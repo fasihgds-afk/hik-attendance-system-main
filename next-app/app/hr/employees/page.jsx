@@ -129,20 +129,79 @@ export default function HrDashboardPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: "24px 28px 32px",
-        background:
-          "radial-gradient(circle at top, #0b2344 0, #061525 40%, #020617 100%)",
-        color: "#e5e7eb",
-        fontFamily:
-          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
-    >
+    <>
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .header-container {
+            flex-direction: column !important;
+            gap: 16px !important;
+            align-items: flex-start !important;
+          }
+          .header-logo {
+            width: 60px !important;
+            height: 60px !important;
+          }
+          .header-title {
+            font-size: 18px !important;
+          }
+          .header-subtitle {
+            font-size: 11px !important;
+          }
+          .header-buttons {
+            flex-direction: column !important;
+            width: 100% !important;
+            gap: 8px !important;
+          }
+          .header-buttons button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .main-container {
+            padding: 16px !important;
+          }
+          .tabs-container {
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+          }
+          .tab-button {
+            flex: 1 1 auto !important;
+            min-width: 100px !important;
+            font-size: 12px !important;
+            padding: 8px 12px !important;
+          }
+          .stats-grid {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .card-content {
+            padding: 16px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .main-container {
+            padding: 12px !important;
+          }
+          .header-title {
+            font-size: 16px !important;
+          }
+        }
+      `}</style>
+      <div
+        className="main-container"
+        style={{
+          minHeight: "100vh",
+          padding: "24px 28px 32px",
+          background:
+            "radial-gradient(circle at top, #0b2344 0, #061525 40%, #020617 100%)",
+          color: "#e5e7eb",
+          fontFamily:
+            'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        }}
+      >
       {/* 🔹 TOP GRADIENT HEADER – same style as Monthly page */}
       <div style={{ maxWidth: 1400, margin: "0 auto 20px auto" }}>
         <div
+          className="header-container"
           style={{
             display: "flex",
             alignItems: "center",
@@ -158,6 +217,7 @@ export default function HrDashboardPage() {
           {/* Left: logo + title */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div
+              className="header-logo"
               style={{
                 width: 100,
                 height: 100,
@@ -167,6 +227,7 @@ export default function HrDashboardPage() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               <img
@@ -185,6 +246,7 @@ export default function HrDashboardPage() {
             </div>
             <div>
               <div
+                className="header-title"
                 style={{
                   fontSize: 22,
                   fontWeight: 700,
@@ -194,6 +256,7 @@ export default function HrDashboardPage() {
                 Global Digital Solutions
               </div>
               <div
+                className="header-subtitle"
                 style={{
                   fontSize: 12.5,
                   opacity: 0.9,
@@ -220,6 +283,7 @@ export default function HrDashboardPage() {
 
           {/* Right: quick actions (Employee Manager + Shift Management + Reload) */}
           <div
+            className="header-buttons"
             style={{
               display: "flex",
               gap: 10,
@@ -305,6 +369,7 @@ export default function HrDashboardPage() {
       >
         {/* TABS */}
         <div
+          className="tabs-container"
           style={{
             display: "flex",
             gap: 12,
@@ -316,6 +381,7 @@ export default function HrDashboardPage() {
             <button
               key={t.id}
               type="button"
+              className="tab-button"
               onClick={() => setTab(t.id)}
               style={{
                 padding: "8px 16px",
@@ -352,6 +418,7 @@ export default function HrDashboardPage() {
 
             {/* TOP STATS */}
             <div
+              className="stats-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -941,5 +1008,6 @@ export default function HrDashboardPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

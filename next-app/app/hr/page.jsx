@@ -445,6 +445,7 @@ export default function HrPage() {
         fontFamily:
           'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
+      className="daily-page-container"
     >
       <style
         dangerouslySetInnerHTML={{
@@ -460,6 +461,72 @@ export default function HrPage() {
           .hr-att-table tbody tr.data-row:hover td {
             background-color: #e0edff;
           }
+          
+          /* Mobile Responsive Styles */
+          @media (max-width: 768px) {
+            .daily-page-container {
+              padding: 16px !important;
+            }
+            .daily-header {
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              gap: 16px !important;
+              padding: 16px !important;
+            }
+            .daily-header-logo {
+              width: 60px !important;
+              height: 60px !important;
+            }
+            .daily-header-title {
+              font-size: 18px !important;
+            }
+            .daily-controls {
+              flex-direction: column !important;
+              align-items: stretch !important;
+            }
+            .daily-controls > div {
+              width: 100% !important;
+            }
+            .daily-controls input[type="date"] {
+              width: 100% !important;
+              min-width: auto !important;
+            }
+            .daily-table-wrapper {
+              overflow-x: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+              margin-left: -16px !important;
+              margin-right: -16px !important;
+              padding-left: 16px !important;
+              padding-right: 16px !important;
+            }
+            .daily-table {
+              min-width: 800px !important;
+              font-size: 12px !important;
+            }
+            .daily-table th,
+            .daily-table td {
+              padding: 6px 8px !important;
+            }
+            .daily-main-card {
+              padding: 12px !important;
+            }
+          }
+          @media (max-width: 480px) {
+            .daily-page-container {
+              padding: 12px !important;
+            }
+            .daily-header-title {
+              font-size: 16px !important;
+            }
+            .daily-table {
+              min-width: 700px !important;
+              font-size: 11px !important;
+            }
+            .daily-table th,
+            .daily-table td {
+              padding: 4px 6px !important;
+            }
+          }
         `,
         }}
       />
@@ -467,6 +534,7 @@ export default function HrPage() {
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         {/* Brand header bar with logo */}
         <div
+          className="daily-header"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -482,6 +550,7 @@ export default function HrPage() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
             <div
+              className="daily-header-logo"
               style={{
                 width: 90,
                 height: 90,
@@ -509,6 +578,7 @@ export default function HrPage() {
 
             <div>
               <div
+                className="daily-header-title"
                 style={{
                   fontSize: 22,
                   fontWeight: 800,
@@ -618,6 +688,7 @@ export default function HrPage() {
             </div>
 
             <div
+              className="daily-controls"
               style={{
                 display: 'flex',
                 flexWrap: 'wrap',
@@ -854,9 +925,9 @@ export default function HrPage() {
               </div>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
+            <div className="daily-table-wrapper" style={{ overflowX: 'auto' }}>
               <table
-                className="hr-att-table"
+                className="hr-att-table daily-table"
                 style={{
                   width: '100%',
                   minWidth: 900,

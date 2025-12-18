@@ -134,7 +134,33 @@ function LoginInner() {
           '-apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif',
       }}
     >
-      <div style={{ width: "80%", maxWidth: 850, marginRight: "350px" }}>
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .login-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-right: 0 !important;
+            padding: 16px !important;
+          }
+          .login-card {
+            flex-direction: column !important;
+          }
+          .login-left-panel {
+            display: none !important;
+          }
+          .login-right-panel {
+            flex: 1 1 100% !important;
+            padding: 24px 20px !important;
+          }
+          .login-form-title {
+            font-size: 20px !important;
+          }
+          .login-form-subtitle {
+            font-size: 12px !important;
+          }
+        }
+      `}</style>
+      <div className="login-container" style={{ width: "80%", maxWidth: 850, marginRight: "350px" }}>
         <div
           style={{
             display: "flex",
@@ -146,6 +172,7 @@ function LoginInner() {
         >
           {/* LEFT PANEL */}
           <div
+            className="login-left-panel"
             style={{
               flex: "1 1 50%",
               position: "relative",

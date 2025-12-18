@@ -867,6 +867,7 @@ export default function MonthlyHrPage() {
 
   return (
     <div
+      className="monthly-container"
       style={{
         minHeight: '100vh',
         padding: '24px 28px 32px',
@@ -898,6 +899,86 @@ export default function MonthlyHrPage() {
           tr.row-hover:hover td {
             background-color: #e5efff !important;
           }
+          @media (max-width: 768px) {
+            .monthly-container {
+              padding: 16px !important;
+            }
+            .monthly-header {
+              flex-direction: column !important;
+              gap: 16px !important;
+              align-items: flex-start !important;
+            }
+            .monthly-header-logo {
+              width: 60px !important;
+              height: 60px !important;
+            }
+            .monthly-header-title {
+              font-size: 18px !important;
+            }
+            .monthly-header-buttons {
+              flex-direction: column !important;
+              width: 100% !important;
+              gap: 8px !important;
+            }
+            .monthly-header-buttons button {
+              width: 100% !important;
+            }
+            .monthly-controls {
+              flex-direction: column !important;
+              align-items: stretch !important;
+              gap: 12px !important;
+            }
+            .monthly-controls > div {
+              width: 100% !important;
+              min-width: auto !important;
+            }
+            .monthly-table-wrapper {
+              max-height: calc(100vh - 400px) !important;
+              margin-left: -16px !important;
+              margin-right: -16px !important;
+              padding-left: 16px !important;
+              padding-right: 16px !important;
+            }
+            .monthly-table {
+              min-width: 1200px !important;
+              font-size: 11px !important;
+            }
+            .monthly-table th,
+            .monthly-table td {
+              padding: 6px 4px !important;
+              font-size: 11px !important;
+            }
+            .monthly-modal {
+              width: 100% !important;
+              max-width: 100% !important;
+              height: 100% !important;
+              max-height: 100% !important;
+              margin: 0 !important;
+              border-radius: 0 !important;
+              padding: 20px 16px !important;
+            }
+            .monthly-modal-content {
+              max-height: calc(100vh - 100px) !important;
+              overflow-y: auto !important;
+            }
+          }
+          @media (max-width: 480px) {
+            .monthly-container {
+              padding: 12px !important;
+            }
+            .monthly-header-title {
+              font-size: 16px !important;
+            }
+            .monthly-table {
+              min-width: 1000px !important;
+              font-size: 10px !important;
+            }
+            .monthly-table th,
+            .monthly-table td {
+              padding: 4px 2px !important;
+              font-size: 10px !important;
+            }
+          }
         `,
         }}
       />
@@ -905,6 +986,7 @@ export default function MonthlyHrPage() {
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
         {/* Top gradient header */}
         <div
+          className="monthly-header"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -920,6 +1002,7 @@ export default function MonthlyHrPage() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
+              className="monthly-header-logo"
               style={{
                 width: 100,
                 height: 100,
@@ -944,6 +1027,7 @@ export default function MonthlyHrPage() {
             </div>
             <div>
               <div
+                className="monthly-header-title"
                 style={{
                   fontSize: 22,
                   fontWeight: 700,
@@ -964,6 +1048,7 @@ export default function MonthlyHrPage() {
           </div>
 
           <div
+            className="monthly-header-buttons"
             style={{
               display: 'flex',
               gap: 10,
@@ -1269,6 +1354,7 @@ export default function MonthlyHrPage() {
 
           {/* Table wrapper */}
           <div
+            className="monthly-table-wrapper"
             style={{
               maxHeight: 'calc(100vh - 320px)',
               overflowX: 'auto',
@@ -1279,6 +1365,7 @@ export default function MonthlyHrPage() {
             onScroll={(e) => setScrollLeft(e.currentTarget.scrollLeft)}
           >
             <table
+              className="monthly-table"
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
@@ -1769,6 +1856,7 @@ export default function MonthlyHrPage() {
           onClick={closeModal}
         >
           <div
+            className="monthly-modal"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: '100%',
@@ -1793,7 +1881,7 @@ export default function MonthlyHrPage() {
                   'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(16,185,129,0.08))',
               }}
             />
-            <div style={{ position: 'relative' }}>
+            <div className="monthly-modal-content" style={{ position: 'relative' }}>
               <div
                 style={{
                   display: 'flex',

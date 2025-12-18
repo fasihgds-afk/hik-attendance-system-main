@@ -465,15 +465,93 @@ export default function EmployeeShiftPage() {
   // ------------------------------------------------------------------------
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background:
-          'radial-gradient(circle at top, #0b2344 0, #0a1b32 35%, #061523 100%)',
-        color: '#0f172a',
-      }}
-    >
+    <>
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .manage-container {
+            padding: 16px !important;
+          }
+          .manage-header {
+            flex-direction: column !important;
+            gap: 16px !important;
+            align-items: flex-start !important;
+          }
+          .manage-header-logo {
+            width: 40px !important;
+            height: 40px !important;
+          }
+          .manage-header-title {
+            font-size: 18px !important;
+          }
+          .manage-header-buttons {
+            flex-direction: column !important;
+            width: 100% !important;
+            gap: 8px !important;
+          }
+          .manage-header-buttons button {
+            width: 100% !important;
+          }
+          .manage-table-wrapper {
+            overflow-x: auto !important;
+            margin-left: -16px !important;
+            margin-right: -16px !important;
+            padding-left: 16px !important;
+            padding-right: 16px !important;
+          }
+          .manage-table {
+            min-width: 1000px !important;
+            font-size: 12px !important;
+          }
+          .manage-table th,
+          .manage-table td {
+            padding: 8px 6px !important;
+            font-size: 12px !important;
+          }
+          .manage-modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            padding: 20px 16px !important;
+          }
+          .manage-form-grid {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .manage-form-row {
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+          .manage-form-row > div {
+            width: 100% !important;
+            min-width: auto !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .manage-container {
+            padding: 12px !important;
+          }
+          .manage-header-title {
+            font-size: 16px !important;
+          }
+          .manage-table {
+            min-width: 900px !important;
+            font-size: 11px !important;
+          }
+        }
+      `}</style>
+      <div
+        className="manage-container"
+        style={{
+          minHeight: '100vh',
+          padding: '24px 28px 32px',
+          background:
+            'radial-gradient(circle at top, #0b2344 0, #0a1b32 35%, #061523 100%)',
+          color: '#0f172a',
+        }}
+      >
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -502,6 +580,7 @@ export default function EmployeeShiftPage() {
       >
         {/* Top bar with logo */}
         <div
+          className="manage-header"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -517,6 +596,7 @@ export default function EmployeeShiftPage() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
+              className="manage-header-logo"
               style={{
                 width: 42,
                 height: 42,
@@ -1474,5 +1554,6 @@ export default function EmployeeShiftPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
