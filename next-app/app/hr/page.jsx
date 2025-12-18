@@ -653,6 +653,7 @@ export default function HrPage() {
 
         {/* MAIN CARD */}
         <div
+          className="daily-main-card"
           style={{
             borderRadius: 14,
             backgroundColor: '#f3f6fb',
