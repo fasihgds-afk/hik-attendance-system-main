@@ -19,12 +19,18 @@ export default function HrDashboardPage() {
   const [statsError, setStatsError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadEmployees() {
       try {
         setStatsLoading(true);
         setStatsError("");
 
-        const res = await fetch("/api/hr/employees");
+        // Add cache: 'force-cache' for better performance (uses browser cache)
+        const res = await fetch("/api/hr/employees", {
+          cache: 'force-cache', // Use browser cache if available
+        });
+        
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Request failed (${res.status})`);
@@ -35,16 +41,27 @@ export default function HrDashboardPage() {
           ? data
           : data.employees || data.items || [];
 
-        setEmployees(list);
+        if (!cancelled) {
+          setEmployees(list);
+        }
       } catch (err) {
-        console.error("Employee stats load error:", err);
-        setStatsError(err.message || "Failed to load employee stats.");
+        if (!cancelled) {
+          console.error("Employee stats load error:", err);
+          setStatsError(err.message || "Failed to load employee stats.");
+        }
       } finally {
-        setStatsLoading(false);
+        if (!cancelled) {
+          setStatsLoading(false);
+        }
       }
     }
 
     loadEmployees();
+
+    // Cleanup function to prevent state updates if component unmounts
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 📊 Compute stats from employees

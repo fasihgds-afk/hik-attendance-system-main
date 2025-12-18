@@ -894,10 +894,15 @@ export async function GET(req) {
       return String(a.empCode).localeCompare(String(b.empCode));
     });
 
+    // Add cache headers for better performance (1 minute cache for monthly data)
     return NextResponse.json({
       month: monthPrefix,
       daysInMonth,
       employees: employeesOut,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+      },
     });
   } catch (err) {
     console.error('GET /api/hr/monthly-attendance error:', err);

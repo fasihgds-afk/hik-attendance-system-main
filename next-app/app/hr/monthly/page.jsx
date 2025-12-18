@@ -355,7 +355,7 @@ export default function MonthlyHrPage() {
       setLoading(true);
       const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
         method: 'GET',
-        cache: 'no-store',
+        cache: 'default', // Allow browser cache for better performance
       });
 
       if (!res.ok) {
