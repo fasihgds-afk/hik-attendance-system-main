@@ -510,6 +510,32 @@ export default function HrPage() {
             .daily-main-card {
               padding: 12px !important;
             }
+            .daily-legend {
+              font-size: 11px !important;
+              padding: 8px 10px !important;
+            }
+            .daily-stats-strip {
+              flex-direction: column !important;
+              gap: 6px !important;
+            }
+            .daily-stats-strip > div {
+              width: 100% !important;
+            }
+            .daily-search-export {
+              flex-direction: column !important;
+              gap: 10px !important;
+            }
+            .daily-search-export > div {
+              width: 100% !important;
+              min-width: auto !important;
+            }
+            .daily-search-export input {
+              width: 100% !important;
+              min-width: auto !important;
+            }
+            .daily-search-export button {
+              width: 100% !important;
+            }
           }
           @media (max-width: 480px) {
             .daily-page-container {
@@ -665,6 +691,7 @@ export default function HrPage() {
           <div style={{ marginBottom: 14 }}>
             {/* Shift legend */}
             <div
+              className="daily-legend"
               style={{
                 marginBottom: 14,
                 padding: '10px 12px',

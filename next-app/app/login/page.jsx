@@ -118,6 +118,7 @@ function LoginInner() {
   // ---------------- RENDER ----------------
   return (
     <div
+      className="login-page-wrapper"
       style={{
         minHeight: "100vh",
         width: "100%",
@@ -136,32 +137,81 @@ function LoginInner() {
     >
       <style jsx>{`
         @media (max-width: 768px) {
+          .login-page-wrapper {
+            padding: 0 !important;
+            align-items: flex-start !important;
+            padding-top: 20px !important;
+          }
           .login-container {
             width: 100% !important;
             max-width: 100% !important;
             margin-right: 0 !important;
-            padding: 16px !important;
+            padding: 0 16px !important;
           }
           .login-card {
             flex-direction: column !important;
+            border-radius: 20px !important;
+            box-shadow: 0 20px 60px rgba(15,23,42,0.6) !important;
           }
           .login-left-panel {
             display: none !important;
           }
           .login-right-panel {
             flex: 1 1 100% !important;
-            padding: 24px 20px !important;
+            padding: 28px 24px 24px !important;
+          }
+          .login-form-title {
+            font-size: 22px !important;
+            margin-bottom: 20px !important;
+          }
+          .login-toggle-buttons {
+            margin-bottom: 20px !important;
+          }
+          .login-toggle-buttons button {
+            padding: 10px 16px !important;
+            font-size: 14px !important;
+          }
+          .login-form {
+            padding: 20px !important;
+          }
+          .login-form label {
+            font-size: 11px !important;
+            margin-bottom: 8px !important;
+          }
+          .login-form input {
+            padding: 12px 14px !important;
+            font-size: 16px !important;
+            min-height: 48px !important;
+          }
+          .login-submit-button {
+            padding: 14px 20px !important;
+            font-size: 14px !important;
+            min-height: 48px !important;
+            margin-top: 16px !important;
+          }
+          .login-copyright {
+            margin-top: 24px !important;
+            font-size: 10px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .login-page-wrapper {
+            padding-top: 10px !important;
+          }
+          .login-right-panel {
+            padding: 24px 20px 20px !important;
           }
           .login-form-title {
             font-size: 20px !important;
           }
-          .login-form-subtitle {
-            font-size: 12px !important;
+          .login-form {
+            padding: 16px !important;
           }
         }
       `}</style>
       <div className="login-container" style={{ width: "80%", maxWidth: 850, marginRight: "350px" }}>
         <div
+          className="login-card"
           style={{
             display: "flex",
             borderRadius: 30,
@@ -316,6 +366,7 @@ function LoginInner() {
 
           {/* RIGHT PANEL – FORMS */}
           <div
+            className="login-right-panel"
             style={{
               flex: "1 1 50%",
               padding: "30px 36px 28px",
@@ -324,33 +375,22 @@ function LoginInner() {
               flexDirection: "column",
             }}
           >
-            <div style={{ marginBottom: 16 }}>
+            <div className="login-form-title" style={{ marginBottom: 16 }}>
               <div
                 style={{
-                  fontSize: 18,
+                  fontSize: 24,
                   fontWeight: 700,
-                  background: "linear-gradient(135deg,#ec4899,#8b5cf6)",
-                  WebkitBackgroundClip: "text",
-                  color: "transparent",
-                  marginBottom: 6,
+                  color: "#0F162A",
+                  letterSpacing: 0.5,
                 }}
-              ></div>
-              <div style={{ fontSize: 14 }}>
-                <span
-                  style={{
-                    fontWeight: 700,
-                    color: "#2563eb",
-                    marginRight: 4,
-                  }}
-                >
-                  Login
-                </span>
-                <span style={{ color: "#4b5563" }}>Your Account</span>
+              >
+                Login Your Account
               </div>
             </div>
 
             {/* HR / EMPLOYEE TOGGLE */}
             <div
+              className="login-toggle-buttons"
               style={{
                 display: "flex",
                 gap: 10,
@@ -430,6 +470,7 @@ function LoginInner() {
             {mode === "HR" ? (
               // HR FORM
               <form
+                className="login-form"
                 onSubmit={handleHrSubmit}
                 style={{
                   padding: "14px 16px 16px",
@@ -450,10 +491,11 @@ function LoginInner() {
                       fontSize: 12,
                       letterSpacing: 1.5,
                       textTransform: "uppercase",
-                      color: "#9ca3af",
+                      color: "#6b7280",
+                      fontWeight: 600,
                     }}
                   >
-                    Email Address
+                    EMAIL ADDRESS
                   </label>
                   <input
                     type="email"
@@ -481,10 +523,11 @@ function LoginInner() {
                       fontSize: 12,
                       letterSpacing: 1.5,
                       textTransform: "uppercase",
-                      color: "#9ca3af",
+                      color: "#6b7280",
+                      fontWeight: 600,
                     }}
                   >
-                    Password
+                    PASSWORD
                   </label>
                   <input
                     type="password"
@@ -506,6 +549,7 @@ function LoginInner() {
 
                 <button
                   type="submit"
+                  className="login-submit-button"
                   disabled={loading}
                   style={{
                     marginTop: 8,
@@ -518,14 +562,14 @@ function LoginInner() {
                     color: "#ffffff",
                     fontSize: 14,
                     fontWeight: 700,
-                    letterSpacing: 2,
+                    letterSpacing: 1.5,
                     textTransform: "uppercase",
                     cursor: loading ? "default" : "pointer",
                     boxShadow: "0 16px 36px rgba(79,70,229,0.55)",
                     opacity: loading ? 0.75 : 1,
                   }}
                 >
-                  {loading ? "Signing in..." : "Submit"}
+                  {loading ? "SIGNING IN..." : "SIGN IN"}
                 </button>
               </form>
             ) : employeeLoginLocked ? (
@@ -617,6 +661,7 @@ function LoginInner() {
             )}
 
             <div
+              className="login-copyright"
               style={{
                 marginTop: 16,
                 fontSize: 11,
@@ -624,7 +669,7 @@ function LoginInner() {
                 textAlign: "center",
               }}
             >
-              © 2025 Global Digital Solutions · Internal Use Only
+              © 2025 Global Digital Solutions Internal Use Only
             </div>
           </div>
         </div>

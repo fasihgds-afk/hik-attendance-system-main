@@ -932,6 +932,17 @@ export default function MonthlyHrPage() {
               width: 100% !important;
               min-width: auto !important;
             }
+            .monthly-search-input {
+              width: 100% !important;
+              min-width: auto !important;
+            }
+            .monthly-legend-text {
+              font-size: 10px !important;
+              line-height: 1.4 !important;
+            }
+            .monthly-shift-totals {
+              font-size: 11px !important;
+            }
             .monthly-table-wrapper {
               max-height: calc(100vh - 400px) !important;
               margin-left: -16px !important;
@@ -1262,7 +1273,7 @@ export default function MonthlyHrPage() {
               </div>
 
               {/* Search bar */}
-              <div style={{ minWidth: 280 }}>
+              <div className="monthly-search-input" style={{ minWidth: 280 }}>
                 <label
                   style={{
                     fontSize: 13,
@@ -1311,6 +1322,7 @@ export default function MonthlyHrPage() {
               </div>
 
               <div
+                className="monthly-shift-totals"
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -1326,7 +1338,7 @@ export default function MonthlyHrPage() {
                   <strong>{totalsByShift.S1 ?? 0}</strong> &nbsp;|&nbsp; S2:{' '}
                   <strong>{totalsByShift.S2 ?? 0}</strong>
                 </span>
-                <span>
+                <span className="monthly-legend-text">
                   <span style={{ color: '#16a34a', fontWeight: 600 }}>Green</span>{' '}
                   = on-time / all violations excused;{' '}
                   <span style={{ color: '#b45309', fontWeight: 600 }}>Amber</span>{' '}
