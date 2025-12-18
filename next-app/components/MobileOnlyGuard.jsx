@@ -25,22 +25,43 @@ export default function MobileOnlyGuard({ children }) {
         /Tablet/i,
       ];
 
+      // Desktop/laptop user agent patterns (BLOCK these)
+      const desktopPatterns = [
+        /Windows NT/i,
+        /Macintosh/i,
+        /Linux/i,
+        /X11/i,
+      ];
+
       // Check if user agent matches mobile/tablet patterns
       const isMobileTabletUserAgent = mobileTabletPatterns.some((pattern) =>
         pattern.test(userAgent)
       );
 
-      // Determine if device is mobile/tablet:
-      // 1. User agent matches mobile/tablet patterns, OR
-      // 2. Has touch screen (tablets and phones), OR
-      // 3. Small screen width (<= 1024px) - covers most tablets and phones
-      const isMobileTablet = 
-        isMobileTabletUserAgent || 
-        hasTouchScreen ||
-        screenWidth <= 1024;
+      // Check if user agent matches desktop patterns (but not mobile)
+      const isDesktopUserAgent = desktopPatterns.some((pattern) =>
+        pattern.test(userAgent)
+      ) && !isMobileTabletUserAgent;
 
-      // Allow mobile/tablets, block desktop/laptops
-      setIsMobile(isMobileTablet);
+      // Determine if device should be ALLOWED (mobile/tablet):
+      // 1. User agent matches mobile/tablet patterns → ALLOW
+      // 2. User agent matches desktop patterns → BLOCK
+      // 3. Otherwise (unknown): if has touch AND small screen (<= 768px) → ALLOW, else BLOCK
+      let shouldAllow = false;
+      
+      if (isMobileTabletUserAgent) {
+        // Clearly a mobile/tablet device → ALLOW
+        shouldAllow = true;
+      } else if (isDesktopUserAgent) {
+        // Clearly a desktop/laptop → BLOCK
+        shouldAllow = false;
+      } else {
+        // Unknown device: check touch + screen size
+        // If has touch screen and small screen, likely a tablet/phone → ALLOW
+        shouldAllow = hasTouchScreen && screenWidth <= 768;
+      }
+
+      setIsMobile(shouldAllow);
       setIsChecking(false);
     }
 
