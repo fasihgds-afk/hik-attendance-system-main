@@ -889,6 +889,7 @@ export default function HrPage() {
 
               {/* search + export */}
               <div
+                className="daily-search-export"
                 style={{
                   display: 'flex',
                   gap: 10,
