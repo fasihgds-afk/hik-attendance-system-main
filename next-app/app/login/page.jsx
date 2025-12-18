@@ -13,7 +13,7 @@ function LoginInner() {
   const isAdmin = session?.user?.role === "ADMIN";
 
   // 🔒 Lock employee login on UI
-  const employeeLoginLocked = true; // change to false if you want to re-enable employee login
+  const employeeLoginLocked = false; // change to false if you want to re-enable employee login
 
   // mode: "HR" or "EMPLOYEE"
   const initialModeFromUrl = searchParams.get("role");
