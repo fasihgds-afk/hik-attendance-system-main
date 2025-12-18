@@ -55,20 +55,14 @@ function statusShortCode(status) {
       return 'H';
     case 'Absent':
       return 'A';
-    case 'Late Arrival Without Info':
-      return 'LA';
-    case 'Early departure':
-      return 'ED';
-    case 'Info Late Arrival':
-      return 'Info Late';
     case 'Sick Leave':
       return 'SL';
     case 'Paid Leave':
       return 'PL';
     case 'Un Paid Leave':
       return 'UPL';
-    case 'New Induction':
-      return 'NI';
+    case 'Leave Without Inform':
+      return 'LWI';
     case 'Work From Home':
       return 'WFH';
     case 'Half Day':
@@ -127,6 +121,16 @@ function getCellStyle(day) {
 
     // Any leave (paid / unpaid / sick)
     if (isLeaveType) {
+      // Unpaid Leave gets a distinct professional color (purple/lavender)
+      if (day.status === 'Un Paid Leave') {
+        return {
+          ...baseCell,
+          backgroundColor: '#f3e8ff', // Light purple/lavender
+          color: '#6b21a8', // Deep purple text
+          fontWeight: 600,
+        };
+      }
+      // Paid Leave and Sick Leave use yellow/amber
       return {
         ...baseCell,
         backgroundColor: '#fef9c3',
@@ -144,12 +148,12 @@ function getCellStyle(day) {
       };
     }
 
-    // New Induction (no punches but on-boarded) – light grey
-    if (day.status === 'New Induction') {
+    // Leave Without Inform – same as absent (red)
+    if (day.status === 'Leave Without Inform') {
       return {
         ...baseCell,
-        backgroundColor: '#e5e7eb',
-        color: '#4b5563',
+        backgroundColor: '#fee2e2',
+        color: '#991b1b',
         fontWeight: 600,
       };
     }
@@ -162,8 +166,22 @@ function getCellStyle(day) {
     };
   }
 
-  // Partial punches (only check-in OR only check-out) = red
-  if ((day.checkIn && !day.checkOut) || (!day.checkIn && day.checkOut)) {
+  // Partial punches (only check-in OR only check-out)
+  const isPartialPunch = (day.checkIn && !day.checkOut) || (!day.checkIn && day.checkOut);
+  if (isPartialPunch) {
+    // Check if early departure is excused (missing punch is treated as early)
+    const earlyExcused = day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave);
+    if (earlyExcused) {
+      // EXCUSED missing punch: green
+      return {
+        ...baseCell,
+        backgroundColor: '#dcfce7',
+        color: '#166534',
+        fontWeight: 600,
+        boxShadow: '0 0 0 1px #16a34a inset',
+      };
+    }
+    // Not excused: red for missing punch
     return {
       ...baseCell,
       backgroundColor: '#fee2e2',
@@ -172,20 +190,17 @@ function getCellStyle(day) {
     };
   }
 
-  // Normal punches present: handle late/early + excused
-  const hasViolation = (day.late || day.earlyLeave) && !day.excused;
+  // Normal punches present: handle late/early + excused separately
+  const lateExcused = day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late);
+  const earlyExcused = day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave);
+  
+  const hasLateViolation = day.late && !lateExcused;
+  const hasEarlyViolation = day.earlyLeave && !earlyExcused;
+  const hasAnyViolation = hasLateViolation || hasEarlyViolation;
+  const allExcused = (day.late && lateExcused) || (day.earlyLeave && earlyExcused);
 
-  if (hasViolation) {
-    return {
-      ...baseCell,
-      backgroundColor: '#fee2e2',
-      color: '#991b1b',
-      fontWeight: 600,
-    };
-  }
-
-  if (day.excused && (day.late || day.earlyLeave)) {
-    // EXCUSED: keep it green, with subtle inset outline
+  // If all violations are excused, show green
+  if ((day.late || day.earlyLeave) && !hasAnyViolation) {
     return {
       ...baseCell,
       backgroundColor: '#dcfce7',
@@ -195,7 +210,38 @@ function getCellStyle(day) {
     };
   }
 
-  // Normal on-time green
+  // Different colors for different violation types
+  // Priority: If both violations exist, show the more severe one (red)
+  // If only one violation exists (or one is excused), show that violation's color
+  if (hasLateViolation && hasEarlyViolation) {
+    // Both late and early violations (not excused) = red
+    return {
+      ...baseCell,
+      backgroundColor: '#fee2e2',
+      color: '#991b1b',
+      fontWeight: 600,
+    };
+  } else if (hasLateViolation) {
+    // Only late violation (not excused) = professional amber/yellow
+    // This includes: late not excused, early either not present or excused
+    return {
+      ...baseCell,
+      backgroundColor: '#fef3c7', // Professional amber
+      color: '#b45309', // Deeper amber text for better contrast
+      fontWeight: 600,
+    };
+  } else if (hasEarlyViolation) {
+    // Only early violation (not excused) = professional orange
+    // This includes: early not excused, late either not present or excused
+    return {
+      ...baseCell,
+      backgroundColor: '#fed7aa', // Professional orange (softer than red)
+      color: '#c2410c', // Deep orange text
+      fontWeight: 600,
+    };
+  }
+
+  // Normal on-time green (no violations)
   return {
     ...baseCell,
     backgroundColor: '#dcfce7',
@@ -262,7 +308,8 @@ export default function MonthlyHrPage() {
   const [editReason, setEditReason] = useState('');
   const [editCheckIn, setEditCheckIn] = useState('');
   const [editCheckOut, setEditCheckOut] = useState('');
-  const [editExcused, setEditExcused] = useState(false);
+  const [editLateExcused, setEditLateExcused] = useState(false);
+  const [editEarlyExcused, setEditEarlyExcused] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -340,7 +387,28 @@ export default function MonthlyHrPage() {
     setEditReason(day.reason || '');
     setEditCheckIn(toTimeInputValue(day.checkIn));
     setEditCheckOut(toTimeInputValue(day.checkOut));
-    setEditExcused(!!day.excused);
+    // Support both new separate fields and legacy excused field
+    // Read excused flags - prioritize new fields, fallback to legacy
+    const lateExcusedValue = day.lateExcused !== undefined 
+      ? !!day.lateExcused 
+      : (!!day.excused && !!day.late);
+    const earlyExcusedValue = day.earlyExcused !== undefined 
+      ? !!day.earlyExcused 
+      : (!!day.excused && !!day.earlyLeave);
+    
+    setEditLateExcused(lateExcusedValue);
+    setEditEarlyExcused(earlyExcusedValue);
+
+    console.log('Opening modal - excused flags:', {
+      date: day.date,
+      lateExcused: lateExcusedValue,
+      earlyExcused: earlyExcusedValue,
+      dayLateExcused: day.lateExcused,
+      dayEarlyExcused: day.earlyExcused,
+      dayExcused: day.excused,
+      dayLate: day.late,
+      dayEarlyLeave: day.earlyLeave,
+    });
 
     setModalOpen(true);
   }
@@ -361,8 +429,12 @@ export default function MonthlyHrPage() {
         reason: editReason,
         checkInTime: editCheckIn || null,
         checkOutTime: editCheckOut || null,
-        violationExcused: editExcused,
+        lateExcused: editLateExcused,
+        earlyExcused: editEarlyExcused,
+        violationExcused: editLateExcused || editEarlyExcused, // Legacy: for backward compatibility
       };
+
+      console.log('Saving with excused flags:', { lateExcused: editLateExcused, earlyExcused: editEarlyExcused });
 
       const res = await fetch('/api/hr/monthly-attendance', {
         method: 'POST',
@@ -379,7 +451,7 @@ export default function MonthlyHrPage() {
       closeModal();
       await loadMonth();
     } catch (err) {
-      console.error(err);
+      console.error('Save error:', err);
       showToast('error', err.message || 'Failed to save day');
     }
   }
@@ -682,8 +754,8 @@ export default function MonthlyHrPage() {
                 punchText = st;
               } else if (st === 'Absent') {
                 punchText = 'No Punch';
-              } else if (st === 'New Induction') {
-                punchText = 'New Induction';
+              } else if (st === 'Leave Without Inform') {
+                punchText = 'Leave Without Inform';
               }
             } else if (day.checkIn && !day.checkOut) {
               punchText = `${inT} / Missing Check-Out`;
@@ -1171,13 +1243,15 @@ export default function MonthlyHrPage() {
                 </span>
                 <span>
                   <span style={{ color: '#16a34a', fontWeight: 600 }}>Green</span>{' '}
-                  = on-time /{' '}
-                  <span style={{ borderBottom: '1px dashed #16a34a' }}>
-                    excused late/early
-                  </span>
-                  ;{' '}
+                  = on-time / all violations excused;{' '}
+                  <span style={{ color: '#b45309', fontWeight: 600 }}>Amber</span>{' '}
+                  = late arrival (not excused);{' '}
+                  <span style={{ color: '#c2410c', fontWeight: 600 }}>Orange</span>{' '}
+                  = early departure (not excused);{' '}
                   <span style={{ color: '#dc2626', fontWeight: 600 }}>Red</span>{' '}
-                  = late/early, missing punches or unpaid absence
+                  = both late & early (both not excused) / missing punches / absent;{' '}
+                  <span style={{ color: '#6b21a8', fontWeight: 600 }}>Purple</span>{' '}
+                  = unpaid leave
                 </span>
               </div>
             </div>
@@ -1584,8 +1658,8 @@ export default function MonthlyHrPage() {
                               punchLabel = 'No Punch';
                             } else if (day.status === 'Work From Home') {
                               punchLabel = 'WFH';
-                            } else if (day.status === 'New Induction') {
-                              punchLabel = 'New Induction';
+                            } else if (day.status === 'Leave Without Inform') {
+                              punchLabel = 'LWI';
                             }
                           } else if (day.checkIn && !day.checkOut) {
                             punchLabel = `${formatTimeShort(
@@ -1601,15 +1675,15 @@ export default function MonthlyHrPage() {
                             ? `Punch: ${punchLabel}`
                             : '';
 
+                          const lateExcused = day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late);
+                          const earlyExcused = day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave);
+                          
                           const titleParts = [
                             `Date: ${day.date}`,
                             `Status: ${day.status || '—'}`,
                             timeInfo,
-                            day.late ? 'Late: YES' : '',
-                            isEarlyLike ? 'Early leave: YES' : '',
-                            day.excused
-                              ? 'Excused: YES (no salary impact)'
-                              : '',
+                            day.late ? `Late: YES${lateExcused ? ' (Excused)' : ''}` : '',
+                            isEarlyLike ? `Early leave: YES${earlyExcused ? ' (Excused)' : ''}` : '',
                             day.reason ? `HR notes: ${day.reason}` : '',
                           ].filter(Boolean);
 
@@ -1624,7 +1698,8 @@ export default function MonthlyHrPage() {
                                 {statusShortCode(day.status)}
                               </div>
                               <div style={{ fontSize: 10 }}>{punchLabel}</div>
-                              {day.excused && (day.late || isEarlyLike) && (
+                              {((day.late && (day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late))) ||
+                                (isEarlyLike && (day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave)))) && (
                                 <div
                                   style={{
                                     marginTop: 2,
@@ -1795,21 +1870,10 @@ export default function MonthlyHrPage() {
                       <option value="Present">Present (P)</option>
                       <option value="Holiday">Holiday (H)</option>
                       <option value="Absent">Absent (A)</option>
-                      <option value="Late Arrival Without Info">
-                        Late Arrival Without Info (LA)
-                      </option>
-                      <option value="Early departure">
-                        Early departure (ED)
-                      </option>
-                      <option value="Info Late Arrival">
-                        Info Late Arrival (Info Late)
-                      </option>
                       <option value="Sick Leave">Sick Leave (SL)</option>
                       <option value="Paid Leave">Paid Leave (PL)</option>
                       <option value="Un Paid Leave">Un Paid Leave (UPL)</option>
-                      <option value="New Induction">
-                        New Induction (NI)
-                      </option>
+                      <option value="Leave Without Inform">Leave Without Inform (LWI)</option>
                       <option value="Work From Home">
                         Work From Home (WFH)
                       </option>
@@ -1897,41 +1961,81 @@ export default function MonthlyHrPage() {
                   />
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 6,
-                    padding: '9px 11px',
-                    borderRadius: 10,
-                    backgroundColor: '#ecfdf3',
-                    border: '1px solid #bbf7d0',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 8,
-                  }}
-                >
-                  <input
-                    id="excuseCheckbox"
-                    type="checkbox"
-                    checked={editExcused}
-                    onChange={(e) => setEditExcused(e.target.checked)}
-                    style={{ marginTop: 2 }}
-                  />
-                  <label
-                    htmlFor="excuseCheckbox"
+                {/* Late Excused - only show if there's a late violation */}
+                {selected.day.late && (
+                  <div
                     style={{
-                      fontSize: 11.5,
-                      color: '#166534',
-                      cursor: 'pointer',
+                      marginTop: 6,
+                      padding: '9px 11px',
+                      borderRadius: 10,
+                      backgroundColor: '#ecfdf3',
+                      border: '1px solid #bbf7d0',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
                     }}
                   >
-                    Treat this day&apos;s late/early as <strong>excused</strong>.
-                    This will:
-                    <br />• keep the punch times in history, <br />
-                    • turn the cell green instead of red, <br />
-                    • <strong>exclude</strong> this day from Late/Early count &
-                    salary deduction.
-                  </label>
-                </div>
+                    <input
+                      id="lateExcuseCheckbox"
+                      type="checkbox"
+                      checked={editLateExcused}
+                      onChange={(e) => setEditLateExcused(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                    />
+                    <label
+                      htmlFor="lateExcuseCheckbox"
+                      style={{
+                        fontSize: 11.5,
+                        color: '#166534',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Treat <strong>late arrival</strong> as <strong>excused</strong>.
+                      This will:
+                      <br />• keep the punch times in history, <br />
+                      • turn the cell green instead of red, <br />
+                      • <strong>exclude</strong> late from Late count & salary deduction.
+                    </label>
+                  </div>
+                )}
+
+                {/* Early Excused - only show if there's an early violation or missing punch */}
+                {(selected.day.earlyLeave || (!selected.day.checkIn && selected.day.checkOut) || (selected.day.checkIn && !selected.day.checkOut)) && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      padding: '9px 11px',
+                      borderRadius: 10,
+                      backgroundColor: '#ecfdf3',
+                      border: '1px solid #bbf7d0',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                    }}
+                  >
+                    <input
+                      id="earlyExcuseCheckbox"
+                      type="checkbox"
+                      checked={editEarlyExcused}
+                      onChange={(e) => setEditEarlyExcused(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                    />
+                    <label
+                      htmlFor="earlyExcuseCheckbox"
+                      style={{
+                        fontSize: 11.5,
+                        color: '#166534',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Treat <strong>early departure</strong> as <strong>excused</strong>.
+                      This will:
+                      <br />• keep the punch times in history, <br />
+                      • turn the cell green instead of red, <br />
+                      • <strong>exclude</strong> early from Early count & salary deduction.
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div

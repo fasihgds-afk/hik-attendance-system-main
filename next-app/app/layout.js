@@ -10,7 +10,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         {/* ✅ Now the whole app (including /login) is wrapped in SessionProvider */}
         <Providers>{children}</Providers>
       </body>

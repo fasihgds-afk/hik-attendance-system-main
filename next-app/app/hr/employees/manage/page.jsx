@@ -38,6 +38,7 @@ const selectStyle = {
 
 export default function EmployeeShiftPage() {
   const [employees, setEmployees] = useState([]);
+  const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
 
@@ -45,6 +46,9 @@ export default function EmployeeShiftPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalEmp, setModalEmp] = useState(null);
+  const [shiftHistory, setShiftHistory] = useState([]);
+  const [showShiftHistory, setShowShiftHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [newEmp, setNewEmp] = useState({
     empCode: '',
@@ -69,6 +73,18 @@ export default function EmployeeShiftPage() {
     }, 2600);
   }
 
+  async function loadShifts() {
+    try {
+      const res = await fetch('/api/hr/shifts?activeOnly=true');
+      if (res.ok) {
+        const data = await res.json();
+        setShifts(data.shifts || []);
+      }
+    } catch (err) {
+      console.error('Failed to load shifts:', err);
+    }
+  }
+
   async function loadEmployees() {
     setLoading(true);
 
@@ -89,6 +105,7 @@ export default function EmployeeShiftPage() {
   }
 
   useEffect(() => {
+    loadShifts();
     loadEmployees();
   }, []);
 
@@ -230,6 +247,73 @@ export default function EmployeeShiftPage() {
 
   // --- modal (full edit on click) ------------------------------------------
 
+  async function loadShiftHistory(empCode) {
+    try {
+      setLoadingHistory(true);
+      const res = await fetch(`/api/hr/employee-shifts?empCode=${empCode}`);
+      if (res.ok) {
+        const data = await res.json();
+        setShiftHistory(data.history || []);
+      }
+    } catch (err) {
+      console.error('Failed to load shift history:', err);
+      setShiftHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  async function autoDetectShifts(empCode) {
+    try {
+      setLoadingHistory(true);
+      const res = await fetch('/api/hr/employee-shifts/auto-detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empCode }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        // Handle specific error cases
+        if (data.error && (data.error.includes('No shifts found') || data.error.includes('shifts not found'))) {
+          showToast('error', 'Shifts not found in database. Please create shifts first by visiting the Shift Management page (/hr/shifts).');
+          // Optionally reload shift history to show updated state
+          await loadShiftHistory(empCode);
+        } else {
+          showToast('error', data.error || data.message || 'Failed to auto-detect shifts');
+        }
+        return;
+      }
+      
+      if (data.summary && data.summary.created > 0) {
+        showToast('success', `Successfully created ${data.summary.created} shift period(s)`);
+        await loadShiftHistory(empCode);
+      } else if (data.summary && data.summary.exists > 0) {
+        showToast('info', 'Shift history already exists for these periods');
+        await loadShiftHistory(empCode);
+      } else {
+        showToast('warning', data.message || 'No shift history created. Check if attendance records have shift codes.');
+        await loadShiftHistory(empCode);
+      }
+    } catch (err) {
+      console.error(err);
+      // Try to parse error message if it's JSON
+      try {
+        const errorData = JSON.parse(err.message);
+        if (errorData.error) {
+          showToast('error', errorData.error);
+        } else {
+          showToast('error', err.message || 'Failed to auto-detect shifts');
+        }
+      } catch {
+        showToast('error', err.message || 'Failed to auto-detect shifts');
+      }
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
   function openEditModal(emp) {
     setModalEmp({
       empCode: emp.empCode,
@@ -246,11 +330,15 @@ export default function EmployeeShiftPage() {
       profileImageUrl: emp.profileImageUrl || '',
     });
     setModalOpen(true);
+    setShowShiftHistory(false);
+    loadShiftHistory(emp.empCode);
   }
 
   function closeModal() {
     setModalOpen(false);
     setModalEmp(null);
+    setShowShiftHistory(false);
+    setShiftHistory([]);
   }
 
   // convert selected file to base64 and store in modalEmp
@@ -695,11 +783,21 @@ export default function EmployeeShiftPage() {
                   value={newEmp.shift}
                   onChange={(e) => handleNewEmpChange('shift', e.target.value)}
                 >
-                  <option value="D1">D1 – Shift 1 (09–18)</option>
-                  <option value="D2">D2 – Shift 2 (15–24)</option>
-                  <option value="D3">D3 – Shift 5 (12–21)</option>
-                  <option value="S1">S1 – Shift 3 (18–03)</option>
-                  <option value="S2">S2 – Shift 4 (21–06)</option>
+                  {shifts.length > 0 ? (
+                    shifts.map((shift) => (
+                      <option key={shift._id} value={shift.code}>
+                        {shift.code} – {shift.name} ({shift.startTime}–{shift.endTime})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="D1">D1 – Shift 1 (09–18)</option>
+                      <option value="D2">D2 – Shift 2 (15–24)</option>
+                      <option value="D3">D3 – Shift 5 (12–21)</option>
+                      <option value="S1">S1 – Shift 3 (18–03)</option>
+                      <option value="S2">S2 – Shift 4 (21–06)</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -843,11 +941,21 @@ export default function EmployeeShiftPage() {
                             }
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <option value="D1">D1 – Day (09–18)</option>
-                            <option value="D2">D2 – Day 2 (15–24)</option>
-                            <option value="D3">D3 – Shift 5 (12–21)</option>
-                            <option value="S1">S1 – Night 1 (18–03)</option>
-                            <option value="S2">S2 – Night 2 (21–06)</option>
+                            {shifts.length > 0 ? (
+                              shifts.map((shift) => (
+                                <option key={shift._id} value={shift.code}>
+                                  {shift.code} – {shift.name} ({shift.startTime}–{shift.endTime})
+                                </option>
+                              ))
+                            ) : (
+                              <>
+                                <option value="D1">D1 – Day (09–18)</option>
+                                <option value="D2">D2 – Day 2 (15–24)</option>
+                                <option value="D3">D3 – Shift 5 (12–21)</option>
+                                <option value="S1">S1 – Night 1 (18–03)</option>
+                                <option value="S2">S2 – Night 2 (21–06)</option>
+                              </>
+                            )}
                           </select>
                         </td>
                         <td style={tdStyle}>
@@ -1202,13 +1310,122 @@ export default function EmployeeShiftPage() {
                       }))
                     }
                   >
-                    <option value="D1">D1 – Day (09–18)</option>
-                    <option value="D2">D2 – Day 2 (15–24)</option>
-                    <option value="D3">D3 – Shift 5 (12–21)</option>
-                    <option value="S1">S1 – Night 1 (18–03)</option>
-                    <option value="S2">S2 – Night 2 (21–06)</option>
+                    {shifts.length > 0 ? (
+                      shifts.map((shift) => (
+                        <option key={shift._id} value={shift.code}>
+                          {shift.code} – {shift.name} ({shift.startTime}–{shift.endTime})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="D1">D1 – Day (09–18)</option>
+                        <option value="D2">D2 – Day 2 (15–24)</option>
+                        <option value="D3">D3 – Shift 5 (12–21)</option>
+                        <option value="S1">S1 – Night 1 (18–03)</option>
+                        <option value="S2">S2 – Night 2 (21–06)</option>
+                      </>
+                    )}
                   </select>
                 </div>
+              </div>
+
+              {/* Shift History Section */}
+              <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>
+                    Shift History
+                  </h3>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => autoDetectShifts(modalEmp.empCode)}
+                      disabled={loadingHistory}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        border: '1px solid #3b82f6',
+                        backgroundColor: '#eff6ff',
+                        color: '#3b82f6',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: loadingHistory ? 'not-allowed' : 'pointer',
+                        opacity: loadingHistory ? 0.6 : 1,
+                      }}
+                    >
+                      {loadingHistory ? 'Detecting...' : 'Auto-Detect from Attendance'}
+                    </button>
+                    <button
+                      onClick={() => setShowShiftHistory(!showShiftHistory)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        backgroundColor: showShiftHistory ? '#f3f4f6' : '#ffffff',
+                        color: '#374151',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {showShiftHistory ? 'Hide' : 'Show'} History
+                    </button>
+                  </div>
+                </div>
+
+                {showShiftHistory && (
+                  <div style={{ marginTop: 12 }}>
+                    {loadingHistory ? (
+                      <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>
+                        Loading shift history...
+                      </div>
+                    ) : shiftHistory.length === 0 ? (
+                      <div style={{ padding: 20, textAlign: 'center', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: 8 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, marginBottom: 8 }}>No shift history found.</p>
+                        <p style={{ margin: '4px 0', fontSize: 12, color: '#9ca3af' }}>
+                          Click "Auto-Detect from Attendance" to create history from existing records.
+                        </p>
+                        <p style={{ margin: '8px 0 0', fontSize: 11, color: '#d1d5db', fontStyle: 'italic' }}>
+                          Note: Make sure shifts are created in the system first. Visit{' '}
+                          <a 
+                            href="/hr/shifts" 
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#3b82f6', textDecoration: 'underline' }}
+                          >
+                            Shift Management
+                          </a>
+                          {' '}to create shifts, then attendance records must have shift codes stored.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Shift</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>Start Date</th>
+                              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>End Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {shiftHistory.map((h, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                <td style={{ padding: '8px 12px', color: '#111827', fontWeight: 600 }}>
+                                  {h.shiftCode || h.shift?.code || '-'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#374151' }}>
+                                  {h.effectiveDate || '-'}
+                                </td>
+                                <td style={{ padding: '8px 12px', color: '#374151' }}>
+                                  {h.endDate || <span style={{ color: '#10b981', fontWeight: 600 }}>Current</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

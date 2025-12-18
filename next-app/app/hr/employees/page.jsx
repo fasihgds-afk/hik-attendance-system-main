@@ -103,6 +103,10 @@ export default function HrDashboardPage() {
     router.push("/hr/employees/manage");
   }
 
+  function openShiftManagement() {
+    router.push("/hr/shifts");
+  }
+
   function goToUserRegister() {
     router.push("/auth/register");
   }
@@ -197,7 +201,7 @@ export default function HrDashboardPage() {
             </div>
           </div>
 
-          {/* Right: quick actions (Employee Manager + Reload) */}
+          {/* Right: quick actions (Employee Manager + Shift Management + Reload) */}
           <div
             style={{
               display: "flex",
@@ -223,6 +227,26 @@ export default function HrDashboardPage() {
               }}
             >
               👥 Open Employee Manager
+            </button>
+
+            <button
+              type="button"
+              onClick={openShiftManagement}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 999,
+                border: "1px solid rgba(251,191,36,0.9)",
+                backgroundColor: "rgba(15,23,42,0.2)",
+                color: "#fef3c7",
+                fontWeight: 600,
+                fontSize: 12.5,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              ⏰ Shift Management
             </button>
 
             <button
@@ -531,7 +555,7 @@ export default function HrDashboardPage() {
               )}
             </div>
 
-            {/* Existing Employees + Attendance cards */}
+            {/* Existing Employees + Attendance + Shift Management cards */}
             <div
               style={{
                 display: "grid",
@@ -611,6 +635,44 @@ export default function HrDashboardPage() {
                   }}
                 >
                   Open Employee Manager
+                </button>
+              </div>
+
+              {/* SHIFT MANAGEMENT CARD */}
+              <div
+                style={{
+                  borderRadius: 14,
+                  padding: "14px 16px",
+                  background: "linear-gradient(135deg,#1e1b4b,#312e81)",
+                  border: "1px solid rgba(251,191,36,0.9)",
+                }}
+              >
+                <h3 style={{ fontSize: 14, marginBottom: 6 }}>Shift Management</h3>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "#c7d2fe",
+                    marginBottom: 10,
+                  }}
+                >
+                  Create and manage shifts, configure shift times, grace periods, and assign shifts to employees with effective dates.
+                </p>
+                <button
+                  type="button"
+                  onClick={openShiftManagement}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    background:
+                      "linear-gradient(135deg,#fbbf24,#f59e0b)",
+                    color: "#1e1b4b",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Open Shift Management
                 </button>
               </div>
 

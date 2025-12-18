@@ -22,7 +22,9 @@ const ShiftAttendanceSchema = new mongoose.Schema(
     late: { type: Boolean, default: false },
     earlyLeave: { type: Boolean, default: false },
 
-    excused: { type: Boolean, default: false },
+    excused: { type: Boolean, default: false }, // Legacy: kept for backward compatibility
+    lateExcused: { type: Boolean, default: false }, // Separate excused for late
+    earlyExcused: { type: Boolean, default: false }, // Separate excused for early
 
     updatedAt: { type: Date, default: Date.now },
   },

@@ -7,11 +7,14 @@ if (!MONGODB_URI) {
   throw new Error('Please define MONGO_URI in .env.local');
 }
 
-// Debug: see which host we're trying to hit
-console.log(
-  'Mongo connecting to:',
-  MONGODB_URI.split('@')[1]?.split('/')[0] || '(no host part)'
-);
+// Debug: see which host we're trying to hit (only log once per server start)
+if (!global.mongoLogged) {
+  console.log(
+    'Mongo connecting to:',
+    MONGODB_URI.split('@')[1]?.split('/')[0] || '(no host part)'
+  );
+  global.mongoLogged = true;
+}
 
 let cached = global.mongoose;
 if (!cached) {
