@@ -301,12 +301,10 @@ export async function POST(req) {
       // but we also check next day's ShiftAttendance record and query events directly as a fallback
       // ====================================================================================
       if (!checkOut && checkIn) {
-        // Get employee's assigned shift code
-        const assignedShift = rec?.assignedShift || emp.shift || '';
-        
+        // Use employee's assigned shift already determined above (empAssignedShift)
         // Get shift object from database to check crossesMidnight property
         // This is the PRIMARY and RELIABLE way to detect night shifts (works for all shifts)
-        const shiftObj = shiftByCode.get(assignedShift);
+        const shiftObj = shiftByCode.get(empAssignedShift);
         
         // Check if this is a night shift:
         // PRIMARY: Use crossesMidnight property from shift definition (most reliable, works for all shifts)
@@ -401,49 +399,27 @@ export async function POST(req) {
                 // No checkIn for current day - can't verify this checkout belongs to current day's shift
                 nextDayCheckOut = null;
               } else {
-                // Validate that checkIn is on the CURRENT business date (not previous day)
-                // This ensures checkout belongs to current day's shift, not previous day's shift
-                // Helper function to convert Date to local date string (YYYY-MM-DD) using timezone offset
-                const getLocalDateStr = (dateObj, tzOffset) => {
-                  const tzHours = tzOffset === '+05:00' ? 5 : parseInt(tzOffset.split(':')[0]);
-                  const utcTime = dateObj.getTime();
-                  const localTime = utcTime + (tzHours * 60 * 60 * 1000);
-                  const localDate = new Date(localTime);
-                  const year = localDate.getUTCFullYear();
-                  const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
-                  const day = String(localDate.getUTCDate()).padStart(2, '0');
-                  return `${year}-${month}-${day}`;
-                };
+                // For validation: Create date objects in the same timezone as the business date
+                // Business date is in local timezone (TZ), so create checkIn date string in same timezone
+                // The checkIn Date object is already in UTC (from MongoDB), so we format it as local timezone string
+                const businessStartOfDay = new Date(`${date}T00:00:00${TZ}`);
+                const businessEndOfDay = new Date(`${date}T23:59:59${TZ}`);
                 
-                const checkInDateStr = getLocalDateStr(checkIn, TZ);
-                const businessDateStr = date; // YYYY-MM-DD format
-                
-                if (checkInDateStr !== businessDateStr) {
+                // Check if checkIn falls within the business date (in local timezone)
+                if (checkIn < businessStartOfDay || checkIn > businessEndOfDay) {
                   // CheckIn is NOT on the business date - this checkout doesn't belong to current day's shift
-                  // Example: Viewing Jan 1, but checkIn is Dec 31 - this checkout is from Dec 31's shift
                   nextDayCheckOut = null;
                 } else {
                   // CheckIn is on the business date - validate checkout timing
-                  // Get checkout time components in local timezone
-                  const tzHours = TZ === '+05:00' ? 5 : parseInt(TZ.split(':')[0]);
-                  const checkOutLocalTime = nextDayCheckOut.getTime() + (tzHours * 60 * 60 * 1000);
-                  const checkOutLocalDate = new Date(checkOutLocalTime);
-                  const checkOutHour = checkOutLocalDate.getUTCHours();
-                  const checkOutMin = checkOutLocalDate.getUTCMinutes();
-                  const checkOutTotalMin = checkOutHour * 60 + checkOutMin;
+                  // Check that checkout is on the next day
+                  const nextDayStartOfDay = new Date(`${nextDateStr}T00:00:00${TZ}`);
+                  const nextDayEndOfDay = new Date(`${nextDateStr}T08:00:00${TZ}`);
                   
-                  // Verify checkout is on the NEXT day (not same day as checkIn)
-                  const checkOutDateStr = getLocalDateStr(nextDayCheckOut, TZ);
-                  const nextDayStr = nextDateStr; // Already calculated above (YYYY-MM-DD format)
-                  
-                  if (checkOutDateStr !== nextDayStr) {
-                    // Checkout is NOT on the next day - this is wrong for night shifts
-                    nextDayCheckOut = null;
-                  } else if (checkOutTotalMin >= 480) {
-                    // Checkout is after 08:00 - too late to be from previous night shift
+                  if (nextDayCheckOut < nextDayStartOfDay || nextDayCheckOut > nextDayEndOfDay) {
+                    // Checkout is NOT within next day 00:00-08:00 window
                     nextDayCheckOut = null;
                   } else {
-                    // Checkout is on next day, before 08:00, and checkIn is on business date
+                    // Checkout is on next day, within 00:00-08:00 window, and checkIn is on business date
                     // This checkout belongs to current day's night shift (N1 ends at 03:00, N2 ends at 06:00)
                     checkOut = nextDayCheckOut;
                   }
