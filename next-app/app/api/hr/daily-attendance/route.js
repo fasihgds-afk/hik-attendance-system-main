@@ -285,9 +285,18 @@ export async function POST(req) {
         checkOut = new Date(existingRecord.checkOut);
       }
       
-      // IMPORTANT: Also check next day's record AND events for night shifts
-      // This ensures we get the correct checkOut for night shifts where checkOut is stored on next day
-      // This is especially important for Dec 31 → Jan 1 cases
+      // ====================================================================================
+      // NIGHT SHIFT CHECKOUT RETRIEVAL (for all dates going forward)
+      // ====================================================================================
+      // For night shifts that cross midnight: checkOut occurs on the next day
+      // This logic ensures checkOut is retrieved correctly for ALL dates:
+      // - Current day (e.g., Jan 1) → checkOut on next day (Jan 2)
+      // - Month-end (e.g., Jan 31) → checkOut on next month (Feb 1)
+      // - Year-end (e.g., Dec 31) → checkOut on next year (Jan 1)
+      // 
+      // The main events query should already include next day early morning events (up to latest shift end time),
+      // but we also check next day's ShiftAttendance record and query events directly as a fallback
+      // ====================================================================================
       if (!checkOut && checkIn) {
         // Get employee's assigned shift code
         const assignedShift = rec?.assignedShift || emp.shift || '';
@@ -330,9 +339,15 @@ export async function POST(req) {
           }
           
           // If not found in ShiftAttendance, query AttendanceEvent directly for next day early morning
+          // This fallback ensures checkOut is retrieved correctly for ALL dates:
+          // - Regular days: Jan 1 → check Jan 2, Jan 15 → check Jan 16, etc.
+          // - Month-end: Jan 31 → check Feb 1, Feb 28/29 → check Mar 1, etc.
+          // - Year-end: Dec 31 → check Jan 1 (next year)
+          // The query uses dynamically calculated nextDateStr, so it works for any date
           if (!nextDayCheckOut) {
             try {
               // Query events from next day 00:00 to 08:00 (early morning checkOut belongs to previous night shift)
+              // Using 08:00 as cutoff covers all night shift end times (N1: 03:00, N2: 06:00, etc.)
               const nextDayStartLocal = new Date(`${nextDateStr}T00:00:00${TZ}`);
               const nextDayEndLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
               
@@ -342,6 +357,7 @@ export async function POST(req) {
                 minor: 38, // "valid access" events only
               })
               .sort({ eventTime: 1 }) // Sort by time ascending
+              .limit(1) // Only need the first (earliest) event
               .lean();
               
               // Get the earliest event on next day (which is the checkOut from previous night shift)
@@ -349,7 +365,7 @@ export async function POST(req) {
                 nextDayCheckOut = new Date(nextDayEvents[0].eventTime);
               }
             } catch (e) {
-              // Ignore errors
+              // Ignore errors - will continue without checkOut
             }
           }
           
