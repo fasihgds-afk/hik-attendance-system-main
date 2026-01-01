@@ -1293,33 +1293,93 @@ export default function MonthlyHrPage() {
                 marginBottom: 8,
               }}
             >
-              <div>
-                <label
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    display: 'block',
-                    marginBottom: 4,
-                    color: '#111827',
-                  }}
-                >
-                  Month
-                </label>
-                <input
-                  type="month"
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  style={{
-                    padding: '7px 10px',
-                    borderRadius: 8,
-                    border: '1px solid #cbd5f5',
-                    backgroundColor: '#ffffff',
-                    color: '#0f172a',
-                    minWidth: 180,
-                    fontSize: 13,
-                    outline: 'none',
-                  }}
-                />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      display: 'block',
+                      marginBottom: 4,
+                      color: '#111827',
+                    }}
+                  >
+                    Year
+                  </label>
+                  <select
+                    value={month ? month.split('-')[0] : new Date().getFullYear()}
+                    onChange={(e) => {
+                      const year = e.target.value;
+                      const currentMonth = month ? month.split('-')[1] : String(new Date().getMonth() + 1).padStart(2, '0');
+                      setMonth(`${year}-${currentMonth}`);
+                    }}
+                    style={{
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5f5',
+                      backgroundColor: '#ffffff',
+                      color: '#0f172a',
+                      minWidth: 100,
+                      fontSize: 13,
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {Array.from({ length: 10 }, (_, i) => {
+                      const year = new Date().getFullYear() - 2 + i;
+                      return (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      display: 'block',
+                      marginBottom: 4,
+                      color: '#111827',
+                    }}
+                  >
+                    Month
+                  </label>
+                  <select
+                    value={month ? month.split('-')[1] : String(new Date().getMonth() + 1).padStart(2, '0')}
+                    onChange={(e) => {
+                      const monthValue = e.target.value;
+                      const currentYear = month ? month.split('-')[0] : new Date().getFullYear();
+                      setMonth(`${currentYear}-${monthValue}`);
+                    }}
+                    style={{
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5f5',
+                      backgroundColor: '#ffffff',
+                      color: '#0f172a',
+                      minWidth: 140,
+                      fontSize: 13,
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
               </div>
 
               {/* Search bar */}

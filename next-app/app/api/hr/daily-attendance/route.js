@@ -189,6 +189,27 @@ export async function POST(req) {
       date: date,
     }).lean();
     
+    // Calculate next day date for night shift checkOut lookup
+    const currentDateObj = new Date(`${date}T00:00:00${TZ}`);
+    const nextDateObj = new Date(currentDateObj);
+    nextDateObj.setDate(nextDateObj.getDate() + 1);
+    const nextDateStr = nextDateObj.getFullYear() + '-' + 
+                        String(nextDateObj.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(nextDateObj.getDate()).padStart(2, '0');
+    
+    // Load existing ShiftAttendance records for next day (for night shift checkOut that occurs on next day)
+    const nextDayRecords = await ShiftAttendance.find({
+      date: nextDateStr,
+    }).lean();
+    
+    // Build map: empCode -> next day record
+    const nextDayByEmpCode = new Map();
+    for (const record of nextDayRecords) {
+      if (record.empCode) {
+        nextDayByEmpCode.set(record.empCode, record);
+      }
+    }
+    
     // Build map: empCode -> existing record (if multiple records exist for same empCode, prefer one with checkOut)
     const existingByEmpCode = new Map();
     for (const record of existingRecords) {
@@ -251,7 +272,7 @@ export async function POST(req) {
         checkIn = new Date(existingRecord.checkIn);
       }
 
-      // Determine checkOut: prefer from events if multiple punches, otherwise use existing record
+      // Determine checkOut: prefer from events if multiple punches, otherwise use existing record or next day's record
       let checkOut = null;
       if (times.length > 1) {
         // Use latest punch from events if we have multiple punches
@@ -262,6 +283,130 @@ export async function POST(req) {
         // This is the key fix: even if we found checkIn from events, use existing checkOut
         // Use != null to check for both null and undefined
         checkOut = new Date(existingRecord.checkOut);
+      }
+      
+      // IMPORTANT: Also check next day's record AND events for night shifts
+      // This ensures we get the correct checkOut for night shifts where checkOut is stored on next day
+      // This is especially important for Dec 31 → Jan 1 cases
+      if (!checkOut && checkIn) {
+        // Get employee's assigned shift code
+        const assignedShift = rec?.assignedShift || emp.shift || '';
+        
+        // Get shift object from database to check crossesMidnight property
+        // This is the PRIMARY and RELIABLE way to detect night shifts (works for all shifts)
+        const shiftObj = shiftByCode.get(assignedShift);
+        
+        // Check if this is a night shift:
+        // PRIMARY: Use crossesMidnight property from shift definition (most reliable, works for all shifts)
+        // This prevents incorrect matching for day shifts
+        const isNightShift = shiftObj?.crossesMidnight === true;
+        
+        if (isNightShift) {
+          // ====================================================================================
+          // NIGHT SHIFT CHECKOUT RETRIEVAL FROM NEXT DAY
+          // ====================================================================================
+          // For night shifts that cross midnight: checkOut may be stored on the next day
+          // since the shift ends on the next working day (e.g., Dec 31 shift 21:00-06:00 ends on Jan 1 at 06:00)
+          // 
+          // Strategy:
+          // 1. First check next day's ShiftAttendance record (if it exists)
+          // 2. If not found, query AttendanceEvent records directly for next day early morning
+          // 3. Use time-based logic to determine if checkOut belongs to current day's shift
+          // ====================================================================================
+          
+          // Try next day's ShiftAttendance record first
+          const nextDayRecord = nextDayByEmpCode.get(emp.empCode);
+          let nextDayCheckOut = null;
+          
+          if (nextDayRecord && nextDayRecord.checkOut) {
+            try {
+              nextDayCheckOut = new Date(nextDayRecord.checkOut);
+              if (isNaN(nextDayCheckOut.getTime())) {
+                nextDayCheckOut = null;
+              }
+            } catch (e) {
+              nextDayCheckOut = null;
+            }
+          }
+          
+          // If not found in ShiftAttendance, query AttendanceEvent directly for next day early morning
+          if (!nextDayCheckOut) {
+            try {
+              // Query events from next day 00:00 to 08:00 (early morning checkOut belongs to previous night shift)
+              const nextDayStartLocal = new Date(`${nextDateStr}T00:00:00${TZ}`);
+              const nextDayEndLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
+              
+              const nextDayEvents = await AttendanceEvent.find({
+                empCode: emp.empCode,
+                eventTime: { $gte: nextDayStartLocal, $lte: nextDayEndLocal },
+                minor: 38, // "valid access" events only
+              })
+              .sort({ eventTime: 1 }) // Sort by time ascending
+              .lean();
+              
+              // Get the earliest event on next day (which is the checkOut from previous night shift)
+              if (nextDayEvents.length > 0) {
+                nextDayCheckOut = new Date(nextDayEvents[0].eventTime);
+              }
+            } catch (e) {
+              // Ignore errors
+            }
+          }
+          
+          // If we found a checkOut from next day, validate it belongs to current day's shift
+          if (nextDayCheckOut && !isNaN(nextDayCheckOut.getTime())) {
+            try {
+              // Convert to local time for comparison
+              const TZ_MS = TZ === '+05:00' ? 5 * 60 * 60 * 1000 : 0;
+              const checkOutLocal = new Date(nextDayCheckOut.getTime() + TZ_MS);
+              const checkOutHour = checkOutLocal.getUTCHours();
+              const checkOutMin = checkOutLocal.getUTCMinutes();
+              const checkOutTotalMin = checkOutHour * 60 + checkOutMin;
+              
+              // Check if next day has checkIn (from ShiftAttendance record if available)
+              let nextDayHasCheckIn = false;
+              if (nextDayRecord && nextDayRecord.checkIn != null) {
+                try {
+                  const nextCheckIn = new Date(nextDayRecord.checkIn);
+                  if (!isNaN(nextCheckIn.getTime())) {
+                    nextDayHasCheckIn = true;
+                  }
+                } catch (e) {
+                  // Ignore errors
+                }
+              }
+              
+              // Logic to determine if next day's checkOut belongs to current day's night shift:
+              // 1. If checkOut is before 08:00 → belongs to previous day's night shift (most common case)
+              // 2. If next day has no checkIn → checkOut definitely belongs to previous day
+              // 3. If next day has checkIn in evening (>= 18:00) and checkOut is before 08:00 → checkOut belongs to previous day
+              if (checkOutTotalMin < 480 || !nextDayHasCheckIn) {
+                // Case 1 & 2: checkOut before 08:00 OR no checkIn on next day
+                checkOut = nextDayCheckOut;
+              } else if (nextDayHasCheckIn) {
+                // Case 3: Check if next day's checkIn is in evening (new shift started)
+                try {
+                  const nextCheckIn = new Date(nextDayRecord.checkIn);
+                  if (!isNaN(nextCheckIn.getTime())) {
+                    const checkInLocal = new Date(nextCheckIn.getTime() + TZ_MS);
+                    const checkInHour = checkInLocal.getUTCHours();
+                    
+                    // If checkOut is before 08:00 and checkIn is after 18:00 (evening),
+                    // then checkOut belongs to previous day's night shift
+                    // (The checkIn at 18:00+ indicates a new shift started, so checkOut is from previous shift)
+                    if (checkOutTotalMin < 480 && checkInHour >= 18) {
+                      checkOut = nextDayCheckOut;
+                    }
+                  }
+                } catch (e) {
+                  // Ignore errors
+                }
+              }
+            } catch (e) {
+              // Ignore errors
+            }
+          }
+        }
       }
 
       // Final shift decision:
@@ -278,13 +423,13 @@ export async function POST(req) {
         shift = Array.from(rec.detectedShifts)[0];
       }
 
-      // Calculate total punches: count events found, but also count checkOut if it exists from existing record
+      // Calculate total punches: count events found, but also count checkOut if it exists from existing record or next day's record
       let totalPunches = times.length;
-      // If we're using checkOut from existing record but didn't have events for it, count it
-      if (totalPunches === 0 && existingRecord?.checkIn) {
-        totalPunches = existingRecord.checkOut ? 2 : 1;
+      // If we're using checkOut from existing record or next day's record but didn't have events for it, count it
+      if (totalPunches === 0 && (existingRecord?.checkIn || checkIn)) {
+        totalPunches = checkOut ? 2 : (checkIn ? 1 : 0);
       } else if (totalPunches === 1 && checkOut && times.length === 1) {
-        // If we have one event but also have checkOut from existing record, count as 2
+        // If we have one event but also have checkOut from existing record or next day's record, count as 2
         totalPunches = 2;
       }
       
