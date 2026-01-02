@@ -435,22 +435,27 @@ export async function POST(req) {
                 // No checkIn for current day - can't verify this checkout belongs to current day's shift
                 nextDayCheckOut = null;
               } else {
-                // For validation: Use timezone-aware date string creation for reliable comparison
-                // Helper function to get local date string (YYYY-MM-DD) from UTC Date object
+                // For validation: Convert UTC Date to local date string (YYYY-MM-DD) in company timezone
+                // Use the same approach as monthly-attendance route for consistency
                 const getLocalDateStr = (utcDate, tzOffset) => {
-                  // Parse timezone offset (e.g., "+05:00" -> 5 hours)
+                  // Parse timezone offset (e.g., "+05:00" -> 5 hours in milliseconds)
                   const offsetMatch = tzOffset.match(/([+-])(\d{2}):(\d{2})/);
-                  if (!offsetMatch) return utcDate.toISOString().slice(0, 10);
+                  if (!offsetMatch) {
+                    // Fallback: use ISO string
+                    return utcDate.toISOString().slice(0, 10);
+                  }
                   
                   const sign = offsetMatch[1] === '+' ? 1 : -1;
                   const hours = parseInt(offsetMatch[2]);
                   const minutes = parseInt(offsetMatch[3]);
                   const offsetMs = sign * (hours * 60 + minutes) * 60 * 1000;
                   
-                  // Create date in local timezone by adding offset
-                  const localDate = new Date(utcDate.getTime() + offsetMs);
+                  // Convert UTC time to local timezone
+                  // Add offset to UTC milliseconds to get local time
+                  const localTimeMs = utcDate.getTime() + offsetMs;
+                  const localDate = new Date(localTimeMs);
                   
-                  // Extract date components (these will be in local timezone since we adjusted)
+                  // Extract date components (use UTC methods since we manually applied offset)
                   const year = localDate.getUTCFullYear();
                   const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
                   const day = String(localDate.getUTCDate()).padStart(2, '0');
