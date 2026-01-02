@@ -343,14 +343,21 @@ export async function POST(req) {
           
           // Try next day's ShiftAttendance record first
           // We'll validate it belongs to current day's shift later by checking checkIn date
+          // IMPORTANT: Only use next day's record if we have checkIn from current day's events
+          // This prevents using stale/incorrect data from previous day's shifts
           const nextDayRecord = nextDayByEmpCode.get(emp.empCode);
           let nextDayCheckOut = null;
           
-          if (nextDayRecord && nextDayRecord.checkOut) {
+          if (nextDayRecord && nextDayRecord.checkOut && checkInIsFromCurrentDayEvents && checkIn) {
             try {
-              nextDayCheckOut = new Date(nextDayRecord.checkOut);
-              if (isNaN(nextDayCheckOut.getTime())) {
-                nextDayCheckOut = null;
+              const potentialCheckOut = new Date(nextDayRecord.checkOut);
+              if (!isNaN(potentialCheckOut.getTime())) {
+                // Validate that checkout is AFTER checkIn time
+                // This ensures the checkout belongs to current day's shift, not previous day's shift
+                // Example: Jan 1 checkIn at 21:00 → checkout on Jan 2 must be after Jan 1 21:00
+                if (potentialCheckOut > checkIn) {
+                  nextDayCheckOut = potentialCheckOut;
+                }
               }
             } catch (e) {
               nextDayCheckOut = null;
@@ -363,20 +370,31 @@ export async function POST(req) {
           // - Month-end: Jan 31 → check Feb 1, Feb 28/29 → check Mar 1, etc.
           // - Year-end: Dec 31 → check Jan 1 (next year)
           // The query uses dynamically calculated nextDateStr, so it works for any date
-          if (!nextDayCheckOut) {
+          // 
+          // IMPORTANT: Only query events if we have a checkIn from current day's events
+          // This prevents querying for events that might belong to previous day's shift
+          if (!nextDayCheckOut && checkInIsFromCurrentDayEvents && checkIn) {
             try {
               // Query events from next day 00:00 to 08:00 (early morning checkOut belongs to previous night shift)
               // Using 08:00 as cutoff covers all night shift end times (N1: 03:00, N2: 06:00, etc.)
               const nextDayStartLocal = new Date(`${nextDateStr}T00:00:00${TZ}`);
               const nextDayEndLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
               
+              // CRITICAL: Also add a constraint that checkout must be AFTER the checkIn time
+              // This ensures we only get checkout events that belong to current day's shift
+              // Example: Jan 1 checkIn at 21:00 → checkout on Jan 2 must be after Jan 1 21:00
+              const checkInTime = new Date(checkIn);
+              
               const nextDayEvents = await AttendanceEvent.find({
                 empCode: emp.empCode,
-                eventTime: { $gte: nextDayStartLocal, $lte: nextDayEndLocal },
+                eventTime: { 
+                  $gte: nextDayStartLocal > checkInTime ? nextDayStartLocal : checkInTime,
+                  $lte: nextDayEndLocal 
+                },
                 minor: 38, // "valid access" events only
               })
               .sort({ eventTime: 1 }) // Sort by time ascending
-              .limit(1) // Only need the first (earliest) event
+              .limit(1) // Only need the first (earliest) event after checkIn
               .lean();
               
               // Get the earliest event on next day (which is the checkOut from previous night shift)
