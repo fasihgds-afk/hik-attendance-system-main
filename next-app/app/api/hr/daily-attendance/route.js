@@ -387,6 +387,24 @@ export async function POST(req) {
           // This prevents querying for events that might belong to previous day's shift
           if (!nextDayCheckOut && checkIn) {
             try {
+              // Helper function to convert UTC Date to local date string (YYYY-MM-DD)
+              const getLocalDateStr = (utcDate, tzOffset) => {
+                const offsetMatch = tzOffset.match(/([+-])(\d{2}):(\d{2})/);
+                if (!offsetMatch) {
+                  return utcDate.toISOString().slice(0, 10);
+                }
+                const sign = offsetMatch[1] === '+' ? 1 : -1;
+                const hours = parseInt(offsetMatch[2]);
+                const minutes = parseInt(offsetMatch[3]);
+                const offsetMs = sign * (hours * 60 + minutes) * 60 * 1000;
+                const localTimeMs = utcDate.getTime() + offsetMs;
+                const localDate = new Date(localTimeMs);
+                const year = localDate.getUTCFullYear();
+                const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(localDate.getUTCDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+              };
+              
               // Query events from next day 00:00 to 08:00 (early morning checkOut belongs to previous night shift)
               // Using 08:00 as cutoff covers all night shift end times (N1: 03:00, N2: 06:00, etc.)
               const nextDayStartLocal = new Date(`${nextDateStr}T00:00:00${TZ}`);
@@ -407,27 +425,63 @@ export async function POST(req) {
               .limit(10) // Get multiple events, we'll filter to find the one after checkIn
               .lean();
               
-              // Get the first event on next day
-              // For night shifts, checkout happens on next day, so we take the first event from next day
-              // The validation logic below will ensure it belongs to current day's shift
+              // Get the first event on next day that is AFTER the checkIn time
+              // CRITICAL: We must ensure the checkout belongs to the CURRENT business date's shift
+              // The problem: When viewing Jan 2, we query Jan 3 00:00-08:00, but we might also find
+              // Jan 2 00:00-08:00 events in the database that belong to Jan 1's shift.
+              // 
+              // Solution: Validate that:
+              // 1. Event is on the NEXT calendar day (nextDateStr)
+              // 2. Event time is AFTER checkIn time (ensures it belongs to current day's shift)
+              // 
+              // Example for Jan 1 N2 shift:
+              // - checkIn: Jan 1 21:00 local (16:00 UTC on Jan 1)
+              // - checkout: Jan 2 06:00 local (01:00 UTC on Jan 2)
+              // - Query: Jan 2 00:00-08:00 local (Jan 1 19:00 - Jan 2 03:00 UTC)
+              // - Validation: eventTime (01:00 UTC Jan 2) > checkInTime (16:00 UTC Jan 1) ✅
+              // 
+              // Example for Jan 2 N2 shift (the problematic case):
+              // - checkIn: Jan 2 21:00 local (16:00 UTC on Jan 2)
+              // - checkout: Jan 3 06:00 local (01:00 UTC on Jan 3)
+              // - Query: Jan 3 00:00-08:00 local (Jan 2 19:00 - Jan 3 03:00 UTC)
+              // - Validation: eventTime (01:00 UTC Jan 3) > checkInTime (16:00 UTC Jan 2) ✅
+              // - But if we find Jan 2 01:00 UTC event (from Jan 1 shift): 01:00 UTC Jan 2 < 16:00 UTC Jan 2 ❌ (rejected)
               if (nextDayEvents.length > 0) {
-                console.log(`[N1 DEBUG] Found ${nextDayEvents.length} events for next day: empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}, nextDateStr=${nextDateStr}`);
-                // Take the first event from next day (earliest checkout)
-                const firstEvent = nextDayEvents[0];
-                const eventTime = new Date(firstEvent.eventTime);
-                console.log(`[N1 DEBUG] First event from next day: empCode=${emp.empCode}, eventTime=${eventTime.toISOString()}, checkIn=${checkIn.toISOString()}`);
+                console.log(`[N1 DEBUG] Found ${nextDayEvents.length} events for next day: empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}, date=${date}, nextDateStr=${nextDateStr}, queryRange=${nextDayStartLocal.toISOString()} to ${nextDayEndLocal.toISOString()}`);
+                const checkInTime = new Date(checkIn);
+                const checkInLocalDateStr = getLocalDateStr(checkIn, TZ);
                 
-                // Basic validation: checkout must be after checkIn (in UTC, this should always be true for next day events)
-                if (eventTime > checkIn) {
-                  nextDayCheckOut = eventTime;
-                  console.log(`[N1 DEBUG] Selected first event as checkout: empCode=${emp.empCode}, checkout=${eventTime.toISOString()}`);
-                } else {
-                  console.log(`[N1 DEBUG] Rejected event (not after checkIn): empCode=${emp.empCode}, eventTime=${eventTime.toISOString()}, checkIn=${checkIn.toISOString()}`);
+                for (const event of nextDayEvents) {
+                  const eventTime = new Date(event.eventTime);
+                  const eventLocalDateStr = getLocalDateStr(eventTime, TZ);
+                  
+                  console.log(`[N1 DEBUG] Checking event: empCode=${emp.empCode}, eventTime=${eventTime.toISOString()}, eventLocalDate=${eventLocalDateStr}, checkInTime=${checkInTime.toISOString()}, checkInLocalDate=${checkInLocalDateStr}, date=${date}, nextDateStr=${nextDateStr}, isAfter=${eventTime > checkInTime}`);
+                  
+                  // CRITICAL VALIDATION:
+                  // 1. Event must be on the next calendar day (nextDateStr), not current day
+                  // 2. Event must be after checkIn time (to ensure it belongs to current day's shift)
+                  // 3. CheckIn must be on the current business date (date)
+                  // 
+                  // This ensures:
+                  // - When viewing Jan 1: checkout from Jan 2 is accepted (nextDateStr = Jan 2, eventLocalDate = Jan 2)
+                  // - When viewing Jan 2: checkout from Jan 3 is accepted (nextDateStr = Jan 3, eventLocalDate = Jan 3)
+                  // - When viewing Jan 2: checkout from Jan 2 is rejected (nextDateStr = Jan 3, eventLocalDate = Jan 2 ≠ Jan 3)
+                  if (eventLocalDateStr === nextDateStr && eventTime > checkInTime && checkInLocalDateStr === date) {
+                    nextDayCheckOut = eventTime;
+                    console.log(`[N1 DEBUG] ACCEPTED event as checkout: empCode=${emp.empCode}, checkout=${eventTime.toISOString()}, eventLocalDate=${eventLocalDateStr}, nextDateStr=${nextDateStr}, checkInLocalDate=${checkInLocalDateStr}, date=${date}`);
+                    break;
+                  } else {
+                    console.log(`[N1 DEBUG] REJECTED event: empCode=${emp.empCode}, eventTime=${eventTime.toISOString()}, eventLocalDate=${eventLocalDateStr}, nextDateStr=${nextDateStr}, checkInLocalDate=${checkInLocalDateStr}, date=${date}, eventTime>checkIn=${eventTime > checkInTime}, dateMatch=${checkInLocalDateStr === date}, nextDateMatch=${eventLocalDateStr === nextDateStr}`);
+                  }
+                }
+                if (!nextDayCheckOut) {
+                  console.log(`[N1 DEBUG] No valid events found after checkIn time on next day: empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}, date=${date}, nextDateStr=${nextDateStr}`);
                 }
               } else {
-                console.log(`[N1 DEBUG] No events found for next day: empCode=${emp.empCode}, nextDateStr=${nextDateStr}, checkIn=${checkIn.toISOString()}`);
+                console.log(`[N1 DEBUG] No events found for next day: empCode=${emp.empCode}, nextDateStr=${nextDateStr}, checkIn=${checkIn.toISOString()}, queryRange=${nextDayStartLocal.toISOString()} to ${nextDayEndLocal.toISOString()}`);
               }
             } catch (e) {
+              console.log(`[N1 DEBUG] Error querying next day events: empCode=${emp.empCode}, error=${e.message}`);
               // Ignore errors - will continue without checkOut
             }
           }
