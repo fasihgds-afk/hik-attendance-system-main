@@ -318,7 +318,10 @@ export async function POST(req) {
         // This prevents incorrect matching for day shifts
         const isNightShift = shiftObj?.crossesMidnight === true;
         
+        console.log(`[NIGHT SHIFT CHECK] empCode=${emp.empCode}, assignedShift=${empAssignedShift}, hasShiftObj=${!!shiftObj}, crossesMidnight=${shiftObj?.crossesMidnight}, isNightShift=${isNightShift}, checkIn=${checkIn?.toISOString()}, checkOut=${checkOut?.toISOString()}`);
+        
         if (isNightShift) {
+          console.log(`[NIGHT SHIFT] Processing night shift checkout retrieval for empCode=${emp.empCode}, shift=${empAssignedShift}, date=${date}`);
           // ====================================================================================
           // NIGHT SHIFT CHECKOUT RETRIEVAL FROM NEXT DAY
           // ====================================================================================
