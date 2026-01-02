@@ -409,15 +409,23 @@ export async function POST(req) {
               // Example: Jan 1 N1 checkIn at 18:00 → checkout on Jan 2 must be after Jan 1 18:00
               // Example: Jan 1 N2 checkIn at 21:00 → checkout on Jan 2 must be after Jan 1 21:00
               if (nextDayEvents.length > 0) {
+                console.log(`[N1 DEBUG] Found ${nextDayEvents.length} events for next day: empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}`);
                 const checkInTime = new Date(checkIn);
                 for (const event of nextDayEvents) {
                   const eventTime = new Date(event.eventTime);
+                  console.log(`[N1 DEBUG] Checking event: empCode=${emp.empCode}, eventTime=${eventTime.toISOString()}, checkInTime=${checkInTime.toISOString()}, isAfter=${eventTime > checkInTime}`);
                   // Find the first event that is after checkIn time
                   if (eventTime > checkInTime) {
                     nextDayCheckOut = eventTime;
+                    console.log(`[N1 DEBUG] Selected event as checkout: empCode=${emp.empCode}, checkout=${eventTime.toISOString()}`);
                     break;
                   }
                 }
+                if (!nextDayCheckOut) {
+                  console.log(`[N1 DEBUG] No events found after checkIn time: empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}`);
+                }
+              } else {
+                console.log(`[N1 DEBUG] No events found for next day: empCode=${emp.empCode}, nextDateStr=${nextDateStr}, checkIn=${checkIn.toISOString()}`);
               }
             } catch (e) {
               // Ignore errors - will continue without checkOut
