@@ -358,10 +358,18 @@ export async function POST(req) {
                 // Example: Jan 1 N2 checkIn at 21:00 → checkout on Jan 2 must be after Jan 1 21:00
                 if (potentialCheckOut > checkIn) {
                   nextDayCheckOut = potentialCheckOut;
+                  console.log(`[N1 DEBUG] Found checkout from nextDayRecord: empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}, checkout=${potentialCheckOut.toISOString()}`);
+                } else {
+                  console.log(`[N1 DEBUG] Rejected nextDayRecord checkout (not after checkIn): empCode=${emp.empCode}, checkIn=${checkIn.toISOString()}, checkout=${potentialCheckOut.toISOString()}`);
                 }
               }
             } catch (e) {
+              console.log(`[N1 DEBUG] Error parsing nextDayRecord checkout: empCode=${emp.empCode}, error=${e.message}`);
               nextDayCheckOut = null;
+            }
+          } else {
+            if (isNightShift) {
+              console.log(`[N1 DEBUG] No nextDayRecord or checkIn: empCode=${emp.empCode}, hasNextDayRecord=${!!nextDayRecord}, hasCheckOut=${!!nextDayRecord?.checkOut}, hasCheckIn=${!!checkIn}`);
             }
           }
           
@@ -474,6 +482,7 @@ export async function POST(req) {
                 if (checkInDateStr !== date) {
                   // CheckIn is NOT on the business date - this checkout belongs to previous day's shift
                   // Example: Viewing Jan 1, but checkIn was Dec 31 - this checkout is from Dec 31's shift, not Jan 1's
+                  console.log(`[N1 DEBUG] Rejected checkout (checkIn date mismatch): empCode=${emp.empCode}, date=${date}, checkInDateStr=${checkInDateStr}, checkIn=${checkIn.toISOString()}, checkout=${nextDayCheckOut.toISOString()}`);
                   nextDayCheckOut = null;
                 } else {
                   // CheckIn is on the business date - validate checkout timing
@@ -490,13 +499,16 @@ export async function POST(req) {
                   // Verify checkout is on next day and before 08:00
                   if (checkOutDateStr !== nextDateStr) {
                     // Checkout is NOT on the next day
+                    console.log(`[N1 DEBUG] Rejected checkout (not on next day): empCode=${emp.empCode}, nextDateStr=${nextDateStr}, checkOutDateStr=${checkOutDateStr}, checkout=${nextDayCheckOut.toISOString()}`);
                     nextDayCheckOut = null;
                   } else if (checkOutTotalMin >= 480) {
                     // Checkout is after 08:00 - too late to be from previous night shift
+                    console.log(`[N1 DEBUG] Rejected checkout (after 08:00): empCode=${emp.empCode}, checkOutTotalMin=${checkOutTotalMin}, checkout=${nextDayCheckOut.toISOString()}`);
                     nextDayCheckOut = null;
                   } else {
                     // Checkout is on next day, before 08:00, and checkIn is on business date
                     // This checkout belongs to current day's night shift (N1 ends at 03:00, N2 ends at 06:00)
+                    console.log(`[N1 DEBUG] ACCEPTED checkout: empCode=${emp.empCode}, date=${date}, checkIn=${checkIn.toISOString()}, checkout=${nextDayCheckOut.toISOString()}`);
                     checkOut = nextDayCheckOut;
                   }
                 }
