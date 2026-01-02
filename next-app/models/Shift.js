@@ -48,7 +48,7 @@ const ShiftSchema = new mongoose.Schema(
 );
 
 // Index for quick lookups
-ShiftSchema.index({ code: 1 });
+// Note: 'code' already has an index from 'unique: true', so we don't need to define it again
 ShiftSchema.index({ isActive: 1 });
 
 export default mongoose.models.Shift ||
