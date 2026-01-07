@@ -111,14 +111,17 @@ export async function GET(req) {
                 // Exclude: phoneNumber, cnic, saturdayGroup (not needed for list view)
               };
               
-              // Simple query - MongoDB should use empCode_1 index automatically for sorting
-              // If this is still slow, MongoDB might be doing a full collection scan
+              // CRITICAL: Create a fresh query each time to avoid "already executed" errors
+              // Build the query in one chain and execute immediately
               const startTime = Date.now();
+              
+              // Execute query immediately - don't store the query object
               const result = await Employee.find({}, minimalProjection)
                 .sort({ empCode: 1 }) // This should use empCode_1 index
                 .limit(limit)
                 .lean()
-                .maxTimeMS(20000); // 20 second timeout
+                .maxTimeMS(20000)
+                .exec(); // Explicitly call exec() to ensure single execution
               
               const queryTime = Date.now() - startTime;
               if (process.env.NODE_ENV === 'development' && queryTime > 5000) {
@@ -140,12 +143,14 @@ export async function GET(req) {
           [employees, total] = await Promise.all([
             monitorQuery(
               async () => {
+                // Execute query immediately with explicit exec() to avoid double execution
                 return await Employee.find({}, listProjection)
                   .sort({ empCode: 1 })
                   .skip(skip)
                   .limit(limit)
                   .lean()
-                  .maxTimeMS(5000);
+                  .maxTimeMS(5000)
+                  .exec();
               },
               `Employee find query (no filters, page ${page})`
             ),
@@ -164,19 +169,15 @@ export async function GET(req) {
           ),
           monitorQuery(
             async () => {
-              let query = Employee.find(filter, listProjection)
+              // Build and execute query in one chain - don't store query object
+              // This prevents "already executed" errors
+              return await Employee.find(filter, listProjection)
                 .sort(sortOptions)
                 .skip(skip)
                 .limit(limit)
                 .lean()
-                .maxTimeMS(3000);
-              
-              // Hint index based on filter (but don't use hint if it causes issues)
-              // MongoDB will automatically choose the best index
-              // Only hint if absolutely necessary and you know the index exists
-              
-              // Execute the query and return the result
-              return await query;
+                .maxTimeMS(3000)
+                .exec(); // Explicit exec() ensures single execution
             },
             'Employee find query (with filters)'
           ),
