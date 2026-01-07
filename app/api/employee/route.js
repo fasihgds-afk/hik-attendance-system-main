@@ -98,58 +98,39 @@ export async function GET(req) {
         findOptions.projection = listProjection;
       }
       
-      // Execute queries using native driver (more reliable in production/serverless)
-      const [employees, total] = await Promise.all([
-        col
-          .find(queryFilter, findOptions)
-          .sort(sortOptions || { empCode: 1 })
-          .skip(skip)
-          .limit(limit)
-          .toArray(),
-        hasFilters
-          ? col.countDocuments(queryFilter)
-          : col.estimatedDocumentCount(),
-      ]);
+      try {
+        // Execute queries using native driver (more reliable in production/serverless)
+        const [employees, total] = await Promise.all([
+          col
+            .find(queryFilter, findOptions)
+            .sort(sortOptions || { empCode: 1 })
+            .skip(skip)
+            .limit(limit)
+            .toArray(),
+          hasFilters
+            ? col.countDocuments(queryFilter)
+            : col.estimatedDocumentCount(),
+        ]);
 
-      return {
-        items: employees || [],
-        pagination: {
-          page,
-          limit,
-          total: total || 0,
-          totalPages: Math.ceil((total || 0) / limit),
-        },
-      };
+        return {
+          items: employees || [],
+          pagination: {
+            page,
+            limit,
+            total: total || 0,
+            totalPages: Math.ceil((total || 0) / limit),
+          },
+        };
+      } catch (err) {
+        // If native driver fails, log and rethrow (shouldn't happen, but just in case)
+        console.error('[Employee API] Native driver query failed:', err);
+        throw err;
+      }
     };
 
-    // If bypassing cache, fetch directly
-    if (bypassCache) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Cache] Bypassing cache - fetching fresh data');
-      }
-      const result = await fetchEmployees();
-      return NextResponse.json(result);
-    }
-
-    // Otherwise, use cache for better performance
-    const cacheKey = generateCacheKey('employees', searchParams);
-    
-    // Get from cache or fetch from database
-    const result = await getOrSetCache(
-      cacheKey,
-      async () => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[Cache] Cache miss for key: ${cacheKey}, fetching from database...`);
-        }
-        return await fetchEmployees();
-      },
-      cacheTTL
-    );
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Cache] Returning data for key: ${cacheKey} (TTL: ${cacheTTL}s)`);
-    }
-
+    // TEMPORARILY DISABLE CACHE to avoid cached Mongoose query objects
+    // Fetch directly every time to ensure we're using native driver
+    const result = await fetchEmployees();
     return NextResponse.json(result);
   } catch (err) {
     const { handleError } = await import('../../../lib/errors/errorHandler');
