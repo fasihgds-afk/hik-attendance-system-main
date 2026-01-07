@@ -35,8 +35,11 @@ export async function GET(req) {
           const result = await getOrSetCache(
             cacheKey,
             async () => {
-              // Use .lean() for single employee - returns plain object directly
-              const employee = await Employee.findOne({ empCode }, projection).lean();
+              // Use native driver for single employee (production-safe)
+              const employee = await Employee.collection.findOne(
+                { empCode },
+                { projection }
+              );
           
           if (!employee) {
             throw new NotFoundError(`Employee ${empCode}`);
@@ -72,73 +75,36 @@ export async function GET(req) {
       ? CACHE_TTL.EMPLOYEES_NO_FILTER_FIRST_PAGE // 2 minutes for first page, no filters
       : CACHE_TTL.EMPLOYEES; // 30 seconds for filtered/other pages
     
-    // SIMPLE + ROBUST VERSION (with native driver fallback for production)
+    // PRODUCTION-SAFE: Use native MongoDB driver directly (avoid Mongoose double-execution issues on Vercel)
+    // Native driver is more reliable in serverless environments
     const fetchEmployees = async () => {
       const skip = (page - 1) * limit;
+      
+      // Use native MongoDB driver directly - no Mongoose query objects that can be double-executed
+      const col = Employee.collection;
+      
+      // Execute queries using native driver (more reliable in production/serverless)
+      const [employees, total] = await Promise.all([
+        col
+          .find(filter || {}, { projection: listProjection || {} })
+          .sort(sortOptions || { empCode: 1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray(),
+        hasFilters
+          ? col.countDocuments(filter || {})
+          : col.estimatedDocumentCount(),
+      ]);
 
-      try {
-        // Simple query - Mongoose + lean (fast, memory-efficient)
-        const [employees, total] = await Promise.all([
-          Employee.find(filter, listProjection)
-            .sort(sortOptions || { empCode: 1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-          hasFilters
-            ? Employee.countDocuments(filter)
-            : Employee.estimatedDocumentCount(),
-        ]);
-
-        return {
-          items: employees || [],
-          pagination: {
-            page,
-            limit,
-            total: total || 0,
-            totalPages: Math.ceil((total || 0) / limit),
-          },
-        };
-      } catch (primaryErr) {
-        // Known intermittent prod issue: "Query was already executed"
-        // Fallback to native MongoDB driver to guarantee data returns
-        if (primaryErr?.message?.includes('Query was already executed')) {
-          try {
-            const col = Employee.collection;
-
-            // Project only needed fields (convert inclusion projection to native)
-            const projection = listProjection || {};
-
-            const cursor = col
-              .find(filter || {}, { projection })
-              .sort(sortOptions || { empCode: 1 })
-              .skip(skip)
-              .limit(limit);
-
-            const [employees, total] = await Promise.all([
-              cursor.toArray(),
-              hasFilters
-                ? col.countDocuments(filter || {})
-                : col.estimatedDocumentCount(),
-            ]);
-
-            return {
-              items: employees || [],
-              pagination: {
-                page,
-                limit,
-                total: total || 0,
-                totalPages: Math.ceil((total || 0) / limit),
-              },
-            };
-          } catch (fallbackErr) {
-            // If even fallback fails, rethrow original error to be handled upstream
-            throw primaryErr;
-          }
-        }
-
-        // Unknown error - bubble up
-        throw primaryErr;
-      }
+      return {
+        items: employees || [],
+        pagination: {
+          page,
+          limit,
+          total: total || 0,
+          totalPages: Math.ceil((total || 0) / limit),
+        },
+      };
     };
 
     // If bypassing cache, fetch directly
