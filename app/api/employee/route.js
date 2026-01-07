@@ -55,18 +55,16 @@ export async function GET(req) {
     // Ensure filter is always a valid object - empty {} is valid for "all"
     const queryFilter = Object.keys(filter).length > 0 ? filter : {};
 
-    // EXECUTE SEQUENTIALLY - Build query step by step, execute immediately
-    // Create fresh query each time - don't reuse query objects
-    const findQuery = Employee.find(queryFilter);
-    findQuery.select(listProjection);
-    findQuery.sort(sortOptions || { empCode: 1 });
-    findQuery.skip(skip);
-    findQuery.limit(limit);
+    // EXECUTE IMMEDIATELY - Build and execute in one chain, no intermediate variables
+    // This prevents query object reuse that causes double execution
+    const employees = await Employee.find(queryFilter)
+      .select(listProjection)
+      .sort(sortOptions || { empCode: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
     
-    // Execute find query immediately
-    const employees = await findQuery.lean();
-    
-    // Then execute count query separately
+    // Execute count separately (also in one chain)
     const total = await Employee.countDocuments(queryFilter);
 
     return NextResponse.json({
