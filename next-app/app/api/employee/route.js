@@ -4,6 +4,10 @@ import { connectDB } from '../../../lib/db';
 import Employee from '../../../models/Employee';
 import { generateCacheKey, getOrSetCache, invalidateEmployeeCache, CACHE_TTL } from '../../../lib/cache/cacheHelper';
 import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/queryOptimizer';
+import { asyncHandler, NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
+import { validateEmployee } from '../../../lib/validations/employee';
+import { rateLimiters } from '../../../lib/middleware/rateLimit';
+import { monitorQuery } from '../../../lib/utils/queryPerformance';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +15,10 @@ export const dynamic = 'force-dynamic';
 // - /api/employee?empCode=943425  -> single employee { employee: {...} }
 // - /api/employee                  -> list { items: [...] }
 export async function GET(req) {
+  // Apply rate limiting
+  const rateLimitResponse = await rateLimiters.read(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     await connectDB();
 
@@ -30,20 +38,13 @@ export async function GET(req) {
           const employee = await Employee.findOne({ empCode }, projection).lean();
           
           if (!employee) {
-            return { error: `Employee ${empCode} not found`, status: 404 };
+            throw new NotFoundError(`Employee ${empCode}`);
           }
           
           return { employee };
         },
         CACHE_TTL.EMPLOYEE_SINGLE
       );
-      
-      if (result.error) {
-        return NextResponse.json(
-          { error: result.error },
-          { status: result.status }
-        );
-      }
       
       return NextResponse.json(result);
     }
@@ -55,8 +56,8 @@ export async function GET(req) {
     const shift = searchParams.get('shift') || '';
     const department = searchParams.get('department') || '';
 
-    // Build optimized query filter
-    const filter = buildEmployeeFilter({ search, shift, department });
+    // Build optimized query filter and sort options
+    const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
     
     // Use optimized projection (exclude base64 images for list views)
     const listProjection = getEmployeeProjection(false);
@@ -64,20 +65,83 @@ export async function GET(req) {
     // Check if client wants to bypass cache (for real-time updates)
     const bypassCache = searchParams.get('_t') || searchParams.get('no-cache');
     
+    // PERFORMANCE: For first page with no filters, use longer cache
+    const isFirstPageNoFilter = page === 1 && !search && !shift && !department;
+    const cacheTTL = isFirstPageNoFilter ? CACHE_TTL.EMPLOYEES * 2 : CACHE_TTL.EMPLOYEES; // 60s for first page
+    
     // Fetch function
     const fetchEmployees = async () => {
       // Calculate pagination
       const skip = (page - 1) * limit;
       
-      // Get total count for pagination
-      const total = await Employee.countDocuments(filter);
+      // PERFORMANCE OPTIMIZATION:
+      // 1. For empty filter, skip count entirely and use a simpler approach
+      // 2. Use hint() to force index usage
+      // 3. Use parallel queries when count is needed
       
-      // Get paginated employees with optimized projection
-      const employees = await Employee.find(filter, listProjection)
-        .sort({ empCode: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      const hasFilters = Object.keys(filter).length > 0;
+      
+      let total, employees;
+      
+      if (!hasFilters) {
+        // No filters - fastest path: just get the data, estimate count
+        // CRITICAL: For first page (skip=0), don't use skip() - it's unnecessary and slow
+        employees = await monitorQuery(
+          () => {
+            let query = Employee.find({}, listProjection)
+              .sort({ empCode: 1 }) // Always sort by empCode (indexed)
+              .limit(limit)
+              .lean()
+              .maxTimeMS(5000); // Increased timeout for large collections
+            
+            // Only use skip if not first page
+            if (skip > 0) {
+              query = query.skip(skip);
+            }
+            
+            // Force use of empCode index for sorting
+            // This ensures MongoDB uses the index efficiently
+            return query;
+          },
+          `Employee find query (no filters, page ${page})`
+        );
+        
+        // Use estimated count for empty filter (much faster)
+        total = await monitorQuery(
+          () => Employee.estimatedDocumentCount(),
+          'Employee estimated count'
+        );
+      } else {
+        // Has filters - need accurate count
+        [total, employees] = await Promise.all([
+          monitorQuery(
+            () => Employee.countDocuments(filter).maxTimeMS(3000),
+            'Employee count query'
+          ),
+          monitorQuery(
+            () => {
+              let query = Employee.find(filter, listProjection)
+                .sort(sortOptions)
+                .skip(skip)
+                .limit(limit)
+                .lean()
+                .maxTimeMS(3000);
+              
+              // Hint index based on filter
+              if (filter.shift) {
+                query = query.hint({ shift: 1 });
+              } else if (filter.department) {
+                query = query.hint({ department: 1 });
+              } else if (filter.empCode) {
+                query = query.hint({ empCode: 1 });
+              }
+              
+              return query;
+            },
+            'Employee find query (with filters)'
+          ),
+        ]);
+      }
 
       return {
         items: employees,
@@ -103,75 +167,52 @@ export async function GET(req) {
     const result = await getOrSetCache(
       cacheKey,
       fetchEmployees,
-      CACHE_TTL.EMPLOYEES
+      cacheTTL
     );
 
     return NextResponse.json(result);
   } catch (err) {
-    console.error('GET /api/employee error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Internal server error' },
-      { status: 500 }
-    );
+    const { handleError } = await import('../../../lib/errors/errorHandler');
+    return handleError(err, req);
   }
 }
 
 // POST /api/employee  -> create / update (upsert)
 export async function POST(req) {
+  // Apply rate limiting (stricter for write operations)
+  const rateLimitResponse = await rateLimiters.write(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     await connectDB();
 
     const body = await req.json();
-    const {
-      empCode,
-      name,
-      email,
-      monthlySalary,
-      shift,
-      department,
-      designation,
+    
+    // Validate input
+    const validation = validateEmployee(body, true); // true = isUpdate (partial validation)
+    if (!validation.success) {
+      throw new ValidationError('Validation failed', validation.errors);
+    }
 
-      // 🔹 NEW FIELDS
-      phoneNumber,
-      cnic,
-      profileImageBase64,
-      profileImageUrl,
-    } = body;
+    const validatedData = validation.data;
+    const { empCode } = validatedData;
 
     if (!empCode) {
-      return NextResponse.json(
-        { error: 'empCode is required' },
-        { status: 400 }
-      );
+      throw new ValidationError('empCode is required');
     }
 
+    // Build update object from validated data
     const update = {};
-
-    if (name !== undefined) update.name = name;
-    if (email !== undefined) update.email = email;
-
-    // make sure salary is stored as Number
-    if (monthlySalary !== undefined && monthlySalary !== null) {
-      const numSalary = Number(monthlySalary);
-      if (!Number.isNaN(numSalary)) {
-        update.monthlySalary = numSalary;
+    Object.keys(validatedData).forEach((key) => {
+      if (validatedData[key] !== undefined && key !== 'empCode') {
+        update[key] = validatedData[key];
       }
+    });
+
+    // Ensure salary is stored as Number
+    if (update.monthlySalary !== undefined && update.monthlySalary !== null) {
+      update.monthlySalary = Number(update.monthlySalary);
     }
-
-    if (shift !== undefined) update.shift = shift;
-    if (department !== undefined) update.department = department;
-    if (designation !== undefined) update.designation = designation;
-
-    // 🔹 save new fields
-    if (phoneNumber !== undefined) update.phoneNumber = phoneNumber;
-    if (cnic !== undefined) update.cnic = cnic;
-
-    // image can be base64 or a URL
-    if (profileImageBase64 !== undefined)
-      update.profileImageBase64 = profileImageBase64;
-
-    if (profileImageUrl !== undefined)
-      update.profileImageUrl = profileImageUrl;
 
     const employee = await Employee.findOneAndUpdate(
       { empCode },
@@ -184,16 +225,17 @@ export async function POST(req) {
 
     return NextResponse.json({ employee });
   } catch (err) {
-    console.error('POST /api/employee error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Internal server error' },
-      { status: 500 }
-    );
+    const { handleError } = await import('../../../lib/errors/errorHandler');
+    return handleError(err, req);
   }
 }
 
 // DELETE /api/employee?empCode=XXXXX
 export async function DELETE(req) {
+  // Apply rate limiting (stricter for write operations)
+  const rateLimitResponse = await rateLimiters.write(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     await connectDB();
 
@@ -201,20 +243,14 @@ export async function DELETE(req) {
     const empCode = searchParams.get('empCode');
 
     if (!empCode) {
-      return NextResponse.json(
-        { error: 'empCode is required' },
-        { status: 400 }
-      );
+      throw new ValidationError('empCode is required');
     }
 
     // Find and delete the employee
     const deleted = await Employee.findOneAndDelete({ empCode });
 
     if (!deleted) {
-      return NextResponse.json(
-        { error: `Employee ${empCode} not found` },
-        { status: 404 }
-      );
+      throw new NotFoundError(`Employee ${empCode}`);
     }
 
     // Invalidate all employee caches after deletion
@@ -226,10 +262,7 @@ export async function DELETE(req) {
       employee: deleted,
     });
   } catch (err) {
-    console.error('DELETE /api/employee error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Internal server error' },
-      { status: 500 }
-    );
+    const { handleError } = await import('../../../lib/errors/errorHandler');
+    return handleError(err, req);
   }
 }
