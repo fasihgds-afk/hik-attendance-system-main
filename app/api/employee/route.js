@@ -32,10 +32,11 @@ export async function GET(req) {
     if (empCode) {
       const cacheKey = generateCacheKey(`employee:${empCode}`, searchParams);
       
-      const result = await getOrSetCache(
-        cacheKey,
-        async () => {
-          const employee = await Employee.findOne({ empCode }, projection).lean();
+          const result = await getOrSetCache(
+            cacheKey,
+            async () => {
+              const doc = await Employee.findOne({ empCode }, projection).exec();
+              const employee = doc ? (doc.toObject ? doc.toObject() : doc) : null;
           
           if (!employee) {
             throw new NotFoundError(`Employee ${empCode}`);
@@ -111,17 +112,19 @@ export async function GET(req) {
                 // Exclude: phoneNumber, cnic, saturdayGroup (not needed for list view)
               };
               
-              // CRITICAL: Create a fresh query each time to avoid "already executed" errors
-              // Build the query in one chain and execute immediately
+              // CRITICAL FIX: Use .exec() explicitly and convert to plain objects
+              // This prevents the "already executed" error in production
               const startTime = Date.now();
               
-              // Execute query immediately - don't store the query object
-              // CRITICAL: .lean() returns a promise that executes - don't use .exec() with .lean()
-              const result = await Employee.find({}, minimalProjection)
+              // Build query and execute with .exec() - then convert to plain objects
+              const query = Employee.find({}, minimalProjection)
                 .sort({ empCode: 1 }) // This should use empCode_1 index
                 .limit(limit)
-                .lean()
                 .maxTimeMS(20000);
+              
+              // Execute query and convert to plain objects
+              const docs = await query.exec();
+              const result = docs.map(doc => doc.toObject ? doc.toObject() : doc);
               
               const queryTime = Date.now() - startTime;
               if (process.env.NODE_ENV === 'development' && queryTime > 5000) {
@@ -143,13 +146,14 @@ export async function GET(req) {
           [employees, total] = await Promise.all([
             monitorQuery(
               async () => {
-                // Execute query immediately - .lean() returns a promise that executes once
-                return await Employee.find({}, listProjection)
+                // Execute query with .exec() and convert to plain objects
+                const docs = await Employee.find({}, listProjection)
                   .sort({ empCode: 1 })
                   .skip(skip)
                   .limit(limit)
-                  .lean()
-                  .maxTimeMS(5000);
+                  .maxTimeMS(5000)
+                  .exec();
+                return docs.map(doc => doc.toObject ? doc.toObject() : doc);
               },
               `Employee find query (no filters, page ${page})`
             ),
@@ -168,14 +172,14 @@ export async function GET(req) {
           ),
           monitorQuery(
             async () => {
-              // Build and execute query in one chain - don't store query object
-              // .lean() returns a promise that executes once - don't use .exec() with .lean()
-              return await Employee.find(filter, listProjection)
+              // Build and execute query with .exec() and convert to plain objects
+              const docs = await Employee.find(filter, listProjection)
                 .sort(sortOptions)
                 .skip(skip)
                 .limit(limit)
-                .lean()
-                .maxTimeMS(3000);
+                .maxTimeMS(3000)
+                .exec();
+              return docs.map(doc => doc.toObject ? doc.toObject() : doc);
             },
             'Employee find query (with filters)'
           ),
@@ -265,11 +269,12 @@ export async function POST(req) {
       update.monthlySalary = Number(update.monthlySalary);
     }
 
-    const employee = await Employee.findOneAndUpdate(
+    const doc = await Employee.findOneAndUpdate(
       { empCode },
       { $set: update },
       { new: true, upsert: true, setDefaultsOnInsert: true }
-    ).lean();
+    ).exec();
+    const employee = doc ? (doc.toObject ? doc.toObject() : doc) : null;
 
     // Invalidate employee caches after update
     invalidateEmployeeCache();
