@@ -72,86 +72,29 @@ export async function GET(req) {
       ? CACHE_TTL.EMPLOYEES_NO_FILTER_FIRST_PAGE // 2 minutes for first page, no filters
       : CACHE_TTL.EMPLOYEES; // 30 seconds for filtered/other pages
     
-    // Fetch function
+    // SIMPLE WORKING VERSION - Just get the data, no fancy optimizations
     const fetchEmployees = async () => {
-      // Calculate pagination
       const skip = (page - 1) * limit;
       
-      // PERFORMANCE OPTIMIZATION:
-      // 1. For empty filter, skip count entirely and use a simpler approach
-      // 2. Use hint() to force index usage
-      // 3. Use parallel queries when count is needed
-      
-      const hasFilters = Object.keys(filter).length > 0;
-      
-      let total, employees;
-      
-      if (!hasFilters) {
-        // No filters - fastest path: just get the data, estimate count
-        // CRITICAL OPTIMIZATION: For first page, use the most efficient query possible
-        // Run queries in parallel for better performance
-        // CRITICAL: For first page, use the simplest possible query
-        // MongoDB should automatically use the empCode index for sorting
-        if (page === 1 && skip === 0) {
-          // For first page, get employees first, then count (sequential to avoid overload)
-          // CRITICAL: Execute query directly without wrapper to prevent double execution
-          const minimalProjection = {
-            _id: 1,
-            empCode: 1,
-            name: 1,
-            email: 1,
-            monthlySalary: 1,
-            shift: 1,
-            shiftId: 1,
-            department: 1,
-            designation: 1,
-            profileImageUrl: 1,
-          };
-          
-          // CRITICAL: Execute query in one chain - .lean() executes and returns plain objects
-          // DO NOT call .exec() after .lean() - it causes "already executed" error
-          employees = await Employee.find({}, minimalProjection)
-            .sort({ empCode: 1 })
-            .limit(limit)
-            .maxTimeMS(20000)
-            .lean(); // .lean() executes the query and returns plain objects
-          
-          // Get count after employees (non-blocking, but sequential)
-          total = await Employee.estimatedDocumentCount().maxTimeMS(3000);
-        } else {
-          // For other pages, use parallel execution (less critical)
-          [employees, total] = await Promise.all([
-            // Execute query directly - .lean() executes and returns plain objects
-            Employee.find({}, listProjection)
-              .sort({ empCode: 1 })
-              .skip(skip)
-              .limit(limit)
-              .maxTimeMS(5000)
-              .lean(),
-            Employee.estimatedDocumentCount().maxTimeMS(2000),
-          ]);
-        }
-      } else {
-        // Has filters - need accurate count
-        [total, employees] = await Promise.all([
-          Employee.countDocuments(filter).maxTimeMS(3000),
-          // Execute query directly - .lean() executes and returns plain objects
-          Employee.find(filter, listProjection)
-            .sort(sortOptions)
-            .skip(skip)
-            .limit(limit)
-            .maxTimeMS(3000)
-            .lean(),
-        ]);
-      }
+      // Simple query - just get employees and count
+      const [employees, total] = await Promise.all([
+        Employee.find(filter, listProjection)
+          .sort(sortOptions || { empCode: 1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        filter && Object.keys(filter).length > 0
+          ? Employee.countDocuments(filter)
+          : Employee.estimatedDocumentCount(),
+      ]);
 
       return {
-        items: employees,
+        items: employees || [],
         pagination: {
           page,
           limit,
-          total,
-          totalPages: Math.ceil(total / limit),
+          total: total || 0,
+          totalPages: Math.ceil((total || 0) / limit),
         },
       };
     };
