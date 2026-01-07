@@ -51,20 +51,23 @@ export async function GET(req) {
     const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
     const listProjection = getEmployeeProjection(false);
     const skip = (page - 1) * limit;
-    const hasFilters = Object.keys(filter).length > 0;
-
-    // EXECUTE SEQUENTIALLY - Avoid Promise.all which might cause double execution
-    // Use .select() instead of projection parameter with .lean()
-    // Build query, select fields, then lean and execute
-    const employees = await Employee.find(filter || {})
-      .select(listProjection)
-      .sort(sortOptions || { empCode: 1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(); // .lean() executes query and returns plain objects
     
-    // Then execute count query
-    const total = await Employee.countDocuments(filter || {});
+    // Ensure filter is always a valid object - empty {} is valid for "all"
+    const queryFilter = Object.keys(filter).length > 0 ? filter : {};
+
+    // EXECUTE SEQUENTIALLY - Build query step by step, execute immediately
+    // Create fresh query each time - don't reuse query objects
+    const findQuery = Employee.find(queryFilter);
+    findQuery.select(listProjection);
+    findQuery.sort(sortOptions || { empCode: 1 });
+    findQuery.skip(skip);
+    findQuery.limit(limit);
+    
+    // Execute find query immediately
+    const employees = await findQuery.lean();
+    
+    // Then execute count query separately
+    const total = await Employee.countDocuments(queryFilter);
 
     return NextResponse.json({
       items: employees || [],
