@@ -52,20 +52,37 @@ export async function GET(req) {
     const listProjection = getEmployeeProjection(false);
     const skip = (page - 1) * limit;
     
-    // Ensure filter is always a valid object - empty {} is valid for "all"
+    // Use aggregation pipeline instead of find().lean() - more reliable in serverless
+    // Aggregation pipeline executes once and returns plain objects
     const queryFilter = Object.keys(filter).length > 0 ? filter : {};
-
-    // EXECUTE IMMEDIATELY - Build and execute in one chain, no intermediate variables
-    // This prevents query object reuse that causes double execution
-    const employees = await Employee.find(queryFilter)
-      .select(listProjection)
-      .sort(sortOptions || { empCode: 1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
     
-    // Execute count separately (also in one chain)
-    const total = await Employee.countDocuments(queryFilter);
+    // Build aggregation pipeline
+    const pipeline = [
+      { $match: queryFilter },
+      { $sort: sortOptions || { empCode: 1 } },
+      { $skip: skip },
+      { $limit: limit },
+    ];
+    
+    // Add projection if specified
+    if (listProjection && Object.keys(listProjection).length > 0) {
+      // Convert Mongoose projection to MongoDB projection
+      const projectionStage = { $project: {} };
+      Object.keys(listProjection).forEach(field => {
+        if (listProjection[field] === 1) {
+          projectionStage.$project[field] = 1;
+        }
+      });
+      pipeline.push(projectionStage);
+    }
+    
+    // Execute aggregation (returns plain objects by default)
+    const [employeesResult, total] = await Promise.all([
+      Employee.aggregate(pipeline),
+      Employee.countDocuments(queryFilter),
+    ]);
+    
+    const employees = employeesResult || [];
 
     return NextResponse.json({
       items: employees || [],
