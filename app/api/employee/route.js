@@ -83,17 +83,13 @@ export async function GET(req) {
 
 // POST /api/employee  -> create / update (upsert)
 export async function POST(req) {
-  // Apply rate limiting (stricter for write operations)
-  const rateLimitResponse = await rateLimiters.write(req);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     await connectDB();
 
     const body = await req.json();
     
     // Validate input
-    const validation = validateEmployee(body, true); // true = isUpdate (partial validation)
+    const validation = validateEmployee(body, true);
     if (!validation.success) {
       throw new ValidationError('Validation failed', validation.errors);
     }
@@ -105,7 +101,7 @@ export async function POST(req) {
       throw new ValidationError('empCode is required');
     }
 
-    // Build update object from validated data
+    // Build update object
     const update = {};
     Object.keys(validatedData).forEach((key) => {
       if (validatedData[key] !== undefined && key !== 'empCode') {
@@ -113,20 +109,16 @@ export async function POST(req) {
       }
     });
 
-    // Ensure salary is stored as Number
     if (update.monthlySalary !== undefined && update.monthlySalary !== null) {
       update.monthlySalary = Number(update.monthlySalary);
     }
 
-    // Use .lean() for update - returns plain object directly
+    // Execute update directly
     const employee = await Employee.findOneAndUpdate(
       { empCode },
       { $set: update },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean();
-
-    // Invalidate employee caches after update
-    invalidateEmployeeCache();
 
     return NextResponse.json({ employee });
   } catch (err) {
