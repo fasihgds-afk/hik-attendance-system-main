@@ -51,17 +51,16 @@ export async function GET(req) {
     const skip = (page - 1) * limit;
     const hasFilters = Object.keys(filter).length > 0;
 
-    // SIMPLE DIRECT QUERIES - Execute immediately with .lean(), no wrappers, no caching
-    const [employees, total] = await Promise.all([
-      Employee.find(filter || {}, listProjection)
-        .sort(sortOptions || { empCode: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(), // .lean() returns plain objects directly
-      hasFilters
-        ? Employee.countDocuments(filter)
-        : Employee.countDocuments({}), // Always use countDocuments
-    ]);
+    // EXECUTE SEQUENTIALLY - Avoid Promise.all which might cause double execution in serverless
+    // Build and execute find query first
+    const employees = await Employee.find(filter || {}, listProjection)
+      .sort(sortOptions || { empCode: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(); // .lean() executes query and returns plain objects
+    
+    // Then execute count query
+    const total = await Employee.countDocuments(filter || {});
 
     return NextResponse.json({
       items: employees || [],
@@ -138,10 +137,6 @@ export async function POST(req) {
 
 // DELETE /api/employee?empCode=XXXXX
 export async function DELETE(req) {
-  // Apply rate limiting (stricter for write operations)
-  const rateLimitResponse = await rateLimiters.write(req);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     await connectDB();
 
@@ -152,15 +147,11 @@ export async function DELETE(req) {
       throw new ValidationError('empCode is required');
     }
 
-    // Find and delete the employee
     const deleted = await Employee.findOneAndDelete({ empCode });
 
     if (!deleted) {
       throw new NotFoundError(`Employee ${empCode}`);
     }
-
-    // Invalidate all employee caches after deletion
-    invalidateEmployeeCache();
 
     return NextResponse.json({
       success: true,
