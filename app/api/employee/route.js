@@ -2,51 +2,29 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../lib/db';
 import Employee from '../../../models/Employee';
-import mongoose from 'mongoose';
-import { generateCacheKey, getOrSetCache, invalidateEmployeeCache, CACHE_TTL } from '../../../lib/cache/cacheHelper';
 import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/queryOptimizer';
-import { asyncHandler, NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
+import { NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
 import { validateEmployee } from '../../../lib/validations/employee';
-import { rateLimiters } from '../../../lib/middleware/rateLimit';
-// Removed monitorQuery import - using direct queries to prevent double execution
 
-// Force dynamic rendering and disable all caching to prevent Mongoose query issues
-// Adding timestamp to force Vercel rebuild
+// SIMPLE APPROACH - No caching, no wrappers, no monitoring - just direct Mongoose queries with .lean()
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const runtime = 'nodejs';
 
 // GET /api/employee
 // - /api/employee?empCode=943425  -> single employee { employee: {...} }
 // - /api/employee                  -> list { items: [...] }
 export async function GET(req) {
-  // Apply rate limiting
-  const rateLimitResponse = await rateLimiters.read(req);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     await connectDB();
 
     const { searchParams } = new URL(req.url);
     const empCode = searchParams.get('empCode');
 
-    // Use optimized projection (includes images for single employee, excludes base64 for lists)
-    const projection = getEmployeeProjection(true); // Include images
-
     // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
-      // Get native MongoDB collection directly - BYPASS MONGOOSE MODEL ENTIRELY
-      const db = mongoose.connection.db;
-      if (!db) {
-        throw new Error('Database not connected');
-      }
-      const col = db.collection('employees'); // Use collection name directly
-      
-      // Use native driver for single employee (production-safe)
-      const employee = await col.findOne(
-        { empCode },
-        { projection }
-      );
+      // SIMPLE: Use Mongoose with .lean() - execute immediately, no wrappers
+      const projection = getEmployeeProjection(true);
+      const employee = await Employee.findOne({ empCode }, projection).lean();
       
       if (!employee) {
         throw new NotFoundError(`Employee ${empCode}`);
@@ -67,97 +45,35 @@ export async function GET(req) {
       shift = '';
     }
 
-    // Build optimized query filter and sort options
+    // Build filter and projection
     const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
-    
-    // Use optimized projection (exclude base64 images for list views)
     const listProjection = getEmployeeProjection(false);
-
-    // Check if client wants to bypass cache (for real-time updates)
-    const bypassCache = searchParams.get('_t') || searchParams.get('no-cache');
-    
-    // PERFORMANCE: For first page with no filters, use longer cache (most common query)
+    const skip = (page - 1) * limit;
     const hasFilters = Object.keys(filter).length > 0;
-    const cacheTTL = !hasFilters && page === 1 
-      ? CACHE_TTL.EMPLOYEES_NO_FILTER_FIRST_PAGE // 2 minutes for first page, no filters
-      : CACHE_TTL.EMPLOYEES; // 30 seconds for filtered/other pages
-    
-    // PRODUCTION-SAFE: Use native MongoDB driver directly (avoid Mongoose double-execution issues on Vercel)
-    // Native driver is more reliable in serverless environments - COMPLETELY BYPASSES MONGOOSE
-    const fetchEmployees = async () => {
-      const skip = (page - 1) * limit;
-      
-      // Get native MongoDB collection directly - BYPASS MONGOOSE MODEL ENTIRELY
-      // Use mongoose.connection.db to get raw collection - most reliable approach
-      const db = mongoose.connection.db;
-      if (!db) {
-        throw new Error('Database not connected');
-      }
-      const col = db.collection('employees'); // Use collection name directly
-      
-      // Ensure filter is a valid object (empty object is valid for "find all")
-      const queryFilter = filter && Object.keys(filter).length > 0 ? filter : {};
-      
-      // Native driver syntax: find(filter, options) - options can include projection, sort, skip, limit
-      // OR use method chaining: find(filter).sort().skip().limit().toArray()
-      // Using method chaining is more reliable for serverless environments
-      
-      try {
-        // Build find cursor with method chaining (most reliable approach)
-        let cursor = col.find(queryFilter);
-        
-        // Apply projection if specified
-        if (listProjection && Object.keys(listProjection).length > 0) {
-          cursor = cursor.project(listProjection);
-        }
-        
-        // Apply sort, skip, limit
-        cursor = cursor.sort(sortOptions || { empCode: 1 });
-        cursor = cursor.skip(skip);
-        cursor = cursor.limit(limit);
-        
-        // Execute queries using native driver - NO MONGOOSE INVOLVEMENT
-        // Always use countDocuments() with filter (even if empty) - more reliable than estimatedDocumentCount()
-        // Empty filter {} is valid and will count all documents
-        const [employees, total] = await Promise.all([
-          cursor.toArray(),
-          col.countDocuments(queryFilter), // Use countDocuments always - works with empty filter {}
-        ]);
 
-        return {
-          items: employees || [],
-          pagination: {
-            page,
-            limit,
-            total: total || 0,
-            totalPages: Math.ceil((total || 0) / limit),
-          },
-        };
-      } catch (err) {
-        // Log detailed error for debugging
-        console.error('[Employee API] Native driver query failed:', {
-          message: err.message,
-          name: err.name,
-          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-          filter,
-          skip,
-          limit,
-        });
-        throw err;
-      }
-    };
+    // SIMPLE DIRECT QUERIES - Execute immediately with .lean(), no wrappers, no caching
+    const [employees, total] = await Promise.all([
+      Employee.find(filter || {}, listProjection)
+        .sort(sortOptions || { empCode: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(), // .lean() returns plain objects directly
+      hasFilters
+        ? Employee.countDocuments(filter)
+        : Employee.countDocuments({}), // Always use countDocuments
+    ]);
 
-    // DISABLE CACHE - Fetch directly every time to ensure we're using native driver
-    // This prevents any cached Mongoose query objects from being returned
-    const result = await fetchEmployees();
-    
-    // Add cache-busting headers to prevent Vercel from caching the response
-    return NextResponse.json(result, {
+    return NextResponse.json({
+      items: employees || [],
+      pagination: {
+        page,
+        limit,
+        total: total || 0,
+        totalPages: Math.ceil((total || 0) / limit),
+      },
+    }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'X-Cache-Status': 'BYPASS',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });
   } catch (err) {
