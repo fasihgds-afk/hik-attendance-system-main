@@ -72,31 +72,73 @@ export async function GET(req) {
       ? CACHE_TTL.EMPLOYEES_NO_FILTER_FIRST_PAGE // 2 minutes for first page, no filters
       : CACHE_TTL.EMPLOYEES; // 30 seconds for filtered/other pages
     
-    // SIMPLE WORKING VERSION - Just get the data, no fancy optimizations
+    // SIMPLE + ROBUST VERSION (with native driver fallback for production)
     const fetchEmployees = async () => {
       const skip = (page - 1) * limit;
-      
-      // Simple query - just get employees and count
-      const [employees, total] = await Promise.all([
-        Employee.find(filter, listProjection)
-          .sort(sortOptions || { empCode: 1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        filter && Object.keys(filter).length > 0
-          ? Employee.countDocuments(filter)
-          : Employee.estimatedDocumentCount(),
-      ]);
 
-      return {
-        items: employees || [],
-        pagination: {
-          page,
-          limit,
-          total: total || 0,
-          totalPages: Math.ceil((total || 0) / limit),
-        },
-      };
+      try {
+        // Simple query - Mongoose + lean (fast, memory-efficient)
+        const [employees, total] = await Promise.all([
+          Employee.find(filter, listProjection)
+            .sort(sortOptions || { empCode: 1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+          hasFilters
+            ? Employee.countDocuments(filter)
+            : Employee.estimatedDocumentCount(),
+        ]);
+
+        return {
+          items: employees || [],
+          pagination: {
+            page,
+            limit,
+            total: total || 0,
+            totalPages: Math.ceil((total || 0) / limit),
+          },
+        };
+      } catch (primaryErr) {
+        // Known intermittent prod issue: "Query was already executed"
+        // Fallback to native MongoDB driver to guarantee data returns
+        if (primaryErr?.message?.includes('Query was already executed')) {
+          try {
+            const col = Employee.collection;
+
+            // Project only needed fields (convert inclusion projection to native)
+            const projection = listProjection || {};
+
+            const cursor = col
+              .find(filter || {}, { projection })
+              .sort(sortOptions || { empCode: 1 })
+              .skip(skip)
+              .limit(limit);
+
+            const [employees, total] = await Promise.all([
+              cursor.toArray(),
+              hasFilters
+                ? col.countDocuments(filter || {})
+                : col.estimatedDocumentCount(),
+            ]);
+
+            return {
+              items: employees || [],
+              pagination: {
+                page,
+                limit,
+                total: total || 0,
+                totalPages: Math.ceil((total || 0) / limit),
+              },
+            };
+          } catch (fallbackErr) {
+            // If even fallback fails, rethrow original error to be handled upstream
+            throw primaryErr;
+          }
+        }
+
+        // Unknown error - bubble up
+        throw primaryErr;
+      }
     };
 
     // If bypassing cache, fetch directly
