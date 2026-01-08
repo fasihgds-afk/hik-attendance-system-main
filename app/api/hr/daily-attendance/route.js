@@ -135,21 +135,44 @@ export async function POST(req) {
       shiftByCode.set(shift.code, shift);
     }
 
+    // Helper function to extract shift code from various formats
+    // This function handles multiple shift format patterns
+    function extractShiftCode(shiftValue) {
+      if (!shiftValue || typeof shiftValue !== 'string') return '';
+      
+      const trimmed = shiftValue.trim();
+      if (!trimmed) return '';
+      
+      // Try multiple patterns to extract shift code
+      // Pattern 1: Direct code like "D1", "N1", "D2", etc.
+      const directMatch = trimmed.match(/^([A-Z]\d+)$/i);
+      if (directMatch) {
+        return directMatch[1].toUpperCase(); // Normalize to uppercase
+      }
+      
+      // Pattern 2: Formatted string like "D1 – Day Shift (09:00–18:00)" or "D1 - Day Shift"
+      const formattedMatch = trimmed.match(/^([A-Z]\d+)/i);
+      if (formattedMatch) {
+        return formattedMatch[1].toUpperCase(); // Normalize to uppercase
+      }
+      
+      // Pattern 3: Already uppercase code
+      if (/^[A-Z]\d+$/.test(trimmed)) {
+        return trimmed;
+      }
+      
+      // If no pattern matches, return as-is (might be a valid code we don't recognize)
+      return trimmed.toUpperCase();
+    }
+
     // Map for quick lookup: empCode -> info
     // IMPORTANT: Use employee's current shift from Employee model (not EmployeeShiftHistory)
     // This ensures shift updates from employee manage page are immediately reflected
     const empInfoMap = new Map();
     for (const emp of allEmployees) {
       // Use employee's current shift directly (same as monthly attendance route)
-      // Extract shift code if it's a formatted string (e.g., "D1 – Day Shift (09:00–18:00)")
-      let employeeShift = emp.shift || '';
-      if (employeeShift && typeof employeeShift === 'string') {
-        // Try to extract shift code if it's formatted
-        const codeMatch = employeeShift.match(/^([A-Z]\d+)/);
-        if (codeMatch) {
-          employeeShift = codeMatch[1];
-        }
-      }
+      // Extract shift code from various possible formats
+      const employeeShift = extractShiftCode(emp.shift);
       
       empInfoMap.set(emp.empCode, {
         name: emp.name || '',
@@ -220,14 +243,7 @@ export async function POST(req) {
     const nightShiftEmpCodes = new Set();
     for (const emp of allEmployees) {
       // Use employee's current shift from Employee model (not from history)
-      let empAssignedShift = emp.shift || '';
-      if (empAssignedShift && typeof empAssignedShift === 'string') {
-        // Extract shift code if it's formatted
-        const codeMatch = empAssignedShift.match(/^([A-Z]\d+)/);
-        if (codeMatch) {
-          empAssignedShift = codeMatch[1];
-        }
-      }
+      const empAssignedShift = extractShiftCode(emp.shift);
       const shiftObj = shiftByCode.get(empAssignedShift);
       if (shiftObj?.crossesMidnight === true) {
         nightShiftEmpCodes.add(emp.empCode);
@@ -319,14 +335,7 @@ export async function POST(req) {
       
       // Get employee's assigned shift to determine if it's a night shift
       // Use employee's current shift from Employee model (not from history)
-      let empAssignedShift = rec?.assignedShift || emp.shift || '';
-      if (empAssignedShift && typeof empAssignedShift === 'string') {
-        // Extract shift code if it's formatted
-        const codeMatch = empAssignedShift.match(/^([A-Z]\d+)/);
-        if (codeMatch) {
-          empAssignedShift = codeMatch[1];
-        }
-      }
+      const empAssignedShift = extractShiftCode(rec?.assignedShift || emp.shift || '');
       const shiftObjForCheckOut = shiftByCode.get(empAssignedShift);
       const isNightShiftForCheckOut = shiftObjForCheckOut?.crossesMidnight === true;
       
@@ -641,15 +650,7 @@ export async function POST(req) {
       // 1) Prefer employee's current shift from Employee model (updated from manage page)
       // 2) Otherwise infer from detected punch times
       let shift = 'Unknown';
-      let assignedShift = rec?.assignedShift || emp.shift || '';
-      
-      // Extract shift code if it's formatted (e.g., "D1 – Day Shift (09:00–18:00)")
-      if (assignedShift && typeof assignedShift === 'string') {
-        const codeMatch = assignedShift.match(/^([A-Z]\d+)/);
-        if (codeMatch) {
-          assignedShift = codeMatch[1];
-        }
-      }
+      let assignedShift = extractShiftCode(rec?.assignedShift || emp.shift || '');
 
       // Check if assigned shift exists in database
       if (assignedShift && shiftByCode.has(assignedShift)) {
@@ -657,6 +658,19 @@ export async function POST(req) {
       } else if (rec?.detectedShifts && rec.detectedShifts.size > 0) {
         // Use first detected shift (or could prioritize by most punches)
         shift = Array.from(rec.detectedShifts)[0];
+      }
+      
+      // Debug logging for employee 00002 to diagnose "Unknown" issue
+      if (emp.empCode === '00002') {
+        console.log(`[DAILY ATTENDANCE DEBUG] Employee 00002:`, {
+          empShift: emp.shift,
+          recAssignedShift: rec?.assignedShift,
+          extractedShift: assignedShift,
+          shiftByCodeHas: shiftByCode.has(assignedShift),
+          detectedShifts: rec?.detectedShifts ? Array.from(rec.detectedShifts) : [],
+          finalShift: shift,
+          allShiftCodes: Array.from(shiftByCode.keys()),
+        });
       }
 
       // Calculate total punches: count events found, but also count checkOut if it exists from existing record or next day's record
