@@ -123,6 +123,9 @@ export default function EmployeeShiftPage() {
         params.set('_t', Date.now().toString()); // Server will bypass cache when this is present
       }
 
+      // Add version parameter to force fresh data (cache busting)
+      params.set('v', '2.0'); // Version 2.0 = no shift filter
+      
       const res = await fetch(`/api/employee?${params.toString()}`, {
         cache: 'no-store', // Always bypass browser cache
         headers: {
@@ -195,7 +198,8 @@ export default function EmployeeShiftPage() {
 
   // Reload employees when page or search changes
   useEffect(() => {
-    loadEmployees();
+    // Force fresh load on mount to bypass any cached data
+    loadEmployees(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, searchQuery]);
 
