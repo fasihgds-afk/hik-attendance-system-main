@@ -9,21 +9,27 @@ import { validateEmployee } from '../../../lib/validations/employee';
 // SIMPLE APPROACH - No caching, no wrappers, no monitoring - just direct Mongoose queries with .lean()
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const runtime = 'nodejs'; // Explicitly set runtime for Vercel
+export const fetchCache = 'force-no-store'; // Disable fetch caching
 
 // GET /api/employee
 // - /api/employee?empCode=943425  -> single employee { employee: {...} }
 // - /api/employee                  -> list { items: [...] }
 export async function GET(req) {
   try {
+    // Log all requests for debugging (including production)
+    console.log('[Employee API] GET request received:', {
+      url: req.url,
+      timestamp: new Date().toISOString(),
+      env: process.env.NODE_ENV,
+    });
+
     await connectDB();
 
     const { searchParams } = new URL(req.url);
     const empCode = searchParams.get('empCode');
     
-    // Log for debugging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Employee API] GET request:', { empCode, url: req.url });
-    }
+    console.log('[Employee API] Query params:', { empCode, searchParams: Object.fromEntries(searchParams) });
 
     // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
