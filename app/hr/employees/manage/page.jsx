@@ -48,8 +48,7 @@ export default function EmployeeShiftPage() {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
-  const [selectedShift, setSelectedShift] = useState(''); // Filter by shift
-  const [searchQuery, setSearchQuery] = useState(''); // Search query
+  const [searchQuery, setSearchQuery] = useState(''); // Search query only
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -103,15 +102,12 @@ export default function EmployeeShiftPage() {
     setLoading(true);
 
     try {
-      // Build query parameters
+      // Build query parameters - only search, no filters
       const params = new URLSearchParams();
       params.set('page', currentPage.toString());
       params.set('limit', '50'); // 50 employees per page
       if (searchQuery) {
         params.set('search', searchQuery);
-      }
-      if (selectedShift) {
-        params.set('shift', selectedShift);
       }
       
       // Log request for debugging
@@ -119,7 +115,6 @@ export default function EmployeeShiftPage() {
         page: currentPage,
         limit: 50,
         search: searchQuery || '(none)',
-        shift: selectedShift || '(none)',
         url: `/api/employee?${params.toString()}`,
       });
       
@@ -198,11 +193,11 @@ export default function EmployeeShiftPage() {
     loadShifts();
   }, []);
 
-  // Reload employees when page, search, or shift filter changes
+  // Reload employees when page or search changes
   useEffect(() => {
     loadEmployees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchQuery, selectedShift]);
+  }, [currentPage, searchQuery]);
 
   function handleShiftChange(index, newShift) {
     setEmployees((prev) => {
@@ -726,14 +721,8 @@ export default function EmployeeShiftPage() {
               </div>
               <EmployeeFilters
                 searchQuery={searchQuery}
-                selectedShift={selectedShift}
-                shifts={shifts}
                 onSearchChange={(value) => {
                   setSearchQuery(value);
-                  setCurrentPage(1);
-                }}
-                onShiftChange={(value) => {
-                  setSelectedShift(value);
                   setCurrentPage(1);
                 }}
               />
