@@ -114,6 +114,15 @@ export default function EmployeeShiftPage() {
         params.set('shift', selectedShift);
       }
       
+      // Log request for debugging
+      console.log('🔍 Loading employees with params:', {
+        page: currentPage,
+        limit: 50,
+        search: searchQuery || '(none)',
+        shift: selectedShift || '(none)',
+        url: `/api/employee?${params.toString()}`,
+      });
+      
       // Add cache-busting parameter to bypass server-side cache
       if (forceRefresh) {
         params.set('_t', Date.now().toString()); // Server will bypass cache when this is present
@@ -153,12 +162,23 @@ export default function EmployeeShiftPage() {
       }
       const data = await res.json();
       
+      // Log response for debugging
+      console.log('Employee API Response:', {
+        itemsCount: data.items?.length || 0,
+        total: data.pagination?.total || 0,
+        page: data.pagination?.page || 1,
+        hasItems: !!data.items,
+        debug: data.debug, // Will show filter info in production
+      });
+      
       // Log if no employees found (for debugging)
       if (!data.items || data.items.length === 0) {
-        console.warn('No employees found in API response:', {
+        console.warn('⚠️ No employees found in API response:', {
           items: data.items,
           pagination: data.pagination,
           total: data.pagination?.total,
+          debug: data.debug,
+          url: res.url,
         });
       }
       

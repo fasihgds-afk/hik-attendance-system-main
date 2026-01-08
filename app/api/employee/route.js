@@ -73,6 +73,14 @@ export async function GET(req) {
     // Build optimized query filter
     const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
     
+    // Log filter details for debugging
+    console.log('[Employee API] Filter params:', {
+      search: search || '(empty)',
+      shift: shift || '(empty)',
+      department: department || '(empty)',
+      builtFilter: JSON.stringify(filter),
+    });
+    
     // Use optimized projection (exclude base64 images for list views)
     const listProjection = getEmployeeProjection(false);
 
@@ -81,6 +89,7 @@ export async function GET(req) {
     
     // Get total count for pagination
     const total = await Employee.countDocuments(filter);
+    console.log('[Employee API] Total employees matching filter:', total);
     
     // Get paginated employees with optimized projection
     const employees = await Employee.find(filter, listProjection)
@@ -88,20 +97,24 @@ export async function GET(req) {
       .skip(skip)
       .limit(limit)
       .lean();
+    
+    console.log('[Employee API] Employees found:', employees?.length || 0);
 
-    // Log result for debugging
-    if (process.env.NODE_ENV === 'production') {
-      console.log('[Employee API] Query result:', {
-        employeesCount: employees?.length || 0,
-        total,
-        page,
-        limit,
-        filter: Object.keys(filter).length > 0 ? 'has filters' : 'no filters',
-      });
-    }
+    // Log result for debugging (always log in production to help diagnose)
+    console.log('[Employee API] Query result:', {
+      employeesCount: employees?.length || 0,
+      total,
+      page,
+      limit,
+      search,
+      shift,
+      department,
+      filter: JSON.stringify(filter),
+      sortOptions: JSON.stringify(sortOptions),
+    });
 
     // Always return items array, even if empty
-    return NextResponse.json({
+    const response = {
       items: employees || [],
       pagination: {
         page,
@@ -109,7 +122,22 @@ export async function GET(req) {
         total: total || 0,
         totalPages: Math.ceil((total || 0) / limit),
       },
+      // Add debug info in production to help diagnose
+      ...(process.env.NODE_ENV === 'production' && {
+        debug: {
+          filter,
+          employeesFound: employees?.length || 0,
+          totalInDB: total || 0,
+        },
+      }),
+    };
+
+    console.log('[Employee API] Response:', {
+      itemsCount: response.items.length,
+      total: response.pagination.total,
     });
+
+    return NextResponse.json(response);
   } catch (err) {
     console.error('GET /api/employee error:', err);
     console.error('Error stack:', err.stack);
