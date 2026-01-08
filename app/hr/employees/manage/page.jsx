@@ -167,21 +167,29 @@ export default function EmployeeShiftPage() {
     try {
       setSavingId(emp._id || emp.empCode);
 
+      // Get the latest employee data from state to ensure we have the updated shift
+      const currentEmployee = employees.find(e => e.empCode === emp.empCode) || emp;
+
+      // Normalize shift code to uppercase (Shift model stores codes in uppercase)
+      const normalizedShift = currentEmployee.shift 
+        ? String(currentEmployee.shift).trim().toUpperCase() 
+        : '';
+
       const res = await fetch('/api/employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          empCode: emp.empCode,
-          name: emp.name,
-          email: emp.email,
-          monthlySalary: emp.monthlySalary,
-          shift: emp.shift || '',
-          department: emp.department,
-          designation: emp.designation,
-          phoneNumber: emp.phoneNumber,
-          cnic: emp.cnic,
-          profileImageBase64: emp.profileImageBase64,
-          profileImageUrl: emp.profileImageUrl,
+          empCode: currentEmployee.empCode,
+          name: currentEmployee.name,
+          email: currentEmployee.email,
+          monthlySalary: currentEmployee.monthlySalary,
+          shift: normalizedShift,
+          department: currentEmployee.department,
+          designation: currentEmployee.designation,
+          phoneNumber: currentEmployee.phoneNumber,
+          cnic: currentEmployee.cnic,
+          profileImageBase64: currentEmployee.profileImageBase64,
+          profileImageUrl: currentEmployee.profileImageUrl,
         }),
       });
 

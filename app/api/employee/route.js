@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../lib/db';
 import Employee from '../../../models/Employee';
-import { generateCacheKey, getOrSetCache, invalidateEmployeeCache, CACHE_TTL } from '../../../lib/cache/cacheHelper';
 import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/queryOptimizer';
 
 export const dynamic = 'force-dynamic';
@@ -22,30 +21,16 @@ export async function GET(req) {
 
     // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
-      const cacheKey = generateCacheKey(`employee:${empCode}`, searchParams);
+      const employee = await Employee.findOne({ empCode }, projection).lean();
       
-      const result = await getOrSetCache(
-        cacheKey,
-        async () => {
-          const employee = await Employee.findOne({ empCode }, projection).lean();
-          
-          if (!employee) {
-            return { error: `Employee ${empCode} not found`, status: 404 };
-          }
-          
-          return { employee };
-        },
-        CACHE_TTL.EMPLOYEE_SINGLE
-      );
-      
-      if (result.error) {
+      if (!employee) {
         return NextResponse.json(
-          { error: result.error },
-          { status: result.status }
+          { error: `Employee ${empCode} not found` },
+          { status: 404 }
         );
       }
       
-      return NextResponse.json(result);
+      return NextResponse.json({ employee });
     }
 
     // Otherwise → return list with pagination (used by admin/HR UI)
@@ -56,56 +41,34 @@ export async function GET(req) {
     const department = searchParams.get('department') || '';
 
     // Build optimized query filter
-    const filter = buildEmployeeFilter({ search, shift, department });
+    const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
     
     // Use optimized projection (exclude base64 images for list views)
     const listProjection = getEmployeeProjection(false);
 
-    // Check if client wants to bypass cache (for real-time updates)
-    const bypassCache = searchParams.get('_t') || searchParams.get('no-cache');
+    // Calculate pagination
+    const skip = (page - 1) * limit;
     
-    // Fetch function
-    const fetchEmployees = async () => {
-      // Calculate pagination
-      const skip = (page - 1) * limit;
-      
-      // Get total count for pagination
-      const total = await Employee.countDocuments(filter);
-      
-      // Get paginated employees with optimized projection
-      const employees = await Employee.find(filter, listProjection)
-        .sort({ empCode: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-
-      return {
-        items: employees,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      };
-    };
-
-    // If bypassing cache, fetch directly
-    if (bypassCache) {
-      const result = await fetchEmployees();
-      return NextResponse.json(result);
-    }
-
-    // Otherwise, use cache for better performance
-    const cacheKey = generateCacheKey('employees', searchParams);
+    // Get total count for pagination
+    const total = await Employee.countDocuments(filter);
     
-    const result = await getOrSetCache(
-      cacheKey,
-      fetchEmployees,
-      CACHE_TTL.EMPLOYEE_LIST
-    );
+    // Get paginated employees with optimized projection
+    const employees = await Employee.find(filter, listProjection)
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
-    return NextResponse.json(result);
+    // Always return items array, even if empty
+    return NextResponse.json({
+      items: employees || [],
+      pagination: {
+        page,
+        limit,
+        total: total || 0,
+        totalPages: Math.ceil((total || 0) / limit),
+      },
+    });
   } catch (err) {
     console.error('GET /api/employee error:', err);
     return NextResponse.json(
@@ -151,9 +114,6 @@ export async function POST(req) {
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean();
 
-    // Invalidate cache for this employee and list
-    await invalidateEmployeeCache(empCode);
-
     return NextResponse.json({ employee });
   } catch (err) {
     console.error('POST /api/employee error:', err);
@@ -189,9 +149,6 @@ export async function DELETE(req) {
         { status: 404 }
       );
     }
-
-    // Invalidate cache for this employee and list
-    await invalidateEmployeeCache(empCode);
 
     return NextResponse.json({
       success: true,
