@@ -1,4 +1,4 @@
-﻿// next-app/app/api/employee/route.js
+// next-app/app/api/employee/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../lib/db';
 import Employee from '../../../models/Employee';
@@ -20,7 +20,7 @@ export async function GET(req) {
     // Use optimized projection (includes images for single employee, excludes base64 for lists)
     const projection = getEmployeeProjection(true); // Include images
 
-    // If empCode is provided ΓåÆ return single employee (used by employee dashboard)
+    // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
       const cacheKey = generateCacheKey(`employee:${empCode}`, searchParams);
       
@@ -48,7 +48,7 @@ export async function GET(req) {
       return NextResponse.json(result);
     }
 
-    // Otherwise ΓåÆ return list with pagination (used by admin/HR UI)
+    // Otherwise → return list with pagination (used by admin/HR UI)
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const search = searchParams.get('search') || '';
@@ -131,7 +131,7 @@ export async function POST(req) {
       department,
       designation,
 
-      // ≡ƒö╣ NEW FIELDS
+      // 🔹 NEW FIELDS
       phoneNumber,
       cnic,
       profileImageBase64,
@@ -162,7 +162,7 @@ export async function POST(req) {
     if (department !== undefined) update.department = department;
     if (designation !== undefined) update.designation = designation;
 
-    // ≡ƒö╣ save new fields
+    // 🔹 save new fields
     if (phoneNumber !== undefined) update.phoneNumber = phoneNumber;
     if (cnic !== undefined) update.cnic = cnic;
 
