@@ -11,14 +11,13 @@ export const dynamic = 'force-dynamic';
 // - /api/employee                  -> list { items: [...] }
 export async function GET(req) {
   try {
-    // Log request for debugging (only in production to help diagnose)
-    if (process.env.NODE_ENV === 'production') {
-      console.log('[Employee API] GET request received:', {
-        url: req.url,
-        hasMongoUri: !!process.env.MONGO_URI,
-        timestamp: new Date().toISOString(),
-      });
-    }
+    // Always log in production for debugging
+    console.log('[Employee API] GET request received:', {
+      url: req.url,
+      hasMongoUri: !!process.env.MONGO_URI,
+      timestamp: new Date().toISOString(),
+      nodeEnv: process.env.NODE_ENV,
+    });
 
     // Connect to database
     try {
@@ -171,7 +170,22 @@ export async function GET(req) {
         console.log('[Employee API] Employees found (fallback query):', employees?.length || 0);
       } catch (fallbackError) {
         console.error('[Employee API] Fallback query also failed:', fallbackError);
-        employees = [];
+        // Last resort: try simplest query like /api/hr/employees
+        try {
+          console.log('[Employee API] Trying simplest query as last resort...');
+          employees = await Employee.find({})
+            .select('empCode name email monthlySalary shift shiftId department designation phoneNumber cnic profileImageUrl saturdayGroup')
+            .sort({ empCode: 1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+          console.log('[Employee API] Employees found (simple query):', employees?.length || 0);
+          // Update total to match simple query
+          total = await Employee.countDocuments({});
+        } catch (simpleError) {
+          console.error('[Employee API] Even simple query failed:', simpleError);
+          employees = [];
+        }
       }
     }
 
