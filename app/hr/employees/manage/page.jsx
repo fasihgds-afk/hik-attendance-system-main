@@ -129,9 +129,39 @@ export default function EmployeeShiftPage() {
       
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || `Failed to load employees (${res.status})`);
+        let errorMessage = text || `Failed to load employees (${res.status})`;
+        
+        // Try to parse JSON error if available
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.error || errorMessage;
+          if (errorData.details) {
+            console.error('API Error Details:', errorData.details);
+          }
+        } catch (e) {
+          // Not JSON, use text as is
+        }
+        
+        console.error('Employee API Error:', {
+          status: res.status,
+          statusText: res.statusText,
+          error: errorMessage,
+          url: res.url,
+        });
+        
+        throw new Error(errorMessage);
       }
       const data = await res.json();
+      
+      // Log if no employees found (for debugging)
+      if (!data.items || data.items.length === 0) {
+        console.warn('No employees found in API response:', {
+          items: data.items,
+          pagination: data.pagination,
+          total: data.pagination?.total,
+        });
+      }
+      
       setEmployees(data.items || []);
       if (data.pagination) {
         setPagination(data.pagination);

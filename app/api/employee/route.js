@@ -11,7 +11,19 @@ export const dynamic = 'force-dynamic';
 // - /api/employee                  -> list { items: [...] }
 export async function GET(req) {
   try {
-    await connectDB();
+    // Connect to database
+    try {
+      await connectDB();
+    } catch (dbError) {
+      console.error('Database connection error:', dbError);
+      return NextResponse.json(
+        {
+          error: 'Database connection failed. Please check MONGO_URI environment variable.',
+          details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+        },
+        { status: 500 }
+      );
+    }
 
     const { searchParams } = new URL(req.url);
     const empCode = searchParams.get('empCode');
@@ -71,9 +83,14 @@ export async function GET(req) {
     });
   } catch (err) {
     console.error('GET /api/employee error:', err);
+    console.error('Error stack:', err.stack);
     return NextResponse.json(
       {
         error: err?.message || 'Failed to load employees',
+        ...(process.env.NODE_ENV === 'development' && { 
+          stack: err.stack,
+          details: err.toString() 
+        }),
       },
       { status: 500 }
     );
