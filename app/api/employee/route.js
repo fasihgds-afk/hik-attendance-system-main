@@ -74,8 +74,36 @@ export async function GET(req) {
     const totalEmployeesInDB = await Employee.countDocuments({});
     console.log('[Employee API] 🔍 Total employees in database (no filter):', totalEmployeesInDB);
     
+    // If no employees in database at all, return early
+    if (totalEmployeesInDB === 0) {
+      console.warn('[Employee API] ⚠️ No employees found in database at all!');
+      return NextResponse.json({
+        items: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+        debug: {
+          message: 'No employees in database',
+          totalInDB: 0,
+        },
+      });
+    }
+    
     // Build optimized query filter
-    const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
+    let filter, sortOptions;
+    try {
+      const filterResult = buildEmployeeFilter({ search, shift, department });
+      filter = filterResult.filter;
+      sortOptions = filterResult.sortOptions;
+    } catch (filterError) {
+      console.error('[Employee API] Error building filter:', filterError);
+      // Fallback to empty filter if buildEmployeeFilter fails
+      filter = {};
+      sortOptions = { empCode: 1 };
+    }
     
     // Log filter details for debugging
     console.log('[Employee API] Filter params:', {
@@ -86,28 +114,66 @@ export async function GET(req) {
     });
     
     // Use optimized projection (exclude base64 images for list views)
-    const listProjection = getEmployeeProjection(false);
+    let listProjection;
+    try {
+      listProjection = getEmployeeProjection(false);
+    } catch (projError) {
+      console.error('[Employee API] Error getting projection:', projError);
+      // Fallback to basic projection
+      listProjection = {
+        empCode: 1,
+        name: 1,
+        email: 1,
+        shift: 1,
+        department: 1,
+        designation: 1,
+        monthlySalary: 1,
+      };
+    }
 
     // Calculate pagination
     const skip = (page - 1) * limit;
     
     // Get total count for pagination
-    const total = await Employee.countDocuments(filter);
-    console.log('[Employee API] Total employees matching filter:', total);
+    let total;
+    try {
+      total = await Employee.countDocuments(filter);
+      console.log('[Employee API] Total employees matching filter:', total);
+    } catch (countError) {
+      console.error('[Employee API] Error counting documents:', countError);
+      total = 0;
+    }
     
     // If filter returns 0 but database has employees, log warning
     if (total === 0 && totalEmployeesInDB > 0) {
       console.warn('[Employee API] ⚠️ Filter is too restrictive! Database has', totalEmployeesInDB, 'employees but filter returns 0');
+      console.warn('[Employee API] Filter details:', JSON.stringify(filter));
     }
     
     // Get paginated employees with optimized projection
-    const employees = await Employee.find(filter, listProjection)
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(limit)
-      .lean();
-    
-    console.log('[Employee API] Employees found:', employees?.length || 0);
+    let employees = [];
+    try {
+      employees = await Employee.find(filter, listProjection)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .lean();
+      console.log('[Employee API] Employees found:', employees?.length || 0);
+    } catch (findError) {
+      console.error('[Employee API] Error finding employees:', findError);
+      // Try without projection as fallback
+      try {
+        employees = await Employee.find(filter)
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limit)
+          .lean();
+        console.log('[Employee API] Employees found (fallback query):', employees?.length || 0);
+      } catch (fallbackError) {
+        console.error('[Employee API] Fallback query also failed:', fallbackError);
+        employees = [];
+      }
+    }
 
     // Log result for debugging (always log in production to help diagnose)
     console.log('[Employee API] Query result:', {
@@ -131,19 +197,24 @@ export async function GET(req) {
         total: total || 0,
         totalPages: Math.ceil((total || 0) / limit),
       },
-      // Add debug info in production to help diagnose
-      ...(process.env.NODE_ENV === 'production' && {
-        debug: {
-          filter,
-          employeesFound: employees?.length || 0,
-          totalInDB: total || 0,
-        },
-      }),
+      // Always add debug info to help diagnose
+      debug: {
+        totalInDB: totalEmployeesInDB,
+        employeesFound: employees?.length || 0,
+        totalMatchingFilter: total || 0,
+        filter: filter || {},
+        hasFilter: Object.keys(filter || {}).length > 0,
+        search: search || null,
+        shift: shift || null,
+        department: department || null,
+      },
     };
 
     console.log('[Employee API] Response:', {
       itemsCount: response.items.length,
       total: response.pagination.total,
+      totalInDB: totalEmployeesInDB,
+      debug: response.debug,
     });
 
     return NextResponse.json(response);
