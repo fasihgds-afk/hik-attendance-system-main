@@ -19,6 +19,11 @@ export async function GET(req) {
 
     const { searchParams } = new URL(req.url);
     const empCode = searchParams.get('empCode');
+    
+    // Log for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Employee API] GET request:', { empCode, url: req.url });
+    }
 
     // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
@@ -47,57 +52,35 @@ export async function GET(req) {
       shift = '';
     }
 
-    // Build filter and projection
+    // Build filter
     const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
-    const listProjection = getEmployeeProjection(false);
     const skip = (page - 1) * limit;
     
-    // CRITICAL: Use aggregation pipeline - bypasses ALL Mongoose query builder issues
-    // Aggregation never uses Employee.find() so can't have "already executed" errors
+    // Use direct Mongoose queries instead of aggregation for simplicity and reliability
+    // Aggregation can have issues in serverless environments
     const queryFilter = Object.keys(filter).length > 0 ? filter : {};
     
-    // Build aggregation pipeline - projection first for efficiency
-    const pipeline = [
-      { $match: queryFilter }, // Empty {} matches all documents
-      { $project: {
-        _id: 1,
-        empCode: 1,
-        name: 1,
-        email: 1,
-        monthlySalary: 1,
-        shift: 1,
-        shiftId: 1,
-        department: 1,
-        designation: 1,
-        phoneNumber: 1,
-        cnic: 1,
-        saturdayGroup: 1,
-        profileImageUrl: 1,
-      }},
-      { $sort: sortOptions || { empCode: 1 } },
-      { $skip: skip },
-      { $limit: limit },
-    ];
+    // Log filter for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Employee API] Query filter:', queryFilter);
+    }
     
-    // AGGREGATION PIPELINE - No Mongoose find() queries used here at all
-    // Wrap in try-catch to catch aggregation errors specifically
-    let employees = [];
-    let total = 0;
+    // Get projection from helper (consistent with other queries)
+    const listProjection = getEmployeeProjection(false);
     
-    try {
-      employees = await Employee.aggregate(pipeline);
-      
-      // Count also uses countDocuments for consistency
-      total = await Employee.countDocuments(queryFilter);
-    } catch (aggError) {
-      console.error('Aggregation error:', {
-        error: aggError.message,
-        stack: aggError.stack,
-        filter: queryFilter,
-        pipeline: JSON.stringify(pipeline),
-      });
-      // Re-throw with more context
-      throw new Error(`Database query failed: ${aggError.message}`);
+    // Execute queries sequentially to avoid any issues
+    const employees = await Employee.find(queryFilter)
+      .select(listProjection)
+      .sort(sortOptions || { empCode: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .exec(); // Explicitly execute the query
+    
+    const total = await Employee.countDocuments(queryFilter).exec();
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Employee API] Query result:', { count: employees.length, total });
     }
 
     return NextResponse.json({

@@ -1343,7 +1343,7 @@ export async function GET(req) {
     // Direct response - no caching
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });
   } catch (err) {
