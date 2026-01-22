@@ -28,6 +28,18 @@ export async function POST(req) {
 
     const body = await req.json();
     
+    // Log received data for debugging (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Register API] Received data:', {
+        email: body.email,
+        role: body.role,
+        hasPassword: !!body.password,
+        passwordLength: body.password?.length,
+        hasEmpCode: !!body.empCode,
+        empCode: body.empCode,
+      });
+    }
+    
     // Validate input
     let validated;
     try {
