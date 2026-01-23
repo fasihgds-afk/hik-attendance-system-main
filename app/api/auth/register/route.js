@@ -1,10 +1,10 @@
 // next-app/app/api/auth/register/route.js
-import { connectDB } from '@/lib/db';
-import User from '@/models/User';
-import Employee from '@/models/Employee';
+import { connectDB } from '../../../lib/db';
+import User from '../../../models/User';
+import Employee from '../../../models/Employee';
 import bcrypt from 'bcryptjs';
-import { ValidationError, NotFoundError } from '@/lib/errors/errorHandler';
-import { rateLimiters } from '@/lib/middleware/rateLimit';
+import { ValidationError, NotFoundError } from '../../../lib/errors/errorHandler';
+import { rateLimiters } from '../../../lib/middleware/rateLimit';
 import { z } from 'zod';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
 
