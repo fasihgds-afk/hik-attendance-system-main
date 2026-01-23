@@ -1454,8 +1454,6 @@ export async function POST(req) {
     // Handle Paid Leave synchronization
     // First, check if there's an existing leave record for this date
     const existingLeave = await LeaveRecord.findOne({ empCode, date }).lean();
-    console.log(`[MONTHLY ATTENDANCE] empCode=${empCode}, date=${date}, isPaidLeave=${isPaidLeave}, leaveType=${leaveType}`);
-    console.log(`[MONTHLY ATTENDANCE] existingLeave:`, existingLeave ? `Found (leaveType=${existingLeave.leaveType})` : 'Not found');
     
     if (isPaidLeave && leaveType) {
       // Marking as Paid Leave - create/update leave records
@@ -1464,8 +1462,7 @@ export async function POST(req) {
       
       if (!existingLeave) {
         // No existing leave record - create new one using upsert to prevent duplicates
-        console.log(`[MONTHLY ATTENDANCE] Creating new LeaveRecord for ${empCode} on ${date} with type ${leaveType}`);
-        const createdRecord = await LeaveRecord.findOneAndUpdate(
+        await LeaveRecord.findOneAndUpdate(
           { empCode, date },
           {
             empCode,
@@ -1476,14 +1473,11 @@ export async function POST(req) {
           },
           { upsert: true, new: true }
         );
-        console.log(`[MONTHLY ATTENDANCE] Created LeaveRecord:`, createdRecord._id);
 
         // Update paid leave counter (only if there are remaining leaves)
         if (leaveType === 'casual' && paidLeave.casualLeavesRemaining > 0) {
-          console.log(`[MONTHLY ATTENDANCE] Incrementing casual leaves: ${paidLeave.casualLeavesTaken} -> ${paidLeave.casualLeavesTaken + 1}`);
           paidLeave.casualLeavesTaken += 1;
         } else if (leaveType === 'annual' && paidLeave.annualLeavesRemaining > 0) {
-          console.log(`[MONTHLY ATTENDANCE] Incrementing annual leaves: ${paidLeave.annualLeavesTaken} -> ${paidLeave.annualLeavesTaken + 1}`);
           paidLeave.annualLeavesTaken += 1;
         }
         await paidLeave.save();

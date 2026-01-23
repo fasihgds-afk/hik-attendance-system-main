@@ -71,8 +71,6 @@ export async function GET(req) {
 
     // STEP 1: Clean up duplicate LeaveRecords FIRST (same empCode and date) - keep only the first one
     // This must happen BEFORE counting to ensure accurate counts
-    console.log(`[LEAVES API] Starting duplicate cleanup for year ${year}, empCodes:`, empCodes.length);
-    
     const allLeaveRecords = await LeaveRecord.find({
       empCode: { $in: empCodes },
       date: { $gte: `${year}-01-01`, $lte: `${year}-12-31` }
@@ -80,8 +78,6 @@ export async function GET(req) {
       .sort({ createdAt: 1 })
       .lean()
       .maxTimeMS(3000);
-    
-    console.log(`[LEAVES API] Found ${allLeaveRecords.length} total LeaveRecords before cleanup`);
     
     // Group by empCode-date to find duplicates
     const leaveRecordsByKey = new Map();
@@ -91,19 +87,15 @@ export async function GET(req) {
       const key = `${record.empCode}-${record.date}`;
       if (leaveRecordsByKey.has(key)) {
         // Duplicate found - mark for deletion (keep the first one)
-        console.log(`[LEAVES API] Duplicate found: empCode=${record.empCode}, date=${record.date}, leaveType=${record.leaveType}, _id=${record._id}`);
         duplicatesToDelete.push(record._id);
       } else {
         leaveRecordsByKey.set(key, record);
       }
     });
     
-    console.log(`[LEAVES API] Found ${duplicatesToDelete.length} duplicate records to delete`);
-    
     // Delete duplicate records
     if (duplicatesToDelete.length > 0) {
-      const deleteResult = await LeaveRecord.deleteMany({ _id: { $in: duplicatesToDelete } });
-      console.log(`[LEAVES API] Deleted ${deleteResult.deletedCount} duplicate records`);
+      await LeaveRecord.deleteMany({ _id: { $in: duplicatesToDelete } });
     }
 
     // STEP 2: Get ShiftAttendance records with "Paid Leave" status to validate LeaveRecords
@@ -122,21 +114,17 @@ export async function GET(req) {
       validPaidLeaveDates.add(`${sa.empCode}-${sa.date}`);
     });
     
-    console.log(`[LEAVES API] Found ${paidLeaveAttendances.length} ShiftAttendance records with "Paid Leave" status`);
-    
     // STEP 3: Clean up LeaveRecords that don't have matching "Paid Leave" status in ShiftAttendance
     const orphanedLeaveRecords = [];
     allLeaveRecords.forEach(record => {
       const key = `${record.empCode}-${record.date}`;
       if (!validPaidLeaveDates.has(key)) {
         orphanedLeaveRecords.push(record._id);
-        console.log(`[LEAVES API] Orphaned LeaveRecord found: empCode=${record.empCode}, date=${record.date}, leaveType=${record.leaveType}`);
       }
     });
     
     if (orphanedLeaveRecords.length > 0) {
-      const deleteResult = await LeaveRecord.deleteMany({ _id: { $in: orphanedLeaveRecords } });
-      console.log(`[LEAVES API] Deleted ${deleteResult.deletedCount} orphaned LeaveRecords (no matching Paid Leave status)`);
+      await LeaveRecord.deleteMany({ _id: { $in: orphanedLeaveRecords } });
     }
 
     // STEP 4: Get actual LeaveRecord counts AFTER cleanup (only for dates with "Paid Leave" status)
@@ -155,14 +143,11 @@ export async function GET(req) {
       }
     ]).option({ maxTimeMS: 3000 });
 
-    console.log(`[LEAVES API] Actual leave counts from aggregation:`, JSON.stringify(actualLeaveCounts, null, 2));
-
     // Build a map of actual counts
     const actualCountsMap = new Map();
     actualLeaveCounts.forEach(item => {
       const key = `${item._id.empCode}-${item._id.leaveType}`;
       actualCountsMap.set(key, item.count);
-      console.log(`[LEAVES API] Count map: ${key} = ${item.count}`);
     });
 
     // Enrich paid leave records with employee details and validate/correct counters

@@ -6,6 +6,11 @@ import MobileOnlyGuard from "@/components/guards/MobileOnlyGuard";
 export const metadata = {
   title: "GDS Attendance Portal",
   description: "Global Digital Solutions Attendance & HR Portal",
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({ children }) {
