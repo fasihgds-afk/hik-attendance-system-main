@@ -22,20 +22,21 @@ export async function GET(req) {
       throw new ValidationError('empCode is required');
     }
 
-    // Get or create paid leave record for the year
-    const paidLeave = await PaidLeave.getOrCreate(empCode, year);
-
-    // Get leave history for the year
+    // OPTIMIZATION: Run PaidLeave and LeaveRecord queries in parallel for faster response
     const yearStart = `${year}-01-01`;
     const yearEnd = `${year}-12-31`;
     
-    const leaveHistory = await LeaveRecord.find({
-      empCode,
-      date: { $gte: yearStart, $lte: yearEnd },
-    })
-      .sort({ date: -1 })
-      .lean()
-      .maxTimeMS(3000);
+    const [paidLeave, leaveHistory] = await Promise.all([
+      PaidLeave.getOrCreate(empCode, year),
+      LeaveRecord.find({
+        empCode,
+        date: { $gte: yearStart, $lte: yearEnd },
+      })
+        .select('date leaveType reason')
+        .sort({ date: -1 })
+        .lean()
+        .maxTimeMS(2000) // Reduced timeout
+    ]);
 
     // Calculate summary
     const summary = {

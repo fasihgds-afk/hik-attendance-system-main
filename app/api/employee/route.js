@@ -51,19 +51,38 @@ export async function GET(req) {
     // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
       // OPTIMIZATION: Use Mongoose with .select() and .lean(), add timeout
+      // OPTIMIZATION: Skip shift normalization for faster response - shift is already normalized in most cases
       const projection = getEmployeeProjection(true);
       const employee = await Employee.findOne({ empCode })
         .select(projection)
         .lean()
-        .maxTimeMS(2000); // Fast timeout
+        .maxTimeMS(1500); // Reduced timeout for faster response
       
       if (!employee) {
         throw new NotFoundError(`Employee ${empCode}`);
       }
       
-      // Normalize shift field: convert ObjectId to shift code if needed
+      // OPTIMIZATION: Only normalize shift if it's an ObjectId (skip if already a code)
       if (employee.shift) {
-        employee.shift = await normalizeShiftField(employee.shift);
+        const shiftString = String(employee.shift).trim();
+        // Only do lookup if it's an ObjectId (24 hex characters)
+        if (/^[0-9a-fA-F]{24}$/.test(shiftString)) {
+          // It's an ObjectId - need to look up shift code
+          const Shift = (await import('../../../models/Shift')).default;
+          const shiftDoc = await Shift.findById(shiftString)
+            .select('code')
+            .lean()
+            .maxTimeMS(1000); // Fast timeout for shift lookup
+          
+          if (shiftDoc && shiftDoc.code) {
+            employee.shift = shiftDoc.code;
+          } else {
+            employee.shift = '';
+          }
+        } else {
+          // Already a code - just normalize to uppercase
+          employee.shift = shiftString.toUpperCase();
+        }
       }
       
       return successResponse(

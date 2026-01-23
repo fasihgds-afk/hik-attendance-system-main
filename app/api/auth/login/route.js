@@ -54,25 +54,27 @@ export async function POST(req) {
         throw new ValidationError('empCode and cnic are required for employee login');
       }
 
-      // OPTIMIZATION: Select only required fields, add timeout
-      const employee = await Employee.findOne({ empCode, cnic })
-        .select('empCode name')
-        .lean()
-        .maxTimeMS(2000);
+      // OPTIMIZATION: Run Employee and User queries in parallel for faster login
+      const [employee, existingUser] = await Promise.all([
+        Employee.findOne({ empCode, cnic })
+          .select('empCode name')
+          .lean()
+          .maxTimeMS(1500), // Reduced timeout
+        User.findOne({
+          role: 'EMPLOYEE',
+          employeeEmpCode: empCode,
+        })
+          .select('role employeeEmpCode')
+          .lean()
+          .maxTimeMS(1500) // Reduced timeout
+      ]);
+
       if (!employee) {
         throw new UnauthorizedError('Employee not found for given code + CNIC');
       }
 
-      // OPTIMIZATION: Select only required fields
-      let user = await User.findOne({
-        role: 'EMPLOYEE',
-        employeeEmpCode: empCode,
-      })
-        .select('role employeeEmpCode')
-        .lean()
-        .maxTimeMS(2000);
-
       // Optionally auto-create a User row once employee is verified
+      let user = existingUser;
       if (!user) {
         user = await User.create({
           email: `${empCode}@auto.gds.local`,
