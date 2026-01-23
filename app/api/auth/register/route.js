@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import { ValidationError, NotFoundError } from '@/lib/errors/errorHandler';
 import { rateLimiters } from '@/lib/middleware/rateLimit';
 import { z } from 'zod';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '@/lib/api/response';
+import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
 
 // Validation schema for user registration
 const registerSchema = z.object({

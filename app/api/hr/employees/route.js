@@ -1,7 +1,7 @@
 // next-app/app/api/hr/employees/route.js
-import { connectDB } from "@/lib/db";
-import Employee from "@/models/Employee";
-import { successResponse, errorResponseFromException, HTTP_STATUS } from "@/lib/api/response";
+import { connectDB } from "../../../../lib/db";
+import Employee from "../../../../models/Employee";
+import { successResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
