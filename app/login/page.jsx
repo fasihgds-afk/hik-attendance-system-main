@@ -3,7 +3,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
 
 function LoginInner() {
@@ -61,10 +61,10 @@ function LoginInner() {
         return;
       }
 
-      // Use window.location for full page reload to ensure session cookie is sent
-      // This fixes the issue where router.push doesn't include the session cookie immediately
-      const redirectUrl = result.url || "/hr/employees";
-      window.location.href = redirectUrl;
+      // When redirect: false, result.url is null, so use callbackUrl directly
+      // Small delay to ensure session cookie is set before redirect
+      await new Promise(resolve => setTimeout(resolve, 100));
+      window.location.href = "/hr/employees";
     } catch (err) {
       console.error("HR login error", err);
       setErrorMsg("Something went wrong. Please try again.");
