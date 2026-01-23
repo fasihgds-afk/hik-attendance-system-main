@@ -216,13 +216,17 @@ export default function EmployeeShiftPage() {
     }
   }
 
+  // OPTIMIZATION: Load shifts and employees in parallel on mount
   useEffect(() => {
     loadShifts();
+    loadEmployees(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reload employees when page or search changes
   useEffect(() => {
-    // Force fresh load on mount to bypass any cached data
+    // Skip initial load (handled above)
+    if (currentPage === 1 && !searchQuery) return;
     loadEmployees(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, searchQuery]);

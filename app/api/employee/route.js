@@ -9,8 +9,8 @@ import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
+export const revalidate = 30; // Cache for 30 seconds for faster responses
+export const fetchCache = 'default';
 
 // Helper function to convert ObjectId shift to shift code
 async function normalizeShiftField(shiftValue) {
@@ -112,71 +112,92 @@ export async function GET(req) {
     // Aggregation can have issues in serverless environments
     const queryFilter = Object.keys(filter).length > 0 ? filter : {};
     
-    // Log filter for debugging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Employee API] Query filter:', queryFilter);
+    // OPTIMIZATION: Use empCode index for sorting (faster than department+empCode compound)
+    const optimizedSort = sortOptions || { empCode: 1 };
+    
+    // OPTIMIZATION: Minimal projection for list view - exclude heavy fields
+    // Exclude profileImageUrl (can be large), cnic (not needed for list), phoneNumber (not needed)
+    const listProjection = {
+      _id: 1,
+      empCode: 1,
+      name: 1,
+      email: 1,
+      monthlySalary: 1,
+      shift: 1,
+      shiftId: 1,
+      department: 1,
+      designation: 1,
+      saturdayGroup: 1,
+      // Excluded: profileImageUrl, cnic, phoneNumber, createdAt, updatedAt
+    };
+    
+    // OPTIMIZATION: Run find query first, then count only if needed
+    // For first page without filters, we can estimate total to save time
+    const employees = await Employee.find(queryFilter)
+      .select(listProjection)
+      .sort(optimizedSort)
+      .skip(skip)
+      .limit(limit)
+      .lean()
+      .maxTimeMS(2000) // Further reduced timeout
+      .exec();
+    
+    // OPTIMIZATION: Only count if we need exact total (pagination beyond page 1 or with filters)
+    const needsExactCount = page > 1 || search || shift || department;
+    let total;
+    
+    if (needsExactCount) {
+      total = await Employee.countDocuments(queryFilter)
+        .maxTimeMS(1500) // Further reduced timeout
+        .exec();
+    } else {
+      // Estimate: if we got full page, assume there are more; otherwise use actual count
+      total = employees.length === limit ? limit * 10 : employees.length;
     }
     
-    // Get projection from helper (consistent with other queries)
-    const listProjection = getEmployeeProjection(false);
+    // OPTIMIZATION: Fast shift normalization - skip lookup if shift is already a code
+    // Most employees have shift codes (not ObjectIds), so we can skip the lookup in most cases
+    let shiftObjectIds = new Set();
+    let needsShiftLookup = false;
     
-    // OPTIMIZATION: Run find and countDocuments in parallel for faster response
-    // Removed hints - MongoDB will auto-select best index (multiple indexes on empCode cause conflicts)
-    const [employees, total] = await Promise.all([
-      Employee.find(queryFilter)
-        .select(listProjection)
-        .sort(sortOptions || { empCode: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .maxTimeMS(2500) // Reduced timeout
-        .exec(),
-      Employee.countDocuments(queryFilter)
-        .maxTimeMS(2000) // Reduced timeout
-        .exec()
-    ]);
-    
-    // OPTIMIZATION: Batch shift lookups instead of sequential queries (N+1 problem fix)
-    // Collect all unique shift ObjectIds that need to be resolved
-    const shiftObjectIds = new Set();
-    const shiftMap = new Map(); // Map ObjectId -> shift code
-    
+    // First pass: normalize codes and collect ObjectIds
     for (const emp of employees) {
       if (emp.shift) {
         const shiftString = String(emp.shift).trim();
         // Check if it's an ObjectId (24 hex characters)
         if (/^[0-9a-fA-F]{24}$/.test(shiftString)) {
           shiftObjectIds.add(shiftString);
+          needsShiftLookup = true;
+        } else {
+          // Already a code - normalize to uppercase immediately (most common case)
+          emp.shift = shiftString.toUpperCase();
         }
       }
     }
     
-    // OPTIMIZATION: Batch fetch all shifts in one query (direct query - cache doesn't work on Vercel)
-    if (shiftObjectIds.size > 0) {
+    // OPTIMIZATION: Only do shift lookup if we have ObjectIds (rare case)
+    if (needsShiftLookup && shiftObjectIds.size > 0) {
       const Shift = (await import('../../../models/Shift')).default;
       const shifts = await Shift.find({ 
         _id: { $in: Array.from(shiftObjectIds) } 
       })
         .select('_id code')
         .lean()
-        .maxTimeMS(2000); // Fast timeout for Vercel
+        .maxTimeMS(1000); // Very fast timeout - this should be rare
       
       // Build map for fast lookup
+      const shiftMap = new Map();
       for (const shift of shifts) {
         shiftMap.set(shift._id.toString(), shift.code);
       }
-    }
-    
-    // Now normalize shift fields using the pre-fetched map
-    for (const emp of employees) {
-      if (emp.shift) {
-        const shiftString = String(emp.shift).trim();
-        if (/^[0-9a-fA-F]{24}$/.test(shiftString)) {
-          // It's an ObjectId - use the map
-          emp.shift = shiftMap.get(shiftString) || '';
-        } else {
-          // It's already a code - normalize to uppercase
-          emp.shift = shiftString.toUpperCase();
+      
+      // Update only employees with ObjectId shifts
+      for (const emp of employees) {
+        if (emp.shift) {
+          const shiftString = String(emp.shift).trim();
+          if (/^[0-9a-fA-F]{24}$/.test(shiftString)) {
+            emp.shift = shiftMap.get(shiftString) || '';
+          }
         }
       }
     }
