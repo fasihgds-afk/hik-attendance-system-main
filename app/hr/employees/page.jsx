@@ -48,12 +48,14 @@ export default function HrDashboardPage() {
   // ---- EMPLOYEE DATA FOR OVERVIEW STATS ----
   // LAZY LOADING: Don't load data immediately - only when needed
   const [employees, setEmployees] = useState([]);
+  const [totalEmployees, setTotalEmployees] = useState(0); // Total from API meta
   const [statsLoading, setStatsLoading] = useState(false); // Start as false - no loading initially
   const [statsError, setStatsError] = useState("");
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false); // Track if data has been loaded
 
   // Lazy load function - only called when needed
+  // OPTIMIZATION: Load paginated data, use meta.total for stats
   async function loadEmployees() {
     // Prevent duplicate loads
     if (statsLoading || dataLoaded) return;
@@ -63,7 +65,8 @@ export default function HrDashboardPage() {
       setStatsLoading(true);
       setStatsError("");
 
-      const res = await fetch("/api/hr/employees", {
+      // OPTIMIZATION: Load first page with limit=50 for better department stats
+      const res = await fetch("/api/hr/employees?limit=50&page=1", {
         cache: 'no-store', // Always get fresh data
       });
       
@@ -74,26 +77,32 @@ export default function HrDashboardPage() {
 
       const response = await res.json();
       
-      // Handle standardized API response format
-      // New format: { success, message, data: { employees }, error }
+      // Handle standardized API response format with pagination
+      // New format: { success, message, data: { employees }, meta: { total, page, limit, hasNext }, error }
       // Old format (backward compatibility): { employees } or array
       let list = [];
+      let total = 0;
       
       if (Array.isArray(response)) {
         list = response;
+        total = response.length;
       } else if (response.success !== undefined) {
-        // New standardized format
+        // New standardized format with pagination
         if (!response.success) {
           throw new Error(response.error || response.message || 'Failed to load employees');
         }
         list = response.data?.employees || response.data?.items || [];
+        // Meta is at top level, not inside data
+        total = response.meta?.total || response.data?.meta?.total || list.length;
       } else {
         // Legacy format (backward compatibility)
         list = response.employees || response.items || [];
+        total = response.meta?.total || list.length;
       }
 
       if (!cancelled) {
         setEmployees(list);
+        setTotalEmployees(total);
         setDataLoaded(true);
       }
     } catch (err) {
@@ -124,8 +133,9 @@ export default function HrDashboardPage() {
   }, [tab, session, dataLoaded, statsLoading]);
 
   // 📊 Compute stats from employees
+  // OPTIMIZATION: Use totalEmployees from API meta instead of employees.length
   const stats = useMemo(() => {
-    if (!employees.length) {
+    if (!employees.length && totalEmployees === 0) {
       return {
         totalEmployees: 0,
         totalDepartments: 0,
@@ -153,13 +163,15 @@ export default function HrDashboardPage() {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
 
+    // OPTIMIZATION: Use totalEmployees from API meta (accurate total)
+    // activeEmployees uses loaded employees count (approximation from first page)
     return {
-      totalEmployees: employees.length,
+      totalEmployees: totalEmployees || employees.length, // Use API meta total
       totalDepartments: deptMap.size,
-      activeEmployees: activeCount || employees.length, // fallback if no status
+      activeEmployees: activeCount || employees.length, // Approximation from first page
       departmentCounts,
     };
-  }, [employees]);
+  }, [employees, totalEmployees]);
 
   const tabs = [
     { id: "overview", label: "Overview" },
