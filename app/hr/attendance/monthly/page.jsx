@@ -291,6 +291,7 @@ export default function MonthlyHrPage() {
   const [selected, setSelected] = useState(null); // { emp, day }
 
   const [editStatus, setEditStatus] = useState('Present');
+  const [editLeaveType, setEditLeaveType] = useState('casual'); // casual or annual
   const [editReason, setEditReason] = useState('');
   const [editCheckIn, setEditCheckIn] = useState('');
   const [editCheckOut, setEditCheckOut] = useState('');
@@ -496,6 +497,8 @@ export default function MonthlyHrPage() {
         lateExcused: editLateExcused,
         earlyExcused: editEarlyExcused,
         violationExcused: editLateExcused || editEarlyExcused, // Legacy: for backward compatibility
+        // Add leaveType when status is Paid Leave
+        ...(editStatus === 'Paid Leave' && { leaveType: editLeaveType }),
       };
 
       // Saving with excused flags
@@ -2020,6 +2023,11 @@ export default function MonthlyHrPage() {
                             >
                               <div style={{ fontSize: 10, marginBottom: 2 }}>
                                 {statusShortCode(day.status)}
+                                {day.status === 'Paid Leave' && day.leaveType && (
+                                  <span style={{ fontSize: 9, marginLeft: 2, opacity: 0.8 }}>
+                                    ({day.leaveType === 'casual' ? 'C' : 'A'})
+                                  </span>
+                                )}
                               </div>
                               <div style={{ fontSize: 10 }}>{punchLabel}</div>
                               {((day.late && (day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late))) ||
@@ -2205,6 +2213,37 @@ export default function MonthlyHrPage() {
                       <option value="Half Day">Half Day</option>
                     </select>
                   </div>
+
+                  {/* Leave Type Selection - Only show when Paid Leave is selected */}
+                  {editStatus === 'Paid Leave' && (
+                    <div
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}
+                    >
+                      <label style={{ fontSize: 11, fontWeight: 600 }}>
+                        Leave Type *
+                      </label>
+                      <select
+                        value={editLeaveType}
+                        onChange={(e) => setEditLeaveType(e.target.value)}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          border: '1px solid #cbd5f5',
+                          backgroundColor: '#ffffff',
+                          fontSize: 13,
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="casual">Casual Leave</option>
+                        <option value="annual">Annual Leave</option>
+                      </select>
+                    </div>
+                  )}
 
                   <div
                     style={{

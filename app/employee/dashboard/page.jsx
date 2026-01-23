@@ -889,6 +889,10 @@ export default function EmployeeDashboardPage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
+  // Leave balance state
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [loadingLeaveBalance, setLoadingLeaveBalance] = useState(false);
+
   const empCode = session?.user?.empCode;
 
   // redirect if not employee
@@ -898,6 +902,32 @@ export default function EmployeeDashboardPage() {
       router.replace("/login?role=employee");
     }
   }, [session, status, router]);
+
+  // Load leave balance
+  useEffect(() => {
+    if (!empCode) return;
+
+    async function loadLeaveBalance() {
+      try {
+        setLoadingLeaveBalance(true);
+        const res = await fetch(`/api/employee/leaves?empCode=${encodeURIComponent(empCode)}`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const response = await res.json();
+          if (response.success && response.data) {
+            setLeaveBalance(response.data);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load leave balance:", err);
+      } finally {
+        setLoadingLeaveBalance(false);
+      }
+    }
+    loadLeaveBalance();
+  }, [empCode]);
 
   // optional profile API
   useEffect(() => {
@@ -1830,6 +1860,7 @@ export default function EmployeeDashboardPage() {
                 </div>
               </>
             )}
+
           </div>
         </div>
 
@@ -1931,6 +1962,30 @@ export default function EmployeeDashboardPage() {
                     color="#e5e7eb"
                     
                   />
+                  
+                  {/* Paid Leave Balance Cards - Matching SummaryItem style */}
+                  {leaveBalance && (
+                    <>
+                      <SummaryItem
+                        label="Leave Balance"
+                        value={leaveBalance.summary?.totalRemaining || 24}
+                        color="#a3e635"
+                        hint={`${leaveBalance.summary?.totalTaken || 0} / ${leaveBalance.summary?.totalAllocated || 24} taken`}
+                      />
+                      <SummaryItem
+                        label="Casual Left"
+                        value={leaveBalance.summary?.casual?.remaining || 12}
+                        color="#3b82f6"
+                        hint={`${leaveBalance.summary?.casual?.taken || 0} / ${leaveBalance.summary?.casual?.allocated || 12} taken`}
+                      />
+                      <SummaryItem
+                        label="Annual Left"
+                        value={leaveBalance.summary?.annual?.remaining || 12}
+                        color="#a855f7"
+                        hint={`${leaveBalance.summary?.annual?.taken || 0} / ${leaveBalance.summary?.annual?.allocated || 12} taken`}
+                      />
+                    </>
+                  )}
                 </div>
                 <div
                   style={{
@@ -1950,219 +2005,221 @@ export default function EmployeeDashboardPage() {
             )}
           </div>
 
-          {/* DAY-BY-DAY */}
-          <div
-              style={{
-                borderRadius: 18,
-                padding: "12px 14px",
-                background: colors.gradient.card,
-                border: `1px solid ${colors.border.default}`,
-              }}
-            >
-              <div
+          {/* DAY-BY-DAY ROW */}
+          <div>
+            <div
                 style={{
-                  fontSize: 14.5,
-                  marginBottom: 8,
-                  fontWeight: 600,
-                  color: colors.text.primary,
+                  borderRadius: 18,
+                  padding: "12px 14px",
+                  background: colors.gradient.card,
+                  border: `1px solid ${colors.border.default}`,
                 }}
               >
-                Day-by-day attendance
-              </div>
-              <div
-                className="employee-table-wrapper"
-                style={{
-                  maxHeight: "440px",
-                  overflowY: "auto",
-                  overflowX: "auto",
-                  borderRadius: 12,
-                  border: `1px solid ${colors.border.table}`,
-                  backgroundColor: colors.background.table.row,
-                }}
-              >
-                <table
-                className="employee-table"
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: 11.5,
-                  minWidth: 500,
-                  backgroundColor: colors.background.table.row,
-                }}
-              >
-                <thead>
-                  <tr style={{ backgroundColor: colors.background.table.header }}>
-                    <th
-                      style={{
-                        padding: "7px 8px",
-                        textAlign: "left",
-                        borderBottom: `1px solid ${colors.border.table}`,
-                        fontWeight: 600,
-                        color: colors.text.table.header,
-                      }}
-                    >
-                      Day
-                    </th>
-                    <th
-                      style={{
-                        padding: "7px 8px",
-                        textAlign: "left",
-                        borderBottom: `1px solid ${colors.border.table}`,
-                        fontWeight: 600,
-                        color: colors.text.table.header,
-                      }}
-                    >
-                      Status
-                    </th>
-                    <th
-                      style={{
-                        padding: "7px 8px",
-                        textAlign: "left",
-                        borderBottom: `1px solid ${colors.border.table}`,
-                        fontWeight: 600,
-                        color: colors.text.table.header,
-                      }}
-                    >
-                      In / Out
-                    </th>
-                    <th
-                      style={{
-                        padding: "7px 8px",
-                        textAlign: "left",
-                        borderBottom: `1px solid ${colors.border.table}`,
-                        fontWeight: 600,
-                        color: colors.text.table.header,
-                      }}
-                    >
-                      Flags
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!myRecord?.days || myRecord.days.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={4}
+                <div
+                  style={{
+                    fontSize: 14.5,
+                    marginBottom: 8,
+                    fontWeight: 600,
+                    color: colors.text.primary,
+                  }}
+                >
+                  Day-by-day attendance
+                </div>
+                <div
+                  className="employee-table-wrapper"
+                  style={{
+                    maxHeight: "440px",
+                    overflowY: "auto",
+                    overflowX: "auto",
+                    borderRadius: 12,
+                    border: `1px solid ${colors.border.table}`,
+                    backgroundColor: colors.background.table.row,
+                  }}
+                >
+                  <table
+                  className="employee-table"
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 11.5,
+                    minWidth: 500,
+                    backgroundColor: colors.background.table.row,
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: colors.background.table.header }}>
+                      <th
                         style={{
-                          padding: "9px 10px",
-                          textAlign: "center",
-                          color: colors.text.tertiary,
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
                         }}
                       >
-                        No attendance records found.
-                      </td>
+                        Day
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Status
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        In / Out
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Flags
+                      </th>
                     </tr>
-                  ) : (
-                    myRecord.days.map((d, idx) => {
-                      const dayNo = idx + 1;
-                      const isFuture = !!d.isFuture;
-                      const isToday =
-                        todayDayObj && d.date === todayDayObj.date;
-
-                      const classInfo = classifyDayForRow(d, colors, theme);
-
-                      let statusLabel = d.status || "—";
-                      let inTime = d.checkIn
-                        ? formatTimeShort(d.checkIn)
-                        : "-";
-                      let outTime = d.checkOut
-                        ? formatTimeShort(d.checkOut)
-                        : "-";
-                      let inOutLabel = `${inTime} / ${outTime}`;
-                      const isPartial =
-                        (d.checkIn && !d.checkOut) ||
-                        (!d.checkIn && d.checkOut);
-
-                      // match monthly rules for in/out text
-                      if (!d.checkIn && !d.checkOut) {
-                        if (d.status === "Holiday") inOutLabel = "- / -";
-                        else if (
-                          d.status === "Paid Leave" ||
-                          d.status === "Un Paid Leave" ||
-                          d.status === "Sick Leave"
-                        )
-                          inOutLabel = d.status;
-                        else if (d.status === "Absent")
-                          inOutLabel = "No punch";
-                        else if (d.status === "Work From Home")
-                          inOutLabel = "WFH";
-                        else if (d.status === "New Induction")
-                          inOutLabel = "New Induction";
-                      } else if (d.checkIn && !d.checkOut) {
-                        inOutLabel = `${formatTimeShort(
-                          d.checkIn
-                        )} / Missing Check-Out`;
-                      } else if (!d.checkIn && d.checkOut) {
-                        inOutLabel = `Missing Check-In / ${formatTimeShort(
-                          d.checkOut
-                        )}`;
-                      }
-
-                      if (isFuture) {
-                        statusLabel = "Upcoming";
-                        inOutLabel = "- / -";
-                      }
-
-                      const flags = [];
-                      if (!isFuture) {
-                        if (d.late) flags.push("Late");
-                        if (d.earlyLeave || isPartial) flags.push("Early");
-                        if (d.excused) flags.push("Excused");
-                      }
-
-                      return (
-                        <tr
-                          key={d.date || idx}
+                  </thead>
+                  <tbody>
+                    {!myRecord?.days || myRecord.days.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
                           style={{
-                            backgroundColor: isFuture
-                              ? colors.background.primary
-                              : classInfo.bg,
+                            padding: "9px 10px",
+                            textAlign: "center",
+                            color: colors.text.tertiary,
                           }}
                         >
-                          <td
+                          No attendance records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      myRecord.days.map((d, idx) => {
+                        const dayNo = idx + 1;
+                        const isFuture = !!d.isFuture;
+                        const isToday =
+                          todayDayObj && d.date === todayDayObj.date;
+
+                        const classInfo = classifyDayForRow(d, colors, theme);
+
+                        let statusLabel = d.status || "—";
+                        let inTime = d.checkIn
+                          ? formatTimeShort(d.checkIn)
+                          : "-";
+                        let outTime = d.checkOut
+                          ? formatTimeShort(d.checkOut)
+                          : "-";
+                        let inOutLabel = `${inTime} / ${outTime}`;
+                        const isPartial =
+                          (d.checkIn && !d.checkOut) ||
+                          (!d.checkIn && d.checkOut);
+
+                        // match monthly rules for in/out text
+                        if (!d.checkIn && !d.checkOut) {
+                          if (d.status === "Holiday") inOutLabel = "- / -";
+                          else if (
+                            d.status === "Paid Leave" ||
+                            d.status === "Un Paid Leave" ||
+                            d.status === "Sick Leave"
+                          )
+                            inOutLabel = d.status;
+                          else if (d.status === "Absent")
+                            inOutLabel = "No punch";
+                          else if (d.status === "Work From Home")
+                            inOutLabel = "WFH";
+                          else if (d.status === "New Induction")
+                            inOutLabel = "New Induction";
+                        } else if (d.checkIn && !d.checkOut) {
+                          inOutLabel = `${formatTimeShort(
+                            d.checkIn
+                          )} / Missing Check-Out`;
+                        } else if (!d.checkIn && d.checkOut) {
+                          inOutLabel = `Missing Check-In / ${formatTimeShort(
+                            d.checkOut
+                          )}`;
+                        }
+
+                        if (isFuture) {
+                          statusLabel = "Upcoming";
+                          inOutLabel = "- / -";
+                        }
+
+                        const flags = [];
+                        if (!isFuture) {
+                          if (d.late) flags.push("Late");
+                          if (d.earlyLeave || isPartial) flags.push("Early");
+                          if (d.excused) flags.push("Excused");
+                        }
+
+                        return (
+                          <tr
+                            key={d.date || idx}
                             style={{
-                              padding: "6px 8px",
-                              borderBottom: `1px solid ${colors.border.table}`,
-                              color: isToday ? colors.success : colors.text.table.cell,
-                              fontWeight: isToday ? 700 : 500,
+                              backgroundColor: isFuture
+                                ? colors.background.primary
+                                : classInfo.bg,
                             }}
                           >
-                            {dayNo}
-                          </td>
-                          <td
-                            style={{
-                              padding: "6px 8px",
-                              borderBottom: `1px solid ${colors.border.table}`,
-                              color: isFuture ? colors.warning : classInfo.fg,
-                              fontStyle: isFuture ? "italic" : "normal",
-                            }}
-                          >
-                            {statusLabel}
-                          </td>
-                          <td
-                            style={{
-                              padding: "6px 8px",
-                              borderBottom: `1px solid ${colors.border.table}`,
-                              color: colors.text.tertiary,
-                            }}
-                          >
-                            {inOutLabel}
-                          </td>
-                          <td
-                            style={{
-                              padding: "6px 8px",
-                              borderBottom: `1px solid ${colors.border.table}`,
-                              color: isFuture ? colors.text.tertiary : colors.error,
-                            }}
-                          >
-                            {flags.length ? flags.join(", ") : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: isToday ? colors.success : colors.text.table.cell,
+                                fontWeight: isToday ? 700 : 500,
+                              }}
+                            >
+                              {dayNo}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: isFuture ? colors.warning : classInfo.fg,
+                                fontStyle: isFuture ? "italic" : "normal",
+                              }}
+                            >
+                              {statusLabel}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: colors.text.tertiary,
+                              }}
+                            >
+                              {inOutLabel}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: isFuture ? colors.text.tertiary : colors.error,
+                              }}
+                            >
+                              {flags.length ? flags.join(", ") : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

@@ -53,6 +53,10 @@ export default function HrDashboardPage() {
   const [statsError, setStatsError] = useState("");
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false); // Track if data has been loaded
+  
+  // Leave statistics state
+  const [leaveStats, setLeaveStats] = useState([]);
+  const [loadingLeaveStats, setLoadingLeaveStats] = useState(false);
 
   // Lazy load function - only called when needed
   // OPTIMIZATION: Load paginated data, use meta.total for stats
@@ -117,6 +121,25 @@ export default function HrDashboardPage() {
     }
   }
 
+  // Load leave statistics
+  async function loadLeaveStats() {
+    try {
+      setLoadingLeaveStats(true);
+      const year = new Date().getFullYear();
+      const res = await fetch(`/api/hr/leaves?year=${year}`);
+      if (res.ok) {
+        const response = await res.json();
+        if (response.success) {
+          setLeaveStats(response.data?.paidLeaves || []);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load leave stats:', err);
+    } finally {
+      setLoadingLeaveStats(false);
+    }
+  }
+
   // Load data when overview tab is clicked or after a short delay (lazy loading)
   useEffect(() => {
     if (!session) return;
@@ -126,9 +149,13 @@ export default function HrDashboardPage() {
       // OPTIMIZATION: Reduced delay for faster data loading (page still renders first)
       const timer = setTimeout(() => {
         loadEmployees();
+        loadLeaveStats();
       }, 100); // 100ms delay - faster perceived performance
 
       return () => clearTimeout(timer);
+    } else if (tab === "overview" && dataLoaded) {
+      // Load leave stats if employees are already loaded
+      loadLeaveStats();
     }
   }, [tab, session, dataLoaded, statsLoading]);
 
@@ -1171,15 +1198,15 @@ export default function HrDashboardPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 20,
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 16,
               }}
             >
               {/* EMPLOYEES CARD */}
               <div
                 style={{
-                  borderRadius: 16,
-                  padding: "24px",
+                  borderRadius: 14,
+                  padding: "18px",
                   background: colors.gradient.card,
                   border: `1px solid ${colors.border.default}`,
                   boxShadow: theme === 'dark' 
@@ -1200,28 +1227,29 @@ export default function HrDashboardPage() {
                   e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.2)";
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                   <div
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
                       background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1))",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       border: "1px solid rgba(59, 130, 246, 0.3)",
+                      flexShrink: 0,
                     }}
                   >
-                    <svg width="24" height="24" fill="none" stroke="#3b82f6" viewBox="0 0 24 24">
+                    <svg width="20" height="20" fill="none" stroke="#3b82f6" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: colors.text.primary }}>Employees</h3>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Employees</h3>
                     <p
                       style={{
-                        fontSize: 11,
+                        fontSize: 10,
                         color: colors.text.muted,
                         margin: 0,
                       }}
@@ -1232,50 +1260,36 @@ export default function HrDashboardPage() {
                 </div>
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: 11,
                     color: colors.text.muted,
-                    marginBottom: 16,
-                    lineHeight: 1.6,
+                    marginBottom: 12,
+                    lineHeight: 1.5,
                   }}
                 >
                   Add, edit, and manage employee profiles. Update salaries, shifts, departments, and personal information.
                 </p>
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: 10,
-                    backgroundColor: "rgba(59, 130, 246, 0.1)",
-                    border: "1px solid rgba(59, 130, 246, 0.2)",
-                    marginBottom: 16,
-                  }}
-                >
-                  <div style={{ fontSize: 12, color: colors.text.muted, marginBottom: 4 }}>
-                    Current Status
-                  </div>
-                  <div style={{ fontSize: 14, color: colors.text.primary, fontWeight: 600 }}>
-                    {statsLoading ? "⋯" : `${stats.totalEmployees} employees`} across{" "}
-                    {statsLoading ? "⋯" : `${stats.totalDepartments} departments`}
-                  </div>
-                </div>
 
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8, flexDirection: "row", flexWrap: "nowrap", width: "100%" }}>
                   {isAdmin && (
                     <button
                       type="button"
                       onClick={openRegisterModal}
                       style={{
-                        padding: "10px 18px",
-                        borderRadius: 10,
+                        padding: "8px 12px",
+                        borderRadius: 8,
                         border: "1px solid rgba(251, 146, 60, 0.3)",
                         background: "linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(251, 146, 60, 0.1))",
                         color: "#fb923c",
-                        fontSize: 13,
+                        fontSize: 11,
                         fontWeight: 600,
                         cursor: "pointer",
                         transition: "all 0.2s",
                         display: "flex",
                         alignItems: "center",
-                        gap: 6,
+                        gap: 5,
+                        justifyContent: "center",
+                        flex: "1 1 auto",
+                        whiteSpace: "nowrap",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.backgroundColor = "rgba(249, 115, 22, 0.3)";
@@ -1286,7 +1300,7 @@ export default function HrDashboardPage() {
                         e.currentTarget.style.transform = "translateY(0)";
                       }}
                     >
-                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
                       Register User
@@ -1297,20 +1311,22 @@ export default function HrDashboardPage() {
                     type="button"
                     onClick={openEmployeesManage}
                     style={{
-                      padding: "10px 20px",
-                      borderRadius: 10,
+                      padding: "8px 12px",
+                      borderRadius: 8,
                       border: "none",
                       background: "linear-gradient(135deg, #3b82f6, #2563eb)",
                       color: "#ffffff",
-                      fontSize: 13,
+                      fontSize: 11,
                       fontWeight: 600,
                       cursor: "pointer",
                       transition: "all 0.2s",
                       boxShadow: "0 4px 12px rgba(59, 130, 246, 0.3)",
                       display: "flex",
                       alignItems: "center",
-                      gap: 8,
-                      flex: 1,
+                      gap: 6,
+                      justifyContent: "center",
+                      flex: "1 1 auto",
+                      whiteSpace: "nowrap",
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = "translateY(-2px)";
@@ -1321,7 +1337,7 @@ export default function HrDashboardPage() {
                       e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 130, 246, 0.3)";
                     }}
                   >
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     Open Manager
@@ -1332,8 +1348,8 @@ export default function HrDashboardPage() {
               {/* SHIFT MANAGEMENT CARD */}
               <div
                 style={{
-                  borderRadius: 16,
-                  padding: "24px",
+                  borderRadius: 14,
+                  padding: "18px",
                   background: colors.gradient.card,
                   border: `1px solid ${colors.warning}33`,
                   boxShadow: theme === 'dark' 
@@ -1354,28 +1370,29 @@ export default function HrDashboardPage() {
                   e.currentTarget.style.borderColor = "rgba(251, 191, 36, 0.3)";
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                   <div
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
                       background: "linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1))",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       border: "1px solid rgba(251, 191, 36, 0.3)",
+                      flexShrink: 0,
                     }}
                   >
-                    <svg width="24" height="24" fill="none" stroke="#fbbf24" viewBox="0 0 24 24">
+                    <svg width="20" height="20" fill="none" stroke="#fbbf24" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: colors.text.primary }}>Shift Management</h3>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Shift Management</h3>
                     <p
                       style={{
-                        fontSize: 11,
+                        fontSize: 10,
                         color: colors.text.muted,
                         margin: 0,
                       }}
@@ -1386,10 +1403,10 @@ export default function HrDashboardPage() {
                 </div>
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: 11,
                     color: colors.text.muted,
-                    marginBottom: 16,
-                    lineHeight: 1.6,
+                    marginBottom: 12,
+                    lineHeight: 1.5,
                   }}
                 >
                   Create and manage shifts, configure shift times, grace periods, and assign shifts to employees with effective dates.
@@ -1398,19 +1415,19 @@ export default function HrDashboardPage() {
                   type="button"
                   onClick={openShiftManagement}
                   style={{
-                    padding: "10px 20px",
-                    borderRadius: 10,
+                    padding: "8px 14px",
+                    borderRadius: 8,
                     border: "none",
                     background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
                     color: theme === 'dark' ? colors.text.primary : colors.warning[900] || '#78350f',
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: 600,
                     cursor: "pointer",
                     transition: "all 0.2s",
                     boxShadow: "0 4px 12px rgba(251, 191, 36, 0.3)",
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
+                    gap: 6,
                     width: "100%",
                     justifyContent: "center",
                   }}
@@ -1423,7 +1440,7 @@ export default function HrDashboardPage() {
                     e.currentTarget.style.boxShadow = "0 4px 12px rgba(251, 191, 36, 0.3)";
                   }}
                 >
-                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                   Open Shift Management
@@ -1433,8 +1450,8 @@ export default function HrDashboardPage() {
               {/* ATTENDANCE CARD */}
               <div
                 style={{
-                  borderRadius: 16,
-                  padding: "24px",
+                  borderRadius: 14,
+                  padding: "18px",
                   background: colors.gradient.card,
                   border: `1px solid ${colors.success}33`,
                   boxShadow: theme === 'dark' 
@@ -1455,28 +1472,29 @@ export default function HrDashboardPage() {
                   e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.2)";
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                   <div
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
                       background: "linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1))",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       border: "1px solid rgba(34, 197, 94, 0.3)",
+                      flexShrink: 0,
                     }}
                   >
-                    <svg width="24" height="24" fill="none" stroke="#22c55e" viewBox="0 0 24 24">
+                    <svg width="20" height="20" fill="none" stroke="#22c55e" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: colors.text.primary }}>Attendance</h3>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Attendance</h3>
                     <p
                       style={{
-                        fontSize: 11,
+                        fontSize: 10,
                         color: colors.text.muted,
                         margin: 0,
                       }}
@@ -1487,10 +1505,10 @@ export default function HrDashboardPage() {
                 </div>
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: 11,
                     color: colors.text.muted,
-                    marginBottom: 16,
-                    lineHeight: 1.6,
+                    marginBottom: 12,
+                    lineHeight: 1.5,
                   }}
                 >
                   View daily punches and monthly summaries, including late/early flags and comprehensive reports.
@@ -1499,19 +1517,19 @@ export default function HrDashboardPage() {
                   type="button"
                   onClick={() => setTab("attendance")}
                   style={{
-                    padding: "10px 20px",
-                    borderRadius: 10,
+                    padding: "8px 14px",
+                    borderRadius: 8,
                     border: "none",
                     background: "linear-gradient(135deg, #22c55e, #16a34a)",
                     color: "#022c22",
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: 600,
                     cursor: "pointer",
                     transition: "all 0.2s",
                     boxShadow: "0 4px 12px rgba(34, 197, 94, 0.3)",
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
+                    gap: 6,
                     width: "100%",
                     justifyContent: "center",
                   }}
@@ -1524,10 +1542,110 @@ export default function HrDashboardPage() {
                     e.currentTarget.style.boxShadow = "0 4px 12px rgba(34, 197, 94, 0.3)";
                   }}
                 >
-                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                   Go to Attendance Center
+                </button>
+              </div>
+
+              {/* LEAVE MANAGEMENT CARD */}
+              <div
+                style={{
+                  borderRadius: 14,
+                  padding: "18px",
+                  background: colors.gradient.card,
+                  border: `1px solid ${colors.border.default}`,
+                  boxShadow: theme === 'dark' 
+                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+                  transition: "all 0.3s",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.4)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.2)";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: "linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1))",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: 20 }}>🏖️</span>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Leave Management</h3>
+                    <p
+                      style={{
+                        fontSize: 10,
+                        color: colors.text.muted,
+                        margin: 0,
+                      }}
+                    >
+                      Track paid leaves
+                    </p>
+                  </div>
+                </div>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: colors.text.muted,
+                    marginBottom: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  View all employees' paid leave balances, mark casual/annual leaves, and track leave usage statistics.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => router.push('/hr/leaves')}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    color: "#ffffff",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    width: "100%",
+                    justifyContent: "center",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(16, 185, 129, 0.4)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.3)";
+                  }}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  View All Leaves
                 </button>
               </div>
             </div>

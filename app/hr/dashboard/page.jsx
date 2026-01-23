@@ -62,6 +62,10 @@ export default function HrDashboardPage() {
   const [shifts, setShifts] = useState([]);
   const [selectedShift, setSelectedShift] = useState(''); // Filter by shift
 
+  // Leave statistics state
+  const [leaveStats, setLeaveStats] = useState([]);
+  const [loadingLeaveStats, setLoadingLeaveStats] = useState(false);
+
   const [toast, setToast] = useState({ type: '', text: '' });
 
   // Generate theme-aware table styles AFTER all hooks
@@ -118,7 +122,26 @@ export default function HrDashboardPage() {
 
   useEffect(() => {
     loadShifts();
+    loadLeaveStats();
   }, []);
+
+  async function loadLeaveStats() {
+    try {
+      setLoadingLeaveStats(true);
+      const year = new Date().getFullYear();
+      const res = await fetch(`/api/hr/leaves?year=${year}`);
+      if (res.ok) {
+        const response = await res.json();
+        if (response.success) {
+          setLeaveStats(response.data?.paidLeaves || []);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load leave stats:', err);
+    } finally {
+      setLoadingLeaveStats(false);
+    }
+  }
 
   async function handleLoadAndSave() {
     setLoading(true);
@@ -771,6 +794,36 @@ export default function HrDashboardPage() {
             </button>
 
             <button
+              onClick={() => router.push('/hr/leaves')}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 12,
+                border: 'none',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 6px 20px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(16, 185, 129, 0.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
+              }}
+            >
+              🏖️ Leave Management
+            </button>
+
+            <button
               onClick={handleLoadAndSave}
               disabled={loading}
               style={{
@@ -862,6 +915,116 @@ export default function HrDashboardPage() {
             onLogout={autoLogout}
           />
         )}
+
+        {/* LEAVE STATISTICS SECTION */}
+        <div
+          style={{
+            marginBottom: 20,
+            borderRadius: 14,
+            padding: '18px 22px',
+            background: colors.gradient.card,
+            border: `1px solid ${colors.border.default}`,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: colors.text.primary, margin: 0 }}>
+              📊 Paid Leave Statistics ({new Date().getFullYear()})
+            </h2>
+            <button
+              onClick={loadLeaveStats}
+              disabled={loadingLeaveStats}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border.default}`,
+                background: colors.background.input,
+                color: colors.text.primary,
+                fontSize: 12,
+                cursor: loadingLeaveStats ? 'not-allowed' : 'pointer',
+                opacity: loadingLeaveStats ? 0.6 : 1,
+              }}
+            >
+              {loadingLeaveStats ? 'Loading...' : '🔄 Refresh'}
+            </button>
+          </div>
+          
+          {loadingLeaveStats ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: colors.text.secondary }}>
+              Loading leave statistics...
+            </div>
+          ) : leaveStats.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: colors.text.secondary }}>
+              No leave data available
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: 12,
+                maxHeight: '400px',
+                overflowY: 'auto',
+              }}
+            >
+              {leaveStats.map((leave) => {
+                const remaining = leave.totalLeavesRemaining || 0;
+                const remainingColor = remaining > 10 ? '#22c55e' : remaining > 5 ? '#fbbf24' : '#ef4444';
+                
+                return (
+                  <div
+                    key={`${leave.empCode}-${leave.year}`}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 10,
+                      background: colors.background.card,
+                      border: `1px solid ${colors.border.default}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.text.primary }}>
+                          {leave.employeeName || leave.empCode}
+                        </div>
+                        <div style={{ fontSize: 11, color: colors.text.secondary, marginTop: 2 }}>
+                          {leave.empCode} · {leave.department || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: colors.text.secondary, marginBottom: 4 }}>Casual</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.text.primary }}>
+                          {leave.casualLeavesTaken || 0} / {leave.casualLeavesAllocated || 12}
+                        </div>
+                        <div style={{ fontSize: 10, color: colors.text.tertiary, marginTop: 2 }}>
+                          {leave.casualLeavesRemaining || 12} left
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: colors.text.secondary, marginBottom: 4 }}>Annual</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.text.primary }}>
+                          {leave.annualLeavesTaken || 0} / {leave.annualLeavesAllocated || 12}
+                        </div>
+                        <div style={{ fontSize: 10, color: colors.text.tertiary, marginTop: 2 }}>
+                          {leave.annualLeavesRemaining || 12} left
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${colors.border.default}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ fontSize: 11, color: colors.text.secondary }}>Total</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: remainingColor }}>
+                          {leave.totalLeavesTaken || 0} / {leave.totalLeavesAllocated || 24} · {remaining} remaining
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* MAIN CARD */}
         <div

@@ -34,6 +34,8 @@ import Employee from '../../../../models/Employee';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
 import Shift from '../../../../models/Shift';
 import ViolationRules from '../../../../models/ViolationRules';
+import PaidLeave from '../../../../models/PaidLeave';
+import LeaveRecord from '../../../../models/LeaveRecord';
 import { normalizeStatus, extractShiftCode } from '../../../../lib/calculations';
 import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
@@ -466,7 +468,7 @@ export async function GET(req) {
         date: { $gte: monthStartDate, $lte: monthEndDate },
       }
     )
-      .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused')
+      .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType')
       .lean()
       .maxTimeMS(4000); // Reduced timeout for faster response
 
@@ -622,6 +624,7 @@ export async function GET(req) {
             late: false,
             earlyLeave: false,
             excused: false,
+            leaveType: null,
             isFuture: true,
           });
           continue;
@@ -1036,6 +1039,7 @@ export async function GET(req) {
           excused: lateExcused || earlyExcused, // For backward compatibility
           lateExcused,
           earlyExcused,
+          leaveType: doc?.leaveType || null, // Paid leave type (casual/annual)
           isFuture: false,
         });
       }
@@ -1275,6 +1279,7 @@ export async function POST(req) {
       violationExcused, // Legacy: kept for backward compatibility
       lateExcused,
       earlyExcused,
+      leaveType, // casual or annual (only when status is Paid Leave)
     } = body;
 
     if (!empCode || !date) {
@@ -1432,8 +1437,38 @@ export async function POST(req) {
       excused: finalExcused, // Legacy field for backward compatibility
       lateExcused: finalLateExcused,
       earlyExcused: finalEarlyExcused,
+      // Add leaveType if status is Paid Leave
+      ...(attendanceStatus === 'Paid Leave' && leaveType && { leaveType }),
       updatedAt: new Date(),
     };
+
+    // If marking Paid Leave, also update PaidLeave record
+    if (attendanceStatus === 'Paid Leave' && leaveType) {
+      const year = parseInt(date.split('-')[0], 10);
+      const paidLeave = await PaidLeave.getOrCreate(empCode, year);
+      
+      // Check if leave record already exists for this date
+      const existingLeave = await LeaveRecord.findOne({ empCode, date }).lean();
+      
+      if (!existingLeave) {
+        // Create leave record
+        await LeaveRecord.create({
+          empCode,
+          date,
+          leaveType,
+          reason: reason || '',
+          markedBy: 'HR',
+        });
+
+        // Update paid leave counter
+        if (leaveType === 'casual' && paidLeave.casualLeavesRemaining > 0) {
+          paidLeave.casualLeavesTaken += 1;
+        } else if (leaveType === 'annual' && paidLeave.annualLeavesRemaining > 0) {
+          paidLeave.annualLeavesTaken += 1;
+        }
+        await paidLeave.save();
+      }
+    }
 
     // OPTIMIZATION: Use findOneAndUpdate with upsert instead of delete + create (faster, atomic)
     // This is more efficient than deleteMany + create
