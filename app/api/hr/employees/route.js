@@ -12,11 +12,12 @@ export async function GET(req) {
 
     // OPTIMIZATION: Sort uses compound index { department: 1, empCode: 1 } for fast sorting
     // MongoDB query planner will automatically use the best index
+    // Reduced timeout for Vercel serverless (faster failure)
     const employees = await Employee.find({})
       .select('empCode name email monthlySalary shift shiftId department designation phoneNumber cnic profileImageUrl saturdayGroup')
       .sort({ department: 1, empCode: 1 }) // Uses compound index for fast sorting
       .lean()
-      .maxTimeMS(5000); // Timeout after 5 seconds to prevent hanging
+      .maxTimeMS(3000); // Reduced timeout for Vercel (3 seconds)
 
     return successResponse(
       { employees },

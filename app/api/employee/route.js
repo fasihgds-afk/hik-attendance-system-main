@@ -101,7 +101,7 @@ export async function GET(req) {
     const listProjection = getEmployeeProjection(false);
     
     // OPTIMIZATION: Run find and countDocuments in parallel for faster response
-    // Also add maxTimeMS to prevent slow queries from hanging
+    // Reduced timeouts for Vercel serverless (faster failure, better UX)
     const [employees, total] = await Promise.all([
       Employee.find(queryFilter)
         .select(listProjection)
@@ -109,10 +109,10 @@ export async function GET(req) {
         .skip(skip)
         .limit(limit)
         .lean()
-        .maxTimeMS(5000) // Timeout after 5 seconds
+        .maxTimeMS(3000) // Reduced to 3 seconds for Vercel
         .exec(),
       Employee.countDocuments(queryFilter)
-        .maxTimeMS(5000) // Timeout after 5 seconds
+        .maxTimeMS(3000) // Reduced to 3 seconds for Vercel
         .exec()
     ]);
     
@@ -131,32 +131,19 @@ export async function GET(req) {
       }
     }
     
-    // OPTIMIZATION: Batch fetch all shifts in one query (use cached shifts if available)
+    // OPTIMIZATION: Batch fetch all shifts in one query (direct query - cache doesn't work on Vercel)
     if (shiftObjectIds.size > 0) {
-      const { getCachedShifts } = await import('../../../lib/cache/shiftCache');
-      let allCachedShifts = getCachedShifts(false); // Get all shifts from cache
+      const Shift = (await import('../../../models/Shift')).default;
+      const shifts = await Shift.find({ 
+        _id: { $in: Array.from(shiftObjectIds) } 
+      })
+        .select('_id code')
+        .lean()
+        .maxTimeMS(2000); // Fast timeout for Vercel
       
-      if (allCachedShifts) {
-        // Use cached shifts - filter to only the ones we need
-        const neededShifts = allCachedShifts.filter(s => 
-          shiftObjectIds.has(s._id.toString())
-        );
-        for (const shift of neededShifts) {
-          shiftMap.set(shift._id.toString(), shift.code);
-        }
-      } else {
-        // Cache miss - fetch from database
-        const Shift = (await import('../../../models/Shift')).default;
-        const shifts = await Shift.find({ 
-          _id: { $in: Array.from(shiftObjectIds) } 
-        })
-          .select('_id code')
-          .lean();
-        
-        // Build map for fast lookup
-        for (const shift of shifts) {
-          shiftMap.set(shift._id.toString(), shift.code);
-        }
+      // Build map for fast lookup
+      for (const shift of shifts) {
+        shiftMap.set(shift._id.toString(), shift.code);
       }
     }
     

@@ -92,14 +92,11 @@ export async function POST(req) {
     const TZ = process.env.TIMEZONE_OFFSET || '+05:00';
 
     // Load ALL active shifts from database (for dynamic classification)
-    // OPTIMIZATION: Use cached shifts if available (shifts rarely change)
-    const { getCachedShifts } = await import('../../../../lib/cache/shiftCache');
-    let allShifts = getCachedShifts(true); // Get active shifts from cache
-    
-    if (!allShifts) {
-      allShifts = await Shift.find({ isActive: true }).lean();
-      // Cache will be set by shifts route, no need to set here
-    }
+    // Direct query - optimized for Vercel serverless (cache doesn't work on Vercel)
+    const allShifts = await Shift.find({ isActive: true })
+      .select('_id name code startTime endTime crossesMidnight gracePeriod')
+      .lean()
+      .maxTimeMS(2000); // Fast timeout for Vercel
     
     if (allShifts.length === 0) {
       throw new ValidationError('No active shifts found. Please create shifts first.');
@@ -122,13 +119,18 @@ export async function POST(req) {
       // Use optimized projection - exclude large base64 images
       Employee.find()
         .select('empCode name shift department designation')
-        .lean(),
+        .lean()
+        .maxTimeMS(3000), // Fast timeout for Vercel
       
       // Load existing ShiftAttendance records for this date
-      ShiftAttendance.find({ date: date }).lean(),
+      ShiftAttendance.find({ date: date })
+        .lean()
+        .maxTimeMS(2000), // Fast timeout for Vercel
       
       // Load existing ShiftAttendance records for next day (for night shift checkOut)
-      ShiftAttendance.find({ date: nextDateStr }).lean(),
+      ShiftAttendance.find({ date: nextDateStr })
+        .lean()
+        .maxTimeMS(2000), // Fast timeout for Vercel
     ]);
 
     // Build shift code to shift object map for quick lookup
@@ -250,7 +252,8 @@ export async function POST(req) {
       minor: 38, // "valid access" events only
     })
     .sort({ eventTime: 1 }) // Sort by time ascending for proper processing
-    .lean();
+    .lean()
+    .maxTimeMS(5000); // Daily events can be large, allow 5 seconds
 
 
     // PERFORMANCE: Pre-fetch all next day events for night shift employees in a single batch query
@@ -278,6 +281,7 @@ export async function POST(req) {
         })
           .sort({ empCode: 1, eventTime: 1 })
           .lean()
+          .maxTimeMS(3000) // Fast timeout for Vercel
       : [];
     
     // Build map: empCode -> array of next day events (sorted by time)

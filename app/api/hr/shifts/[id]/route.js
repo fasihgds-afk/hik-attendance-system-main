@@ -87,11 +87,7 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
     }
 
-    // CRITICAL: Invalidate cache after update to ensure fresh data
-    const { invalidateShiftsCache } = await import('../../../../../lib/cache/shiftCache');
-    invalidateShiftsCache();
-
-    // Shift updated successfully
+    // Shift updated successfully (cache removed - direct queries on Vercel)
     return NextResponse.json({ shift });
   } catch (err) {
     console.error('PUT /api/hr/shifts/[id] error:', err);
@@ -127,9 +123,6 @@ export async function DELETE(req, { params }) {
     // Check if permanent deletion is requested
     const { searchParams } = new URL(req.url);
     const permanent = searchParams.get('permanent') === 'true';
-
-    // CRITICAL: Import cache invalidation function
-    const { invalidateShiftsCache } = await import('../../../../../lib/cache/shiftCache');
     
     if (permanent) {
       // Permanent deletion - remove from database
@@ -138,9 +131,6 @@ export async function DELETE(req, { params }) {
       if (!shift) {
         throw new NotFoundError('Shift');
       }
-
-      // CRITICAL: Invalidate cache after delete
-      invalidateShiftsCache();
 
       return successResponse(
         { shift },
@@ -158,9 +148,6 @@ export async function DELETE(req, { params }) {
       if (!shift) {
         throw new NotFoundError('Shift');
       }
-
-      // CRITICAL: Invalidate cache after update
-      invalidateShiftsCache();
 
       return successResponse(
         { shift },

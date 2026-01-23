@@ -14,8 +14,10 @@ export async function GET(req) {
   try {
     await connectDB();
 
-    // Get the active rules (should be only one)
-    const activeRules = await ViolationRules.findOne({ isActive: true }).lean();
+    // Get the active rules (should be only one) - optimized for Vercel
+    const activeRules = await ViolationRules.findOne({ isActive: true })
+      .lean()
+      .maxTimeMS(2000); // Fast timeout for Vercel
 
     if (!activeRules) {
       // Return default rules if none exist

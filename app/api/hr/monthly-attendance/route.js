@@ -412,7 +412,9 @@ export async function GET(req) {
     await connectDB();
 
     // Fetch active violation rules from database (direct query)
-    let violationRules = await ViolationRules.findOne({ isActive: true }).lean();
+    let violationRules = await ViolationRules.findOne({ isActive: true })
+      .lean()
+      .maxTimeMS(2000); // Fast timeout for Vercel
     if (!violationRules) {
       // Return default rules if none exist
       violationRules = {
@@ -452,14 +454,15 @@ export async function GET(req) {
     const monthStartDate = `${monthPrefix}-01`;
     const monthEndDate = `${monthPrefix}-${String(daysInMonth).padStart(2, '0')}`;
 
-    // Use optimized query with proper projection
+    // Use optimized query with proper projection (Vercel optimized)
     const shiftDocs = await ShiftAttendance.find(
       {
         date: { $gte: monthStartDate, $lte: monthEndDate },
       }
     )
       .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused')
-      .lean();
+      .lean()
+      .maxTimeMS(5000); // Monthly data can be large, allow 5 seconds
 
     const docsByEmpDate = new Map();
     for (const doc of shiftDocs) {
@@ -467,18 +470,14 @@ export async function GET(req) {
       docsByEmpDate.set(`${doc.empCode}|${doc.date}`, doc);
     }
 
-    // PERFORMANCE OPTIMIZATION: Pre-fetch all shifts (direct query)
+    // PERFORMANCE OPTIMIZATION: Pre-fetch all shifts (direct query - cache doesn't work on Vercel)
     const allShiftsMap = new Map();
     if (useDynamicShifts) {
-      // Direct query - no caching
-      // OPTIMIZATION: Use cached shifts if available (shifts rarely change)
-      const { getCachedShifts } = await import('../../../../lib/cache/shiftCache');
-      let allShifts = getCachedShifts(true); // Get active shifts from cache
-      
-      if (!allShifts) {
-        allShifts = await Shift.find({ isActive: true }).lean();
-        // Cache will be set by shifts route, no need to set here
-      }
+      // Direct query - optimized for Vercel serverless
+      const allShifts = await Shift.find({ isActive: true })
+        .select('_id name code startTime endTime crossesMidnight gracePeriod')
+        .lean()
+        .maxTimeMS(2000); // Fast timeout for Vercel
       
       allShifts.forEach((s) => {
         allShiftsMap.set(s._id.toString(), s);
@@ -1269,15 +1268,20 @@ export async function POST(req) {
 
     const TZ = process.env.TIMEZONE_OFFSET || '+05:00';
 
-    // Load all active shifts for dynamic shift lookup
-    const allShifts = await Shift.find({ isActive: true }).lean();
+    // Load all active shifts for dynamic shift lookup (optimized for Vercel)
+    const allShifts = await Shift.find({ isActive: true })
+      .select('_id name code startTime endTime crossesMidnight gracePeriod')
+      .lean()
+      .maxTimeMS(2000); // Fast timeout for Vercel
     const allShiftsMap = new Map();
     allShifts.forEach((s) => {
       allShiftsMap.set(s._id.toString(), s);
       allShiftsMap.set(s.code, s);
     });
 
-    const emp = await Employee.findOne({ empCode }).lean();
+    const emp = await Employee.findOne({ empCode })
+      .lean()
+      .maxTimeMS(2000); // Fast timeout for Vercel
     if (!emp) {
       throw new NotFoundError(`Employee ${empCode}`);
     }

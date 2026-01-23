@@ -1,8 +1,7 @@
 // app/api/hr/shifts/route.js
 import { connectDB } from '../../../../lib/db';
 import Shift from '../../../../models/Shift';
-import { getCachedShifts, setCachedShifts, invalidateShiftsCache } from '../../../../lib/cache/shiftCache';
-import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const dynamic = 'force-dynamic';
@@ -10,34 +9,27 @@ export const dynamic = 'force-dynamic';
 // GET /api/hr/shifts - Get all shifts
 export async function GET(req) {
   try {
+    await connectDB();
+    
     const { searchParams } = new URL(req.url);
     const activeOnly = searchParams.get('activeOnly') === 'true';
 
-    // OPTIMIZATION: Use cache for shifts (static data, rarely changes)
-    // Cache is invalidated on any CRUD operation, so data stays fresh
-    let shifts = getCachedShifts(activeOnly);
-    
-    if (!shifts) {
-      await connectDB();
-      
-      const query = activeOnly ? { isActive: true } : {};
-      shifts = await Shift.find(query).sort({ code: 1 }).lean();
-      
-      // Cache all shifts (we'll filter activeOnly from cache if needed)
-      if (!activeOnly) {
-        setCachedShifts(shifts);
-      } else {
-        // If activeOnly was requested, cache all shifts anyway for future use
-        const allShifts = await Shift.find({}).sort({ code: 1 }).lean();
-        setCachedShifts(allShifts);
-        shifts = allShifts.filter(s => s.isActive);
-      }
-    }
+    // OPTIMIZATION: Direct query (in-memory cache doesn't work on Vercel serverless)
+    // Shifts are small dataset, query is fast with proper index
+    const query = activeOnly ? { isActive: true } : {};
+    const shifts = await Shift.find(query)
+      .select('_id name code startTime endTime crossesMidnight gracePeriod description isActive')
+      .sort({ code: 1 })
+      .lean()
+      .maxTimeMS(2000); // Fast timeout for Vercel
 
+    // Shifts are static data - can be cached briefly (30 seconds) for Vercel edge caching
     return successResponse(
       { shifts },
       'Shifts retrieved successfully',
-      HTTP_STATUS.OK
+      HTTP_STATUS.OK,
+      null,
+      { isStatic: true, maxAge: 30 } // 30 seconds cache for Vercel edge
     );
   } catch (err) {
     return errorResponseFromException(err, req);

@@ -2,7 +2,6 @@
 // Migration script to create default shifts from hardcoded values
 import { connectDB } from '../../../../../lib/db';
 import Shift from '../../../../../models/Shift';
-import { invalidateShiftsCache } from '../../../../../lib/cache/shiftCache';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 
 export const dynamic = 'force-dynamic';
@@ -82,9 +81,6 @@ export async function POST(req) {
         results.push({ code: shiftData.code, status: 'error', error: err.message });
       }
     }
-
-    // CRITICAL: Invalidate cache after migration (creates/updates shifts)
-    invalidateShiftsCache();
 
     return successResponse(
       { results },
