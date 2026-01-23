@@ -10,7 +10,6 @@ import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 30; // Cache for 30 seconds for faster responses
-export const fetchCache = 'default';
 
 // Helper function to convert ObjectId shift to shift code
 async function normalizeShiftField(shiftValue) {
