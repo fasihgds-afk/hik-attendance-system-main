@@ -26,16 +26,32 @@ export async function GET(req) {
       query.empCode = empCode;
     }
 
-    // Get all paid leave records for the year
+    // Get all paid leave records for the year (without lean to allow saving)
     const paidLeaves = await PaidLeave.find(query)
-      .lean()
       .maxTimeMS(3000);
 
     // If filtering by empCode and no record exists, create one
     if (empCode && paidLeaves.length === 0) {
       const paidLeave = await PaidLeave.getOrCreate(empCode, year);
+      const emp = await Employee.findOne({ empCode })
+        .select('empCode name department designation')
+        .lean()
+        .maxTimeMS(2000);
+      
       return successResponse(
-        { paidLeaves: [paidLeave] },
+        { 
+          paidLeaves: [{
+            ...paidLeave.toObject(),
+            employeeName: emp?.name || '',
+            department: emp?.department || '',
+            designation: emp?.designation || '',
+            totalLeavesAllocated: paidLeave.totalLeavesAllocated,
+            totalLeavesTaken: paidLeave.totalLeavesTaken,
+            totalLeavesRemaining: paidLeave.totalLeavesRemaining,
+            casualLeavesRemaining: paidLeave.casualLeavesRemaining,
+            annualLeavesRemaining: paidLeave.annualLeavesRemaining,
+          }] 
+        },
         'Leave status retrieved successfully',
         HTTP_STATUS.OK
       );
@@ -53,22 +69,134 @@ export async function GET(req) {
       employeeMap.set(emp.empCode, emp);
     });
 
-    // Enrich paid leave records with employee details
-    const enrichedLeaves = paidLeaves.map(pl => {
+    // STEP 1: Clean up duplicate LeaveRecords FIRST (same empCode and date) - keep only the first one
+    // This must happen BEFORE counting to ensure accurate counts
+    console.log(`[LEAVES API] Starting duplicate cleanup for year ${year}, empCodes:`, empCodes.length);
+    
+    const allLeaveRecords = await LeaveRecord.find({
+      empCode: { $in: empCodes },
+      date: { $gte: `${year}-01-01`, $lte: `${year}-12-31` }
+    })
+      .sort({ createdAt: 1 })
+      .lean()
+      .maxTimeMS(3000);
+    
+    console.log(`[LEAVES API] Found ${allLeaveRecords.length} total LeaveRecords before cleanup`);
+    
+    // Group by empCode-date to find duplicates
+    const leaveRecordsByKey = new Map();
+    const duplicatesToDelete = [];
+    
+    allLeaveRecords.forEach(record => {
+      const key = `${record.empCode}-${record.date}`;
+      if (leaveRecordsByKey.has(key)) {
+        // Duplicate found - mark for deletion (keep the first one)
+        console.log(`[LEAVES API] Duplicate found: empCode=${record.empCode}, date=${record.date}, leaveType=${record.leaveType}, _id=${record._id}`);
+        duplicatesToDelete.push(record._id);
+      } else {
+        leaveRecordsByKey.set(key, record);
+      }
+    });
+    
+    console.log(`[LEAVES API] Found ${duplicatesToDelete.length} duplicate records to delete`);
+    
+    // Delete duplicate records
+    if (duplicatesToDelete.length > 0) {
+      const deleteResult = await LeaveRecord.deleteMany({ _id: { $in: duplicatesToDelete } });
+      console.log(`[LEAVES API] Deleted ${deleteResult.deletedCount} duplicate records`);
+    }
+
+    // STEP 2: Get ShiftAttendance records with "Paid Leave" status to validate LeaveRecords
+    const paidLeaveAttendances = await ShiftAttendance.find({
+      empCode: { $in: empCodes },
+      date: { $gte: `${year}-01-01`, $lte: `${year}-12-31` },
+      attendanceStatus: 'Paid Leave'
+    })
+      .select('empCode date leaveType')
+      .lean()
+      .maxTimeMS(3000);
+    
+    // Create a map of valid paid leave dates (empCode-date)
+    const validPaidLeaveDates = new Set();
+    paidLeaveAttendances.forEach(sa => {
+      validPaidLeaveDates.add(`${sa.empCode}-${sa.date}`);
+    });
+    
+    console.log(`[LEAVES API] Found ${paidLeaveAttendances.length} ShiftAttendance records with "Paid Leave" status`);
+    
+    // STEP 3: Clean up LeaveRecords that don't have matching "Paid Leave" status in ShiftAttendance
+    const orphanedLeaveRecords = [];
+    allLeaveRecords.forEach(record => {
+      const key = `${record.empCode}-${record.date}`;
+      if (!validPaidLeaveDates.has(key)) {
+        orphanedLeaveRecords.push(record._id);
+        console.log(`[LEAVES API] Orphaned LeaveRecord found: empCode=${record.empCode}, date=${record.date}, leaveType=${record.leaveType}`);
+      }
+    });
+    
+    if (orphanedLeaveRecords.length > 0) {
+      const deleteResult = await LeaveRecord.deleteMany({ _id: { $in: orphanedLeaveRecords } });
+      console.log(`[LEAVES API] Deleted ${deleteResult.deletedCount} orphaned LeaveRecords (no matching Paid Leave status)`);
+    }
+
+    // STEP 4: Get actual LeaveRecord counts AFTER cleanup (only for dates with "Paid Leave" status)
+    const actualLeaveCounts = await LeaveRecord.aggregate([
+      {
+        $match: {
+          empCode: { $in: empCodes },
+          date: { $gte: `${year}-01-01`, $lte: `${year}-12-31` }
+        }
+      },
+      {
+        $group: {
+          _id: { empCode: '$empCode', leaveType: '$leaveType' },
+          count: { $sum: 1 }
+        }
+      }
+    ]).option({ maxTimeMS: 3000 });
+
+    console.log(`[LEAVES API] Actual leave counts from aggregation:`, JSON.stringify(actualLeaveCounts, null, 2));
+
+    // Build a map of actual counts
+    const actualCountsMap = new Map();
+    actualLeaveCounts.forEach(item => {
+      const key = `${item._id.empCode}-${item._id.leaveType}`;
+      actualCountsMap.set(key, item.count);
+      console.log(`[LEAVES API] Count map: ${key} = ${item.count}`);
+    });
+
+    // Enrich paid leave records with employee details and validate/correct counters
+    const enrichedLeaves = await Promise.all(paidLeaves.map(async (pl) => {
       const emp = employeeMap.get(pl.empCode);
+      
+      // Get actual counts from LeaveRecord (after duplicate cleanup)
+      const actualCasual = actualCountsMap.get(`${pl.empCode}-casual`) || 0;
+      const actualAnnual = actualCountsMap.get(`${pl.empCode}-annual`) || 0;
+      
+      // Check if counters are out of sync and fix them
+      const casualMismatch = pl.casualLeavesTaken !== actualCasual;
+      const annualMismatch = pl.annualLeavesTaken !== actualAnnual;
+      
+      if (casualMismatch || annualMismatch) {
+        // Fix the counters to match actual LeaveRecord count
+        pl.casualLeavesTaken = actualCasual;
+        pl.annualLeavesTaken = actualAnnual;
+        await pl.save();
+      }
+      
       return {
-        ...pl,
+        ...pl.toObject(),
         employeeName: emp?.name || '',
         department: emp?.department || '',
         designation: emp?.designation || '',
         // Calculate virtuals
-        totalLeavesAllocated: (pl.casualLeavesAllocated || 0) + (pl.annualLeavesAllocated || 0),
-        totalLeavesTaken: (pl.casualLeavesTaken || 0) + (pl.annualLeavesTaken || 0),
-        totalLeavesRemaining: ((pl.casualLeavesAllocated || 0) + (pl.annualLeavesAllocated || 0)) - ((pl.casualLeavesTaken || 0) + (pl.annualLeavesTaken || 0)),
-        casualLeavesRemaining: (pl.casualLeavesAllocated || 0) - (pl.casualLeavesTaken || 0),
-        annualLeavesRemaining: (pl.annualLeavesAllocated || 0) - (pl.annualLeavesTaken || 0),
+        totalLeavesAllocated: pl.totalLeavesAllocated,
+        totalLeavesTaken: pl.totalLeavesTaken,
+        totalLeavesRemaining: pl.totalLeavesRemaining,
+        casualLeavesRemaining: pl.casualLeavesRemaining,
+        annualLeavesRemaining: pl.annualLeavesRemaining,
       };
-    });
+    }));
 
     return successResponse(
       { paidLeaves: enrichedLeaves, year },
@@ -137,14 +265,18 @@ export async function POST(req) {
       throw new ValidationError(`Employee ${empCode} has no remaining ${leaveType} leaves`);
     }
 
-    // Create leave record
-    const leaveRecord = await LeaveRecord.create({
-      empCode,
-      date,
-      leaveType,
-      reason: reason || '',
-      markedBy: markedBy || 'HR',
-    });
+    // Create leave record using upsert to prevent duplicates (atomic operation)
+    const leaveRecord = await LeaveRecord.findOneAndUpdate(
+      { empCode, date },
+      {
+        empCode,
+        date,
+        leaveType,
+        reason: reason || '',
+        markedBy: markedBy || 'HR',
+      },
+      { upsert: true, new: true }
+    );
 
     // Update paid leave counter
     if (leaveType === 'casual') {
