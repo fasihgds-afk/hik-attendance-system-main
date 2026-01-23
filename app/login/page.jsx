@@ -101,16 +101,11 @@ function LoginInner() {
         return;
       }
 
-      // Verify session was created before redirecting
-      const session = await getSession();
-      if (!session) {
-        setErrorMsg("Session creation failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      // When redirect: false, result.url is null, so use callbackUrl directly
-      // Use window.location for full page reload to ensure session cookie is sent
+      // On Vercel, session cookies may take a moment to propagate
+      // Use a short delay then redirect - the middleware will handle auth check
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Force a full page navigation to ensure cookies are sent
       window.location.href = "/employee/dashboard";
     } catch (err) {
       console.error("Employee login error", err);
