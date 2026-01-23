@@ -1442,8 +1442,18 @@ export async function POST(req) {
       updatedAt: new Date(),
     };
 
-    // If marking Paid Leave, also update PaidLeave record
-    if (attendanceStatus === 'Paid Leave' && leaveType) {
+    // Check current status in database to detect changes
+    const existingRecord = await ShiftAttendance.findOne({ empCode, date })
+      .select('attendanceStatus leaveType')
+      .lean()
+      .maxTimeMS(2000);
+    
+    const wasPaidLeave = existingRecord?.attendanceStatus === 'Paid Leave';
+    const isPaidLeave = attendanceStatus === 'Paid Leave';
+    
+    // Handle Paid Leave synchronization
+    if (isPaidLeave && leaveType) {
+      // Marking as Paid Leave - create/update leave records
       const year = parseInt(date.split('-')[0], 10);
       const paidLeave = await PaidLeave.getOrCreate(empCode, year);
       
@@ -1467,7 +1477,56 @@ export async function POST(req) {
           paidLeave.annualLeavesTaken += 1;
         }
         await paidLeave.save();
+      } else if (existingLeave.leaveType !== leaveType) {
+        // Leave type changed (casual to annual or vice versa) - update counters
+        const oldLeaveType = existingLeave.leaveType;
+        
+        // Decrement old leave type
+        if (oldLeaveType === 'casual' && paidLeave.casualLeavesTaken > 0) {
+          paidLeave.casualLeavesTaken -= 1;
+        } else if (oldLeaveType === 'annual' && paidLeave.annualLeavesTaken > 0) {
+          paidLeave.annualLeavesTaken -= 1;
+        }
+        
+        // Increment new leave type
+        if (leaveType === 'casual' && paidLeave.casualLeavesRemaining > 0) {
+          paidLeave.casualLeavesTaken += 1;
+        } else if (leaveType === 'annual' && paidLeave.annualLeavesRemaining > 0) {
+          paidLeave.annualLeavesTaken += 1;
+        }
+        
+        // Update leave record
+        await LeaveRecord.findOneAndUpdate(
+          { empCode, date },
+          { leaveType, reason: reason || existingLeave.reason || '' }
+        );
+        
+        await paidLeave.save();
       }
+    } else if (wasPaidLeave && !isPaidLeave) {
+      // Changing FROM Paid Leave to another status - remove leave records
+      const existingLeave = await LeaveRecord.findOne({ empCode, date }).lean();
+      
+      if (existingLeave) {
+        const year = parseInt(date.split('-')[0], 10);
+        const paidLeave = await PaidLeave.findOne({ empCode, year });
+        
+        if (paidLeave) {
+          // Decrement the appropriate leave counter
+          if (existingLeave.leaveType === 'casual' && paidLeave.casualLeavesTaken > 0) {
+            paidLeave.casualLeavesTaken -= 1;
+          } else if (existingLeave.leaveType === 'annual' && paidLeave.annualLeavesTaken > 0) {
+            paidLeave.annualLeavesTaken -= 1;
+          }
+          await paidLeave.save();
+        }
+        
+        // Delete leave record
+        await LeaveRecord.findOneAndDelete({ empCode, date });
+      }
+      
+      // Remove leaveType from update object since status is no longer Paid Leave
+      delete update.leaveType;
     }
 
     // OPTIMIZATION: Use findOneAndUpdate with upsert instead of delete + create (faster, atomic)
