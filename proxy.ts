@@ -10,11 +10,32 @@ export default withAuth(
     // Clone URL so we can safely mutate pathname/searchParams
     const url = req.nextUrl.clone();
 
+    // ---------------- REGISTER PAGE - PROTECTED ----------------
+    if (pathname === '/register') {
+      // Block access if user is not logged in
+      if (!token) {
+        // Middleware: Register page accessed without authentication, redirecting to login
+        url.pathname = '/login';
+        url.searchParams.set('role', 'hr');
+        return NextResponse.redirect(url);
+      }
+      // Optional: Only allow HR or ADMIN roles to access register page
+      // Uncomment the following lines if you want to restrict to HR/ADMIN only:
+      // if (token.role !== 'HR' && token.role !== 'ADMIN') {
+      //   console.log('[Middleware] Register page accessed by non-HR/ADMIN user, redirecting');
+      //   url.pathname = '/login';
+      //   url.searchParams.set('role', 'hr');
+      //   return NextResponse.redirect(url);
+      // }
+      // User is authenticated, allow access
+      return NextResponse.next();
+    }
+
     // ---------------- HR AREA ----------------
     if (pathname.startsWith('/hr')) {
       // 1) Not logged in at all  -> send to HR login
       if (!token) {
-        console.log('[Middleware] No token found, redirecting to login');
+        // Middleware: No token found, redirecting to login
         url.pathname = '/login';
         url.searchParams.set('role', 'hr');
         return NextResponse.redirect(url);
@@ -30,7 +51,7 @@ export default withAuth(
       }
 
       // 3) token.role === 'HR' or 'ADMIN' -> let request continue
-      console.log('[Middleware] Access granted for role:', token.role);
+      // Middleware: Access granted
       return NextResponse.next();
     }
 
@@ -70,5 +91,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ['/hr/:path*', '/employee/:path*'],
+  matcher: ['/hr/:path*', '/employee/:path*', '/register'],
 };
