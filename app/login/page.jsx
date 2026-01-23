@@ -99,10 +99,17 @@ function LoginInner() {
         return;
       }
 
+      // Verify session was created before redirecting
+      const session = await getSession();
+      if (!session) {
+        setErrorMsg("Session creation failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // When redirect: false, result.url is null, so use callbackUrl directly
       // Use window.location for full page reload to ensure session cookie is sent
-      // This fixes the issue where router.push doesn't include the session cookie immediately
-      const redirectUrl = result.url || "/employee/dashboard";
-      window.location.href = redirectUrl;
+      window.location.href = "/employee/dashboard";
     } catch (err) {
       console.error("Employee login error", err);
       setErrorMsg("Something went wrong. Please try again.");
