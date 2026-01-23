@@ -1,9 +1,9 @@
 // app/api/auth/[...nextauth]/route.js
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { connectDB } from "../../../lib/db";
-import User from "../../../models/User";
-import Employee from "../../../models/Employee";
+import { connectDB } from "../../../../lib/db";
+import User from "../../../../models/User";
+import Employee from "../../../../models/Employee";
 import bcrypt from "bcryptjs";
 
 export const authOptions = {

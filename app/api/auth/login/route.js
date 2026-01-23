@@ -1,10 +1,10 @@
-// next-app/app/api/auth/login/route.js
-import { connectDB } from '../../../lib/db';
-import User from '../../../models/User';
-import Employee from '../../../models/Employee';
+// app/api/auth/login/route.js
+import { connectDB } from '../../../../lib/db';
+import User from '../../../../models/User';
+import Employee from '../../../../models/Employee';
 import bcrypt from 'bcryptjs';
-import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
-import { ValidationError, UnauthorizedError } from '../../../lib/errors/errorHandler';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { ValidationError, UnauthorizedError } from '../../../../lib/errors/errorHandler';
 
 export async function POST(req) {
   try {

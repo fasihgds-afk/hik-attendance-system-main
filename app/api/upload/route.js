@@ -2,8 +2,8 @@ import { createWriteStream } from 'fs';
 import { mkdir, stat } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { successResponse, errorResponseFromException } from '../../lib/api/response';
-import { ValidationError } from '../../lib/errors/errorHandler';
+import { successResponse, errorResponseFromException } from '../../../lib/api/response';
+import { ValidationError } from '../../../lib/errors/errorHandler';
 
 export const dynamic = 'force-dynamic';
 
