@@ -7,7 +7,9 @@ export const metadata = {
   title: "GDS Attendance Portal",
   description: "Global Digital Solutions Attendance & HR Portal",
   icons: {
-    icon: "/favicon.svg",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
     shortcut: "/favicon.svg",
     apple: "/favicon.svg",
   },
