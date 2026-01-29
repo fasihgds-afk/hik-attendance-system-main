@@ -339,11 +339,10 @@ export default function HrDashboardPage() {
         { header: 'Status',      key: 'status',        width: 12 },
         { header: 'Check In',    key: 'checkIn',       width: 16 },
         { header: 'Check Out',   key: 'checkOut',      width: 16 },
-        { header: 'Total Punches', key: 'totalPunches', width: 14 },
       ];
 
-      // --------- Title Row (A1:I1 merged) ----------
-      sheet.mergeCells('A1:I1');
+      // --------- Title Row (A1:H1 merged) ----------
+      sheet.mergeCells('A1:H1');
       const titleCell = sheet.getCell('A1');
       titleCell.value = `Global Digital Solutions — Attendance Report (${businessDate})`;
       titleCell.font = {
@@ -364,8 +363,8 @@ export default function HrDashboardPage() {
       };
       sheet.getRow(1).height = 26;
 
-      // --------- Subtitle Row (A2:I2 merged) ----------
-      sheet.mergeCells('A2:I2');
+      // --------- Subtitle Row (A2:H2 merged) ----------
+      sheet.mergeCells('A2:H2');
       const subtitleCell = sheet.getCell('A2');
       subtitleCell.value = `Business Date: ${businessDate}  •  Generated: ${new Date().toLocaleString()}`;
       subtitleCell.font = {
@@ -396,7 +395,6 @@ export default function HrDashboardPage() {
         'Status',
         'Check In',
         'Check Out',
-        'Total Punches',
       ];
 
       headerRow.eachCell((cell) => {
@@ -441,7 +439,6 @@ export default function HrDashboardPage() {
           status: statusText,
           checkIn: formatDateTime(r.checkIn),
           checkOut: formatDateTime(r.checkOut),
-          totalPunches: r.totalPunches ?? 0,
         });
 
         // Zebra stripe background
@@ -455,7 +452,7 @@ export default function HrDashboardPage() {
           cell.alignment = {
             vertical: 'middle',
             horizontal:
-              cell.col === 9 ? 'center' : 'left', // punches centered
+              cell.col === 8 ? 'center' : 'left', // check-out centered
             wrapText: true,
           };
           cell.fill = {
@@ -1418,7 +1415,6 @@ export default function HrDashboardPage() {
                     <th style={thStyle}>Status</th>
                     <th style={thStyle}>Check In</th>
                     <th style={thStyle}>Check Out</th>
-                    <th style={thStyle}>Total Punches</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1536,9 +1532,6 @@ export default function HrDashboardPage() {
                           </td>
                           <td style={tdStyle}>
                             {formatDateTime(row.checkOut)}
-                          </td>
-                          <td style={tdStyle}>
-                            {row.totalPunches ?? 0}
                           </td>
                         </tr>
                       );

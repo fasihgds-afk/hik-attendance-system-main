@@ -1,5 +1,6 @@
 // app/api/hr/daily-attendance/route.js
-// Request/response flow only; logic delegated to attendance/ modules.
+// Punch-based: first punch = check-in, last punch = check-out. Aggregation for efficiency.
+// Preserves paid leave and manual attendance edits.
 
 import mongoose from 'mongoose';
 import { connectDB } from '../../../../lib/db';
@@ -11,8 +12,8 @@ import ShiftAttendance from '../../../../models/ShiftAttendance';
 import Shift from '../../../../models/Shift';
 
 import { getNextDateStr, classifyByTime } from './attendance/time-utils.js';
-import { resolveCheckIn } from './attendance/checkin-resolver.js';
-import { resolveCheckOut } from './attendance/checkout-resolver.js';
+import { getFirstAndLastPunchPerEmployee } from './attendance/punch-helpers.js';
+import { ensureCheckInBeforeCheckOut } from './attendance/validation.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,6 @@ function toEmpCodeKey(value) {
 
 /**
  * Extract shift code from emp.shift / emp.shiftId (string, ObjectId, or formatted).
- * Uses shiftById map built from active shifts.
  */
 function extractShiftCode(shiftValue, shiftById) {
   if (!shiftValue) return '';
@@ -42,6 +42,17 @@ function extractShiftCode(shiftValue, shiftById) {
   if (/^[A-Z]\d+$/.test(stringValue)) return stringValue;
   return stringValue.toUpperCase();
 }
+
+/** Statuses that are manual/leave and must not be overwritten by punch-derived Present/Absent. */
+const MANUAL_OR_LEAVE_STATUSES = new Set([
+  'Paid Leave',
+  'Un Paid Leave',
+  'Sick Leave',
+  'Half Day',
+  'Leave Without Inform',
+  'Work From Home',
+  'Holiday',
+]);
 
 export async function POST(req) {
   try {
@@ -66,19 +77,19 @@ export async function POST(req) {
       throw new ValidationError('No active shifts found. Please create shifts first.');
     }
 
-    const [allEmployees, existingRecords, nextDayRecords] = await Promise.all([
+    const startLocal = new Date(`${date}T09:00:00${TZ}`);
+    const endLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
+
+    const [allEmployees, existingRecords, punchMap] = await Promise.all([
       Employee.find()
         .select('empCode name shift shiftId department designation')
         .lean()
         .maxTimeMS(2000),
       ShiftAttendance.find({ date })
-        .select('date empCode checkIn checkOut shift attendanceStatus')
+        .select('date empCode checkIn checkOut shift attendanceStatus reason leaveType')
         .lean()
         .maxTimeMS(2000),
-      ShiftAttendance.find({ date: nextDateStr })
-        .select('date empCode checkIn checkOut shift')
-        .lean()
-        .maxTimeMS(2000),
+      getFirstAndLastPunchPerEmployee(AttendanceEvent, startLocal, endLocal, 5000),
     ]);
 
     const shiftByCode = new Map();
@@ -95,22 +106,15 @@ export async function POST(req) {
     for (const emp of allEmployees) {
       const empKey = toEmpCodeKey(emp.empCode);
       if (!empKey) continue;
-      const employeeShift = extractShiftCode(emp.shift, shiftById) || extractShiftCode(emp.shiftId != null ? String(emp.shiftId) : '', shiftById);
+      const employeeShift =
+        extractShiftCode(emp.shift, shiftById) ||
+        extractShiftCode(emp.shiftId != null ? String(emp.shiftId) : '', shiftById);
       empInfoMap.set(empKey, {
         name: emp.name || '',
         shift: employeeShift,
         department: emp.department || '',
         designation: emp.designation || '',
       });
-    }
-
-    const startLocal = new Date(`${date}T09:00:00${TZ}`);
-    const endLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
-
-    const nextDayByEmpCode = new Map();
-    for (const record of nextDayRecords) {
-      const key = toEmpCodeKey(record.empCode);
-      if (key) nextDayByEmpCode.set(key, record);
     }
 
     const existingByEmpCode = new Map();
@@ -123,169 +127,96 @@ export async function POST(req) {
       }
     }
 
-    const events = await AttendanceEvent.find({
-      eventTime: { $gte: startLocal, $lte: endLocal },
-      minor: 38,
-    })
-      .select('eventTime empCode')
-      .sort({ eventTime: 1 })
-      .lean()
-      .maxTimeMS(4000);
-
-    const nextDayStartLocal = new Date(`${nextDateStr}T00:00:00${TZ}`);
-    const nextDayEndLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
-    const nightShiftEmpCodes = new Set();
-    for (const emp of allEmployees) {
-      const empKey = toEmpCodeKey(emp.empCode);
-      if (!empKey) continue;
-      const empAssignedShift = extractShiftCode(emp.shift, shiftById) || extractShiftCode(emp.shiftId != null ? String(emp.shiftId) : '', shiftById);
-      const shiftObj = shiftByCode.get(empAssignedShift);
-      if (shiftObj?.crossesMidnight === true) nightShiftEmpCodes.add(empKey);
-    }
-    const nightShiftEmpCodesForQuery = new Set(nightShiftEmpCodes);
-    for (const code of nightShiftEmpCodes) {
-      const num = Number(code);
-      if (!Number.isNaN(num)) nightShiftEmpCodesForQuery.add(num);
-    }
-
-    const allNextDayEvents =
-      nightShiftEmpCodesForQuery.size > 0
-        ? await AttendanceEvent.find({
-            empCode: { $in: Array.from(nightShiftEmpCodesForQuery) },
-            eventTime: { $gte: nextDayStartLocal, $lte: nextDayEndLocal },
-            minor: 38,
-          })
-            .select('eventTime empCode')
-            .sort({ empCode: 1, eventTime: 1 })
-            .lean()
-            .maxTimeMS(2500)
-        : [];
-
-    const nextDayEventsByEmp = new Map();
-    for (const event of allNextDayEvents) {
-      const key = toEmpCodeKey(event.empCode);
-      if (!key) continue;
-      if (!nextDayEventsByEmp.has(key)) nextDayEventsByEmp.set(key, []);
-      nextDayEventsByEmp.get(key).push(event);
-    }
-
-    const byEmp = new Map();
-    for (const ev of events) {
-      const evKey = toEmpCodeKey(ev.empCode);
-      if (!evKey) continue;
-      const local = new Date(ev.eventTime);
-      const timeShift = classifyByTime(local, date, TZ, allShifts);
-      let rec = byEmp.get(evKey);
-      if (!rec) {
-        const info = empInfoMap.get(evKey) || {};
-        rec = {
-          empCode: evKey,
-          employeeName: info.name || ev.employeeName || ev.raw?.name || '',
-          assignedShift: info.shift || '',
-          department: info.department || '',
-          designation: info.designation || '',
-          times: [],
-          detectedShifts: new Set(),
-        };
-        byEmp.set(evKey, rec);
-      }
-      rec.times.push(local);
-      if (timeShift) rec.detectedShifts.add(timeShift);
-    }
-
     const items = [];
 
     for (const emp of allEmployees) {
       const empKey = toEmpCodeKey(emp.empCode);
-      const rec = byEmp.get(empKey);
       const existingRecord = existingByEmpCode.get(empKey);
-      const times = rec?.times ? [...rec.times].sort((a, b) => a - b) : [];
+      const punches = punchMap.get(empKey);
 
-      const empAssignedShift = extractShiftCode(
-        rec?.assignedShift || emp.shift || (emp.shiftId != null ? String(emp.shiftId) : ''),
-        shiftById
-      );
-      const shiftObjForCheckOut = shiftByCode.get(empAssignedShift);
-      const isNightShiftForCheckOut = shiftObjForCheckOut?.crossesMidnight === true;
+      let checkIn = null;
+      let checkOut = null;
+      let totalPunches = 0;
 
-      const { checkIn } = resolveCheckIn({
-        empKey,
-        times,
-        existingRecord,
-        nextDayByEmpCode,
-        nextDayEventsByEmp,
-        nextDateStr,
-        TZ,
-        shiftObjForCheckOut,
-        isNightShiftForCheckOut,
-      });
+      if (punches) {
+        checkIn = punches.firstPunch || null;
+        checkOut = punches.count > 1 ? punches.lastPunch : null;
+        totalPunches = punches.count;
+      }
 
-      const checkOut = resolveCheckOut({
-        empKey,
-        emp,
-        times,
-        checkIn,
-        existingRecord,
-        nextDayByEmpCode,
-        nextDayEventsByEmp,
-        date,
-        nextDateStr,
-        TZ,
-        shiftByCode,
-        empAssignedShift,
-        isNightShiftForCheckOut,
-      });
+      if (!checkIn && existingRecord?.checkIn) {
+        checkIn = new Date(existingRecord.checkIn);
+        if (totalPunches === 0) totalPunches = checkOut ? 2 : 1;
+      }
+      if (!checkOut && existingRecord?.checkOut && totalPunches >= 1) {
+        const existingCheckOut = new Date(existingRecord.checkOut);
+        if (!isNaN(existingCheckOut.getTime())) checkOut = ensureCheckInBeforeCheckOut(checkIn, existingCheckOut) || checkOut;
+        if (checkOut && totalPunches === 1) totalPunches = 2;
+      }
+
+      checkOut = ensureCheckInBeforeCheckOut(checkIn, checkOut);
 
       const empShiftRaw = emp.shift || (emp.shiftId != null ? String(emp.shiftId) : '');
       let assignedShift = extractShiftCode(empShiftRaw, shiftById);
-      if (!assignedShift && rec?.assignedShift) assignedShift = extractShiftCode(rec.assignedShift, shiftById);
+      if (!assignedShift) assignedShift = extractShiftCode(empInfoMap.get(empKey)?.shift, shiftById);
+      let shift = assignedShift || 'Unknown';
 
-      let shift = 'Unknown';
-      if (assignedShift) shift = assignedShift;
-      else if (rec?.detectedShifts?.size > 0) shift = Array.from(rec.detectedShifts)[0];
-
-      let totalPunches = times.length;
-      if (totalPunches === 0 && (existingRecord?.checkIn || checkIn)) {
-        totalPunches = checkOut ? 2 : checkIn ? 1 : 0;
-      } else if (totalPunches === 1 && checkOut && times.length === 1) {
-        totalPunches = 2;
+      let attendanceStatus = totalPunches > 0 ? 'Present' : 'Absent';
+      if (existingRecord && MANUAL_OR_LEAVE_STATUSES.has(existingRecord.attendanceStatus)) {
+        attendanceStatus = existingRecord.attendanceStatus;
       }
-      const attendanceStatus = totalPunches > 0 ? 'Present' : 'Absent';
 
+      const info = empInfoMap.get(empKey) || {};
       items.push({
         empCode: emp.empCode,
-        employeeName: emp.name || rec?.employeeName || '',
-        department: emp.department || '',
-        designation: emp.designation || '',
+        employeeName: emp.name || info.name || '',
+        department: emp.department || info.department || '',
+        designation: emp.designation || info.designation || '',
         shift,
         checkIn,
         checkOut,
         totalPunches,
         attendanceStatus,
+        reason: existingRecord?.reason ?? '',
+        leaveType: existingRecord?.leaveType ?? null,
       });
     }
 
-    const presentItems = items.filter((item) => item.totalPunches > 0);
-    const bulkOps = presentItems.map((item) => ({
-      updateOne: {
-        filter: { date, empCode: item.empCode, shift: item.shift },
-        update: {
-          $set: {
-            date,
-            empCode: item.empCode,
-            employeeName: item.employeeName,
-            department: item.department || '',
-            designation: item.designation || '',
-            shift: item.shift,
-            checkIn: item.checkIn,
-            checkOut: item.checkOut || null,
-            totalPunches: item.totalPunches,
-            updatedAt: new Date(),
-          },
+    const presentItems = items.filter((item) => item.totalPunches > 0 || MANUAL_OR_LEAVE_STATUSES.has(item.attendanceStatus));
+
+    const bulkOps = presentItems.map((item) => {
+      const existing = existingByEmpCode.get(toEmpCodeKey(item.empCode));
+      const preserveManual = existing && MANUAL_OR_LEAVE_STATUSES.has(existing.attendanceStatus);
+
+      const update = {
+        date,
+        empCode: item.empCode,
+        employeeName: item.employeeName,
+        department: item.department || '',
+        designation: item.designation || '',
+        shift: item.shift,
+        checkIn: item.checkIn,
+        checkOut: item.checkOut || null,
+        totalPunches: item.totalPunches,
+        updatedAt: new Date(),
+      };
+
+      if (preserveManual) {
+        update.attendanceStatus = existing.attendanceStatus;
+        if (existing.reason != null) update.reason = existing.reason;
+        if (existing.leaveType != null) update.leaveType = existing.leaveType;
+      } else {
+        update.attendanceStatus = item.attendanceStatus;
+      }
+
+      return {
+        updateOne: {
+          filter: { date, empCode: item.empCode, shift: item.shift },
+          update: { $set: update },
+          upsert: true,
         },
-        upsert: true,
-      },
-    }));
+      };
+    });
 
     if (bulkOps.length > 0) {
       const session = await mongoose.startSession();

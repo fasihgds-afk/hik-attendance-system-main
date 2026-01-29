@@ -75,3 +75,16 @@ export function isValidCheckOutForShift(checkOut, checkIn, businessDate, nextDat
 
   return true;
 }
+
+/**
+ * Ensure check-in is always earlier than check-out when both exist.
+ * Returns validated checkOut (null if invalid or single-punch).
+ *
+ * @param {Date|null} checkIn
+ * @param {Date|null} checkOut
+ * @returns {Date|null} - checkOut if valid (checkOut > checkIn), else null
+ */
+export function ensureCheckInBeforeCheckOut(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return checkOut || null;
+  return checkOut > checkIn ? checkOut : null;
+}
