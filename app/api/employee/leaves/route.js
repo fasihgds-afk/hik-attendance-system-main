@@ -2,7 +2,7 @@
 // Quarter-based paid leave; limit per quarter from LeavePolicy (configurable from HR frontend)
 import { connectDB } from '../../../../lib/db';
 import LeaveRecord from '../../../../models/LeaveRecord';
-import { getQuarterFromDate, getQuarterRange, getCurrentQuarter } from '../../../../lib/leave/quarterUtils';
+import { getQuarterFromDate, getQuarterRange, getCurrentQuarter, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -35,21 +35,34 @@ export async function GET(req) {
     const leaveRecords = await LeaveRecord.find({
       empCode,
       date: { $gte: yearStart, $lte: yearEnd },
-      leaveType: 'paid',
+      leaveType: { $in: ['paid', 'casual', 'annual'] },
     })
-      .select('date reason')
+      .select('date reason leaveType')
       .sort({ date: -1 })
       .lean()
       .maxTimeMS(2000);
 
+    function toDateStr(d) {
+      if (!d) return '';
+      if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+      if (d instanceof Date && !Number.isNaN(d.getTime())) {
+        const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+      return String(d).slice(0, 10);
+    }
+
     const countByQuarter = { 1: 0, 2: 0, 3: 0, 4: 0 };
     leaveRecords.forEach((lr) => {
-      const { quarter } = getQuarterFromDate(lr.date);
+      const dateStr = toDateStr(lr.date);
+      if (!dateStr) return;
+      const { quarter } = getQuarterFromDate(dateStr);
       if (countByQuarter[quarter] !== undefined) countByQuarter[quarter] += 1;
     });
 
     const quarters = [1, 2, 3, 4].map((q) => ({
       quarter: q,
+      label: getQuarterLabel(year, q),
       allocated: leavesPerQuarter,
       taken: countByQuarter[q] || 0,
       remaining: Math.max(0, leavesPerQuarter - (countByQuarter[q] || 0)),
@@ -63,6 +76,7 @@ export async function GET(req) {
       currentQuarter: currentQuarterData
         ? {
             quarter: currentQuarter,
+            label: currentQuarterData.label,
             year: currentYear,
             taken: currentQuarterData.taken,
             remaining: currentQuarterData.remaining,

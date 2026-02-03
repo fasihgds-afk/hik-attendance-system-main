@@ -2060,30 +2060,72 @@ export default function EmployeeDashboardPage() {
                     
                   />
                   
-                  {/* Quarter-based paid leave: 6 per quarter, no carry-forward */}
-                  {leaveBalance && (
+                  {/* Quarter leaves: taken and left for current quarter + full year */}
+                  {leaveBalance && leaveBalance.summary && (
                     <>
-                      {leaveBalance.summary?.currentQuarter ? (
-                        <SummaryItem
-                          label="Paid leave this quarter"
-                          value={leaveBalance.summary.currentQuarter.remaining ?? 6}
-                          color="#a3e635"
-                          hint={`Q${leaveBalance.summary.currentQuarter.quarter}: ${leaveBalance.summary.currentQuarter.taken ?? 0} / ${leaveBalance.summary.currentQuarter.allocated ?? 6} taken (no carry-forward)`}
-                        />
+                      {leaveBalance.summary.currentQuarter ? (
+                        <>
+                          <SummaryItem
+                            label="Paid leave taken (this quarter)"
+                            value={leaveBalance.summary.currentQuarter.taken ?? 0}
+                            color="#a3e635"
+                            hint={leaveBalance.summary.currentQuarter.label ?? "Current quarter"}
+                          />
+                          <SummaryItem
+                            label="Paid leave left (this quarter)"
+                            value={leaveBalance.summary.currentQuarter.remaining ?? leaveBalance.summary.leavesPerQuarter ?? 6}
+                            color="#22c55e"
+                            hint={`${leaveBalance.summary.currentQuarter.remaining ?? 0} of ${leaveBalance.summary.currentQuarter.allocated ?? 6} · no carry-forward`}
+                          />
+                        </>
                       ) : leaveBalance.summary?.quarters?.length > 0 ? (
-                        <SummaryItem
-                          label="Paid leave (quarter)"
-                          value={leaveBalance.summary.quarters.find((q) => q.quarter === Math.ceil((new Date().getMonth() + 1) / 3))?.remaining ?? 6}
-                          color="#a3e635"
-                          hint="6 per quarter · unused leaves do not carry forward"
-                        />
+                        <>
+                          <SummaryItem
+                            label="Paid leave taken (this quarter)"
+                            value={leaveBalance.summary.quarters.find((q) => q.quarter === Math.ceil((new Date().getMonth() + 1) / 3))?.taken ?? 0}
+                            color="#a3e635"
+                            hint="Current quarter"
+                          />
+                          <SummaryItem
+                            label="Paid leave left (this quarter)"
+                            value={leaveBalance.summary.quarters.find((q) => q.quarter === Math.ceil((new Date().getMonth() + 1) / 3))?.remaining ?? leaveBalance.summary.leavesPerQuarter ?? 6}
+                            color="#22c55e"
+                            hint="Per quarter · no carry-forward"
+                          />
+                        </>
                       ) : (
                         <SummaryItem
                           label="Paid leave this quarter"
-                          value={6}
+                          value={leaveBalance.summary.leavesPerQuarter ?? 6}
                           color="#a3e635"
-                          hint="6 per quarter (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec)"
+                          hint="Q1–Q4 (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec)"
                         />
+                      )}
+                      {/* Quarter summary for the year: taken / allocated per quarter */}
+                      {leaveBalance.summary.quarters?.length === 4 && (
+                        <div
+                          style={{
+                            gridColumn: "1 / -1",
+                            marginTop: 8,
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            background: "rgba(34, 197, 94, 0.08)",
+                            border: "1px solid rgba(34, 197, 94, 0.2)",
+                            fontSize: 12,
+                            color: colors.text?.secondary ?? "#6b7280",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, marginBottom: 6, color: colors.text?.primary ?? "#111827" }}>
+                            Quarter leaves ({leaveBalance.year ?? new Date().getFullYear()})
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 16px" }}>
+                            {leaveBalance.summary.quarters.map((q) => (
+                              <span key={q.quarter}>
+                                <strong>{q.label ?? `Q${q.quarter}`}</strong>: {q.taken ?? 0} taken, {q.remaining ?? 0} left (of {q.allocated ?? 6})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </>
                   )}
