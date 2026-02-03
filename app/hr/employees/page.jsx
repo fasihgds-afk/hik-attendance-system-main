@@ -230,6 +230,10 @@ export default function HrDashboardPage() {
     router.push("/hr/violation-rules");
   }
 
+  function openComplaints() {
+    router.push("/hr/complaints");
+  }
+
   function openRegisterModal() {
     setShowRegisterModal(true);
   }
@@ -1292,7 +1296,7 @@ export default function HrDashboardPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
+                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
                 gap: 16,
               }}
             >
@@ -1740,6 +1744,108 @@ export default function HrDashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   View All Leaves
+                </button>
+              </div>
+
+              {/* COMPLAINTS CARD */}
+              <div
+                style={{
+                  borderRadius: 14,
+                  padding: "18px",
+                  background: colors.gradient.card,
+                  border: `1px solid rgba(139, 92, 246, 0.3)`,
+                  boxShadow: theme === 'dark' 
+                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+                  transition: "all 0.3s",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.5)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.3)";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 10,
+                      background: "linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1))",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      border: "1px solid rgba(139, 92, 246, 0.3)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width="20" height="20" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Complaints</h3>
+                    <p
+                      style={{
+                        fontSize: 10,
+                        color: colors.text.muted,
+                        margin: 0,
+                      }}
+                    >
+                      Employee feedback
+                    </p>
+                  </div>
+                </div>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: colors.text.muted,
+                    marginBottom: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  View and respond to employee complaints. Update status, add HR response, and manage internal notes.
+                </p>
+                <button
+                  type="button"
+                  onClick={openComplaints}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+                    color: "#ffffff",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    boxShadow: "0 4px 12px rgba(139, 92, 246, 0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    width: "100%",
+                    justifyContent: "center",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(139, 92, 246, 0.4)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(139, 92, 246, 0.3)";
+                  }}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Open Complaints
                 </button>
               </div>
             </div>

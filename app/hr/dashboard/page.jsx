@@ -962,6 +962,36 @@ export default function HrDashboardPage() {
             </button>
 
             <button
+              onClick={() => router.push('/hr/complaints')}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 12,
+                border: 'none',
+                background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 6px 20px rgba(139, 92, 246, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.4)';
+              }}
+            >
+              📋 Complaints
+            </button>
+
+            <button
               onClick={handleLoadAndSave}
               disabled={loading}
               style={{
