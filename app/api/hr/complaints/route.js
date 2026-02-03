@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
 const VALID_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
 const VALID_CATEGORIES = ['salary_increment', 'leave', 'attendance', 'work_environment', 'hr_policy', 'other'];
 
-// GET /api/hr/complaints?status=open&category=salary_increment&search=...
+// GET /api/hr/complaints?status=...&search=...&period=all|week|month
+// period: all = all time, week = last 7 days, month = last 30 days. Results sorted latest first.
 export async function GET(req) {
   try {
     await connectDB();
@@ -19,6 +20,7 @@ export async function GET(req) {
     const status = (searchParams.get('status') || '').trim();
     const category = (searchParams.get('category') || '').trim();
     const search = (searchParams.get('search') || '').trim();
+    const period = (searchParams.get('period') || 'all').toLowerCase();
 
     const filter = {};
     if (status && VALID_STATUSES.includes(status)) filter.status = status;
@@ -31,6 +33,13 @@ export async function GET(req) {
         { designation: new RegExp(search, 'i') },
         { subject: new RegExp(search, 'i') },
       ];
+    }
+
+    if (period === 'week' || period === 'month') {
+      const since = new Date();
+      if (period === 'week') since.setDate(since.getDate() - 7);
+      else if (period === 'month') since.setDate(since.getDate() - 30);
+      filter.createdAt = { $gte: since };
     }
 
     const list = await Complaint.find(filter)

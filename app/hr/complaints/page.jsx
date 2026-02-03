@@ -36,6 +36,7 @@ export default function HrComplaintsPage() {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterPeriod, setFilterPeriod] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewId, setViewId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -55,11 +56,12 @@ export default function HrComplaintsPage() {
     setTimeout(() => setToast((prev) => (prev.text === text ? { type: '', text: '' } : prev)), 3000);
   }
 
-  async function loadComplaints() {
-    setLoading(true);
+  async function loadComplaints(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filterStatus) params.set('status', filterStatus);
+      if (filterPeriod && filterPeriod !== 'all') params.set('period', filterPeriod);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
       const res = await fetch(`/api/hr/complaints?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json();
@@ -69,15 +71,31 @@ export default function HrComplaintsPage() {
         showToast('error', data.error || 'Failed to load complaints');
       }
     } catch (err) {
-      showToast('error', 'Failed to load complaints');
+      if (!silent) showToast('error', 'Failed to load complaints');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     if (session?.user?.role === 'HR') loadComplaints();
-  }, [session?.user?.role, filterStatus, searchQuery]);
+  }, [session?.user?.role, filterStatus, filterPeriod, searchQuery]);
+
+  useEffect(() => {
+    if (session?.user?.role !== 'HR') return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadComplaints(true);
+    }, 45000);
+    return () => clearInterval(interval);
+  }, [session?.user?.role, filterStatus, filterPeriod, searchQuery]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && session?.user?.role === 'HR') loadComplaints(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [session?.user?.role, filterStatus, filterPeriod, searchQuery]);
 
   useEffect(() => {
     const id = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('id');
@@ -218,6 +236,15 @@ export default function HrComplaintsPage() {
             {Object.entries(STATUS_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}
+          </select>
+          <select
+            value={filterPeriod}
+            onChange={(e) => setFilterPeriod(e.target.value)}
+            style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, fontWeight: 500, minWidth: 180 }}
+          >
+            <option value="all">All time</option>
+            <option value="week">Last 7 days (Weekly)</option>
+            <option value="month">Last 30 days (Monthly)</option>
           </select>
           <input
             type="text"
