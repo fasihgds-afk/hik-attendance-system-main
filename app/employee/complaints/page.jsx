@@ -44,11 +44,12 @@ export default function EmployeeComplaintsPage() {
   const [form, setForm] = useState({ subject: '', description: '' });
 
   useEffect(() => {
-    if (session?.user?.role !== 'EMPLOYEE') {
+    if (status === 'loading') return;
+    if (status === 'unauthenticated' || (session && session.user?.role !== 'EMPLOYEE')) {
       router.replace('/login?role=employee');
       return;
     }
-  }, [session, router]);
+  }, [session, status, router]);
 
   function showToast(type, text) {
     setToast({ type, text });
@@ -155,7 +156,7 @@ export default function EmployeeComplaintsPage() {
   const warningColor = colors.warning ?? (typeof colors.accent === 'object' ? colors.accent?.yellow : undefined) ?? '#fbbf24';
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px', maxWidth: 1200, margin: '0 auto', background: bgPage, color: textPrimary }}>
+    <div style={{ minHeight: '100vh', padding: '24px', maxWidth: '100%', margin: 0, background: bgPage, color: textPrimary }}>
       {/* Header – professional bar */}
       <header
         style={{

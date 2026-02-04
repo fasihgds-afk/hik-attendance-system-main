@@ -668,7 +668,7 @@ export default function HrDashboardPage() {
           /* Laptop & Desktop Responsive Styles */
           @media (min-width: 1024px) and (max-width: 1366px) {
             .container-responsive {
-              max-width: 98% !important;
+              max-width: 100% !important;
               width: 100% !important;
             }
             .daily-page-container {
@@ -731,7 +731,7 @@ export default function HrDashboardPage() {
           
           @media (min-width: 1367px) and (max-width: 1440px) {
             .container-responsive {
-              max-width: 98% !important;
+              max-width: 100% !important;
               width: 100% !important;
             }
             .daily-page-container {
@@ -752,7 +752,7 @@ export default function HrDashboardPage() {
           
           @media (min-width: 1441px) and (max-width: 1920px) {
             .container-responsive {
-              max-width: 95% !important;
+              max-width: 100% !important;
               width: 100% !important;
             }
             .daily-page-container {
@@ -772,7 +772,7 @@ export default function HrDashboardPage() {
           
           @media (min-width: 1921px) {
             .container-responsive {
-              max-width: 95% !important;
+              max-width: 100% !important;
               width: 100% !important;
             }
             .daily-page-container {

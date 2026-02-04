@@ -646,8 +646,8 @@ export default function EmployeeShiftPage() {
         className="container-responsive"
         style={{
           width: '100%',
-          maxWidth: 1400,
-          margin: '0 auto',
+          maxWidth: '100%',
+          margin: 0,
         }}
       >
         {/* Top bar with logo */}

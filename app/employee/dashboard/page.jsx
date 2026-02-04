@@ -1413,10 +1413,10 @@ export default function EmployeeDashboardPage() {
         }
         
         /* Laptop & Desktop Responsive Styles */
-        /* Desktop: equal left/right spacing via centered container with % width */
+        /* Desktop: full width with padding - no empty side strips */
         @media (min-width: 1024px) {
           .employee-dashboard-inner {
-            max-width: 98% !important;
+            max-width: 100% !important;
             width: 100% !important;
             margin-left: auto !important;
             margin-right: auto !important;
@@ -1424,7 +1424,7 @@ export default function EmployeeDashboardPage() {
         }
         @media (min-width: 1441px) {
           .employee-dashboard-inner {
-            max-width: 95% !important;
+            max-width: 100% !important;
           }
         }
         @media (min-width: 1024px) and (max-width: 1366px) {

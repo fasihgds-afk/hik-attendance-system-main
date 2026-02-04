@@ -45,11 +45,12 @@ export default function HrComplaintsPage() {
   const [toast, setToast] = useState({ type: '', text: '' });
 
   useEffect(() => {
-    if (session?.user?.role !== 'HR') {
+    if (status === 'loading') return;
+    if (status === 'unauthenticated' || (session && session.user?.role !== 'HR')) {
       router.replace('/login?role=hr');
       return;
     }
-  }, [session, router]);
+  }, [session, status, router]);
 
   function showToast(type, text) {
     setToast({ type, text });
@@ -184,7 +185,7 @@ export default function HrComplaintsPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px', maxWidth: 1400, margin: '0 auto', background: bgPage, color: textPrimary }}>
+    <div style={{ minHeight: '100vh', padding: '24px', maxWidth: '100%', margin: 0, background: bgPage, color: textPrimary }}>
       {/* Header – professional bar */}
       <header
         style={{

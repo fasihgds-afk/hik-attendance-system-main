@@ -589,8 +589,8 @@ export default function ShiftManagementPage() {
       {/* Main Card */}
       <div
         style={{
-          maxWidth: 1400,
-          margin: '0 auto',
+          maxWidth: '100%',
+          margin: 0,
           borderRadius: 16,
           background: colors.background.card,
           boxShadow: theme === 'dark' 

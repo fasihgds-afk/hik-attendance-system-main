@@ -144,10 +144,10 @@ body {
     padding: 20px 16px !important;
   }
   
-  /* Adjust container max-widths - use more of the screen */
+  /* Full width on desktop - use padding for side spacing */
   .container-responsive,
   .employee-dashboard-inner {
-    max-width: 98% !important;
+    max-width: 100% !important;
     width: 100% !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -206,7 +206,7 @@ body {
 @media (min-width: 1367px) and (max-width: 1440px) {
   .container-responsive,
   .employee-dashboard-inner {
-    max-width: 98% !important;
+    max-width: 100% !important;
     width: 100% !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -237,7 +237,7 @@ body {
 @media (min-width: 1441px) and (max-width: 1920px) {
   .container-responsive,
   .employee-dashboard-inner {
-    max-width: 95% !important;
+    max-width: 100% !important;
     width: 100% !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -260,7 +260,7 @@ body {
 @media (min-width: 1921px) {
   .container-responsive,
   .employee-dashboard-inner {
-    max-width: 95% !important;
+    max-width: 100% !important;
     width: 100% !important;
     margin-left: auto !important;
     margin-right: auto !important;
