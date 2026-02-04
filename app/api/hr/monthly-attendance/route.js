@@ -43,8 +43,7 @@ import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quart
 import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturdayIndexInMonth } from '../../../../lib/calculations';
 import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
-// Cache removed for simplicity and real-time data
-// EmployeeShiftHistory removed - using only employee's current shift assignment
+import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -515,7 +514,16 @@ export async function GET(req) {
       });
     }
 
-    // Shift history removed - using only employee's current shift assignment
+    const shiftById = new Map();
+    allShiftsMap.forEach((s) => {
+      if (s && s._id && s.code) shiftById.set(s._id.toString(), s.code);
+    });
+    const shiftForDateMap = await getShiftsForEmployeesInDateRange(
+      empCodes,
+      monthStartDate,
+      monthEndDate,
+      { employees, shiftById }
+    );
 
     // PERFORMANCE: Pre-calculate weekend flags for all days to avoid repeated calculations
     const weekendFlags = new Map();
@@ -591,46 +599,40 @@ export async function GET(req) {
           if (isSaturdayOffForEmployee(saturdayIndex, emp, departmentPolicyMap, emp.department || '')) isWeekendOff = true;
         }
 
-        // Get shift for this date - use employee's current shift assignment (simplified, no history)
+        // Get shift for this date - use shift effective on this date (history-first)
+        const shiftForDate = shiftForDateMap.get(`${emp.empCode}|${date}`);
         let shiftObj = shiftCache.get(date);
         let shiftCode = '';
-        
+
         if (useDynamicShifts) {
+          if (shiftForDate) {
+            shiftCode = shiftForDate;
+            shiftObj = allShiftsMap.get(shiftForDate) || null;
+            if (shiftObj) shiftCache.set(date, shiftObj);
+          }
           if (!shiftObj) {
-            // Use employee's current shift object (pre-fetched, no DB query)
             if (employeeShiftObj) {
               shiftObj = employeeShiftObj;
-              shiftCode = employeeShiftObj.code;
+              shiftCode = shiftCode || employeeShiftObj.code;
               shiftCache.set(date, shiftObj);
             } else if (doc?.shift) {
-              // Fallback: Use shift from attendance record
               const normalizedShiftCode = extractShiftCode(doc.shift);
               shiftObj = allShiftsMap.get(normalizedShiftCode);
-              if (shiftObj) {
-                shiftCode = shiftObj.code;
-                shiftCache.set(date, shiftObj);
-              } else {
-                shiftCode = normalizedShiftCode;
-              }
+              shiftCode = shiftCode || (shiftObj ? shiftObj.code : normalizedShiftCode);
+              if (shiftObj) shiftCache.set(date, shiftObj);
             } else if (emp.shift) {
-              // Last fallback: Extract shift code from employee's shift field
               const extractedCode = extractShiftCode(emp.shift);
               shiftObj = allShiftsMap.get(extractedCode);
-              if (shiftObj) {
-                shiftCode = shiftObj.code;
-                shiftCache.set(date, shiftObj);
-              } else {
-                shiftCode = extractedCode;
-              }
+              shiftCode = shiftCode || (shiftObj ? shiftObj.code : extractedCode);
+              if (shiftObj) shiftCache.set(date, shiftObj);
             } else {
-              shiftCode = empShift || '';
+              shiftCode = shiftCode || empShift || '';
             }
-          } else {
+          } else if (!shiftCode) {
             shiftCode = shiftObj.code;
           }
         } else {
-          // No dynamic shifts in DB, use shift from attendance record or employee's current shift
-          shiftCode = doc?.shift || empShift || '';
+          shiftCode = shiftForDate || doc?.shift || empShift || '';
         }
 
         if (isFutureDay) {
@@ -1341,31 +1343,29 @@ export async function POST(req) {
       throw new NotFoundError(`Employee ${empCode}`);
     }
 
-    // Get shift for this date - use employee's current shift (no history)
+    const shiftById = new Map();
+    allShifts.forEach((s) => {
+      if (s && s._id && s.code) shiftById.set(s._id.toString(), s.code);
+    });
+    const shiftForDateMap = await getShiftsForEmployeesOnDate([empCode], date, {
+      employees: [emp],
+      shiftById,
+    });
+    const shiftCodeFromHistory = shiftForDateMap.get(empCode);
+
     let shiftObj = null;
-    let shiftCode = '';
-    
-    // Use employee's shiftId or shift code (allShiftsMap already loaded above)
-    if (emp.shiftId) {
+    let shiftCode = shiftCodeFromHistory || '';
+    if (shiftCode) shiftObj = allShiftsMap.get(shiftCode);
+    if (!shiftObj && emp.shiftId) {
       shiftObj = allShiftsMap.get(emp.shiftId.toString());
-      if (shiftObj) {
-        shiftCode = shiftObj.code;
-      }
+      if (shiftObj) shiftCode = shiftObj.code;
     }
-    
     if (!shiftObj && emp.shift) {
       const extractedCode = extractShiftCode(emp.shift);
       shiftObj = allShiftsMap.get(extractedCode);
-      if (shiftObj) {
-        shiftCode = shiftObj.code;
-      } else {
-        shiftCode = extractedCode;
-      }
+      shiftCode = shiftCode || (shiftObj ? shiftObj.code : extractedCode);
     }
-    
-    if (!shiftCode) {
-      shiftCode = emp.shift || '';
-    }
+    if (!shiftCode) shiftCode = emp.shift || '';
 
     let checkIn = null;
     let checkOut = null;

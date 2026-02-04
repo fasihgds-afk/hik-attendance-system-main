@@ -18,12 +18,14 @@ export default function EmployeeForm({
   onCancel,
   loading = false,
 }) {
+  const todayStr = () => new Date().toISOString().slice(0, 10);
   const [formData, setFormData] = useState({
     empCode: employee?.empCode || '',
     name: employee?.name || '',
     email: employee?.email || '',
     monthlySalary: employee?.monthlySalary || '',
     shift: employee?.shift || employee?.shiftId || '',
+    effectiveFromDate: employee ? todayStr() : '',
     department: employee?.department || '',
     designation: employee?.designation || '',
     phoneNumber: employee?.phoneNumber || '',
@@ -88,6 +90,7 @@ export default function EmployeeForm({
         email: employee.email || '',
         monthlySalary: employee.monthlySalary || '',
         shift: employee.shift || employee.shiftId || '',
+        effectiveFromDate: todayStr(),
         department: employee.department || '',
         designation: employee.designation || '',
         phoneNumber: employee.phoneNumber || '',
@@ -104,6 +107,7 @@ export default function EmployeeForm({
         email: '',
         monthlySalary: '',
         shift: '',
+        effectiveFromDate: '',
         department: '',
         designation: '',
         phoneNumber: '',
@@ -371,6 +375,21 @@ export default function EmployeeForm({
                 ))}
               </select>
             </div>
+
+            {isEditMode && formData.shift && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Effective from (shift applies from this date)</label>
+                <input
+                  type="date"
+                  value={formData.effectiveFromDate || todayStr()}
+                  onChange={(e) => handleChange('effectiveFromDate', e.target.value)}
+                  style={inputStyle}
+                />
+                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, margin: 0 }}>
+                  Past dates keep previous shift; from this date onward the new shift is used for attendance.
+                </p>
+              </div>
+            )}
 
             <div>
               <label style={labelStyle}>Monthly Salary</label>

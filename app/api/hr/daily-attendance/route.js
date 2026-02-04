@@ -14,6 +14,7 @@ import Shift from '../../../../models/Shift';
 import { getNextDateStr, classifyByTime } from './attendance/time-utils.js';
 import { getFirstAndLastPunchPerEmployee } from './attendance/punch-helpers.js';
 import { ensureCheckInBeforeCheckOut } from './attendance/validation.js';
+import { getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -102,13 +103,17 @@ export async function POST(req) {
       }
     }
 
+    const empCodesForDate = allEmployees.map((e) => toEmpCodeKey(e.empCode)).filter(Boolean);
+    const shiftForDateMap = await getShiftsForEmployeesOnDate(empCodesForDate, date, {
+      employees: allEmployees,
+      shiftById,
+    });
+
     const empInfoMap = new Map();
     for (const emp of allEmployees) {
       const empKey = toEmpCodeKey(emp.empCode);
       if (!empKey) continue;
-      const employeeShift =
-        extractShiftCode(emp.shift, shiftById) ||
-        extractShiftCode(emp.shiftId != null ? String(emp.shiftId) : '', shiftById);
+      const employeeShift = shiftForDateMap.get(empKey) ?? '';
       empInfoMap.set(empKey, {
         name: emp.name || '',
         shift: employeeShift,
@@ -156,9 +161,7 @@ export async function POST(req) {
 
       checkOut = ensureCheckInBeforeCheckOut(checkIn, checkOut);
 
-      const empShiftRaw = emp.shift || (emp.shiftId != null ? String(emp.shiftId) : '');
-      let assignedShift = extractShiftCode(empShiftRaw, shiftById);
-      if (!assignedShift) assignedShift = extractShiftCode(empInfoMap.get(empKey)?.shift, shiftById);
+      const assignedShift = shiftForDateMap.get(empKey) || empInfoMap.get(empKey)?.shift || '';
       let shift = assignedShift || 'Unknown';
 
       let attendanceStatus = totalPunches > 0 ? 'Present' : 'Absent';

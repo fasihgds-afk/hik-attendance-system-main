@@ -130,16 +130,17 @@ export async function POST(req) {
       );
     }
 
-    // End the previous shift assignment if it exists
+    // End the previous shift assignment: set endDate to day before effectiveDate
+    const prevEnd = new Date(effectiveDate);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevEndStr = prevEnd.toISOString().slice(0, 10);
     await EmployeeShiftHistory.updateMany(
       {
         empCode,
-        endDate: null, // Only update active assignments
+        endDate: null,
       },
       {
-        $set: {
-          endDate: effectiveDate, // Set end date to the day before new shift starts
-        },
+        $set: { endDate: prevEndStr },
       }
     );
 
