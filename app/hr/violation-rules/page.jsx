@@ -36,7 +36,7 @@ export default function ViolationRulesPage() {
       paidLeaveDays: 0.0,
     },
     salaryConfig: {
-      daysPerMonth: 30,
+      daysPerMonth: 25,
     },
     description: '',
   });
@@ -867,7 +867,7 @@ export default function ViolationRulesPage() {
                       display: 'block',
                     }}
                   >
-                    Default Days Per Month
+                    Working Days Per Month (fallback)
                   </label>
                   <input
                     type="number"
@@ -887,7 +887,7 @@ export default function ViolationRulesPage() {
                     }}
                   />
                   <p style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
-                    Default value (30 days). System uses actual month days (28-31) automatically.
+                    Auto-calculated: 31-day month = 25, 30-day = 24, 29-day = 23, 28-day = 22 working days.
                   </p>
                 </div>
               </div>

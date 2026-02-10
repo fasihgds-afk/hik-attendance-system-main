@@ -444,7 +444,7 @@ export async function GET(req) {
           paidLeaveDays: 0.0,
         },
         salaryConfig: {
-          daysPerMonth: 30,
+          daysPerMonth: 25,
         },
       };
     }
@@ -1169,13 +1169,13 @@ export async function GET(req) {
 
 
       const grossSalary = emp.monthlySalary || 0;
-      // Use actual days in the month for salary calculation (more accurate than fixed 30 days)
-      // This handles months with 28, 29, 30, or 31 days correctly
-      const actualDaysInMonth = daysInMonth; // Already calculated from the month
+      // Working days = total calendar days - 6 (Sundays + alternate Saturdays)
+      // 31-day month → 25 working days, 30-day month → 24, 28-day month → 22, 29-day month → 23
+      const workingDaysInMonth = daysInMonth - 6;
       const salaryCalc = calculateSalaryAmounts(
         grossSalary, 
         salaryDeductDays, 
-        { daysPerMonth: actualDaysInMonth } // Use actual month days instead of rule's default
+        { daysPerMonth: workingDaysInMonth } // Per-day salary based on working days
       );
       const perDaySalary = salaryCalc.perDaySalary;
       const salaryDeductAmount = salaryCalc.deductionAmount;
