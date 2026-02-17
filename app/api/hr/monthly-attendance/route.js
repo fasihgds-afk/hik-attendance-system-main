@@ -480,10 +480,13 @@ export async function GET(req) {
       .lean()
       .maxTimeMS(4000); // Reduced timeout for faster response
 
-    const docsByEmpDate = new Map();
+    // Group ALL records by empCode|date (there may be multiple per day if shift changed)
+    const allDocsByEmpDate = new Map();
     for (const doc of shiftDocs) {
       if (!doc.empCode || !doc.date) continue;
-      docsByEmpDate.set(`${doc.empCode}|${doc.date}`, doc);
+      const key = `${doc.empCode}|${doc.date}`;
+      if (!allDocsByEmpDate.has(key)) allDocsByEmpDate.set(key, []);
+      allDocsByEmpDate.get(key).push(doc);
     }
 
     // Paid leave from HR Leaves (quarter-based): reflect on monthly sheet from LeaveRecord
@@ -524,6 +527,18 @@ export async function GET(req) {
       monthEndDate,
       { employees, shiftById }
     );
+
+    // Pick the correct record per (empCode, date): prefer the one matching effective shift for that date
+    const docsByEmpDate = new Map();
+    for (const [key, docs] of allDocsByEmpDate) {
+      if (docs.length === 1) {
+        docsByEmpDate.set(key, docs[0]);
+      } else {
+        const effectiveShift = shiftForDateMap.get(key) || '';
+        const match = docs.find((d) => d.shift && d.shift.toUpperCase() === effectiveShift.toUpperCase());
+        docsByEmpDate.set(key, match || docs[docs.length - 1]);
+      }
+    }
 
     // PERFORMANCE: Pre-calculate weekend flags for all days to avoid repeated calculations
     const weekendFlags = new Map();
