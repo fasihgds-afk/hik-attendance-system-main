@@ -134,15 +134,42 @@ export async function POST(req) {
     const prevEnd = new Date(effectiveDate);
     prevEnd.setDate(prevEnd.getDate() - 1);
     const prevEndStr = prevEnd.toISOString().slice(0, 10);
-    await EmployeeShiftHistory.updateMany(
-      {
-        empCode,
-        endDate: null,
-      },
-      {
-        $set: { endDate: prevEndStr },
+
+    // Check if employee has ANY history records at all
+    const existingHistory = await EmployeeShiftHistory.find({ empCode })
+      .sort({ effectiveDate: -1 })
+      .lean();
+
+    if (existingHistory.length === 0) {
+      // No history exists — create a record for the PREVIOUS shift so old dates are preserved
+      const prevShiftCode = employee.shift || '';
+      const prevShiftId = employee.shiftId || null;
+      if (prevShiftCode || prevShiftId) {
+        // Resolve the previous shift
+        let prevShift = prevShiftId ? await Shift.findById(prevShiftId).lean() : null;
+        if (!prevShift && prevShiftCode) {
+          prevShift = await Shift.findOne({ code: prevShiftCode, isActive: true }).lean();
+        }
+        if (prevShift) {
+          // Create history for old shift: from a far-back date to day before new shift
+          await EmployeeShiftHistory.create({
+            empCode,
+            shiftId: prevShift._id,
+            shiftCode: prevShift.code,
+            effectiveDate: '2020-01-01',
+            endDate: prevEndStr,
+            reason: 'Auto-created: previous shift before first change',
+            changedBy: changedBy || 'system',
+          });
+        }
       }
-    );
+    } else {
+      // Close any open (endDate=null) assignments
+      await EmployeeShiftHistory.updateMany(
+        { empCode, endDate: null },
+        { $set: { endDate: prevEndStr } }
+      );
+    }
 
     // Create new shift assignment
     const history = await EmployeeShiftHistory.create({
