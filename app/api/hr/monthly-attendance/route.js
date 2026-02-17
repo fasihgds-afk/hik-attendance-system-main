@@ -1479,7 +1479,8 @@ export async function POST(req) {
     };
 
     // Check current status in database to detect changes (read before transaction)
-    const existingRecord = await ShiftAttendance.findOne({ empCode, date })
+    // Include shift in filter to match the correct record (unique index: empCode, date, shift)
+    const existingRecord = await ShiftAttendance.findOne({ empCode, date, shift: shiftCode })
       .select('attendanceStatus leaveType')
       .lean()
       .maxTimeMS(2000);
@@ -1551,9 +1552,9 @@ export async function POST(req) {
           }
         }
 
-        // ShiftAttendance update (same upsert, with session)
+        // ShiftAttendance update – include shift in filter to match unique index (empCode, date, shift)
         await ShiftAttendance.findOneAndUpdate(
-          { date, empCode },
+          { date, empCode, shift: shiftCode },
           { $set: update },
           { upsert: true, runValidators: true, session }
         ).maxTimeMS(3000);
