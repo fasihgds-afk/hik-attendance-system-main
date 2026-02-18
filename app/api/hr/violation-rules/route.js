@@ -54,10 +54,7 @@ export async function GET(req) {
       });
     }
 
-    // OPTIMIZATION: Add cache headers for static violation rules
-    const response = NextResponse.json({ rules: activeRules });
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    return response;
+    return NextResponse.json({ rules: activeRules });
   } catch (err) {
     console.error('GET /api/hr/violation-rules error:', err);
     return NextResponse.json(

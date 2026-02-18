@@ -27,13 +27,10 @@ export async function GET(req) {
       .lean()
       .maxTimeMS(1500); // Reduced timeout for faster response
 
-    // Shifts are static data - can be cached briefly (30 seconds) for Vercel edge caching
     return successResponse(
       { shifts },
       'Shifts retrieved successfully',
-      HTTP_STATUS.OK,
-      null,
-      { isStatic: true, maxAge: 30 } // 30 seconds cache for Vercel edge
+      HTTP_STATUS.OK
     );
   } catch (err) {
     return errorResponseFromException(err, req);

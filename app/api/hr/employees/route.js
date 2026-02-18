@@ -75,9 +75,6 @@ export async function GET(req) {
       meta
     );
 
-    // Override cache control for this endpoint (60s revalidation)
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    
     return response;
   } catch (err) {
     const responseTime = Date.now() - startTime;

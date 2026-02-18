@@ -65,7 +65,7 @@ export default function ShiftManagementPage() {
   async function loadShifts() {
     try {
       setLoading(true);
-      const res = await fetch('/api/hr/shifts?activeOnly=false');
+      const res = await fetch('/api/hr/shifts?activeOnly=false', { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to load shifts');
       const response = await res.json();
       

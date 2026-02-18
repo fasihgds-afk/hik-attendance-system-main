@@ -27,10 +27,7 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
     }
 
-    // OPTIMIZATION: Add cache headers for static shift data
-    const response = NextResponse.json({ shift });
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    return response;
+    return NextResponse.json({ shift });
   } catch (err) {
     console.error('GET /api/hr/shifts/[id] error:', err);
     return NextResponse.json(
@@ -116,10 +113,7 @@ export async function PUT(req, { params }) {
 
     // If nothing changed, return the existing shift as-is
     if (Object.keys(update).length === 0) {
-      const shift = existing;
-      const response = NextResponse.json({ shift });
-      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-      return response;
+      return NextResponse.json({ shift: existing });
     }
 
     const shift = await Shift.findByIdAndUpdate(
@@ -135,10 +129,7 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
     }
 
-    // OPTIMIZATION: Add cache headers for static shift data
-    const response = NextResponse.json({ shift });
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    return response;
+    return NextResponse.json({ shift });
   } catch (err) {
     console.error('PUT /api/hr/shifts/[id] error:', err);
     if (err.name === 'CastError' || err.message?.includes('Cast to ObjectId')) {
