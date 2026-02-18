@@ -267,6 +267,41 @@ export default function EmployeeShiftPage() {
         ? String(currentEmployee.shift).trim().toUpperCase() 
         : '';
 
+      // Capture the ORIGINAL shift from emp (before user edit in table) — this is the true previous shift
+      const prevShiftCode = String(emp.shift || '').trim().toUpperCase();
+      const prevShiftId = String(emp.shiftId || emp._shiftId || '').trim();
+
+      // IMPORTANT: Record shift history BEFORE saving employee so the old shift is still in DB
+      if (normalizedShift && normalizedShift !== prevShiftCode) {
+        const shiftObj = shifts.find((s) => (s.code || '').toUpperCase() === normalizedShift);
+        if (shiftObj?._id) {
+          try {
+            const today = new Date().toISOString().slice(0, 10);
+            const shiftRes = await fetch('/api/hr/employee-shifts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                empCode: emp.empCode,
+                shiftId: shiftObj._id.toString(),
+                effectiveDate: today,
+                reason: 'Changed from table',
+                changedBy: 'HR',
+                previousShiftCode: prevShiftCode,
+                previousShiftId: /^[0-9a-fA-F]{24}$/.test(prevShiftId) ? prevShiftId : undefined,
+              }),
+            });
+            if (!shiftRes.ok) {
+              const errData = await shiftRes.json().catch(() => ({}));
+              showToast('warning', errData.error || 'Shift history not updated.');
+            }
+          } catch (e) {
+            console.error('Shift history update:', e);
+            showToast('warning', 'Shift history not updated.');
+          }
+        }
+      }
+
+      // Now save the employee (shift history is already recorded with the old shift info)
       const res = await fetch('/api/employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -291,36 +326,6 @@ export default function EmployeeShiftPage() {
       }
 
       const data = await res.json();
-
-      // If shift changed, record effective-from date (today) in shift history
-      const prevShift = String(emp.shift || emp.shiftId || '').trim();
-      const newShift = String(normalizedShift).trim();
-      if (newShift && newShift !== prevShift) {
-        const shiftObj = shifts.find((s) => (s.code || '').toUpperCase() === newShift);
-        if (shiftObj?._id) {
-          try {
-            const today = new Date().toISOString().slice(0, 10);
-            const shiftRes = await fetch('/api/hr/employee-shifts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                empCode: data.employee.empCode,
-                shiftId: shiftObj._id.toString(),
-                effectiveDate: today,
-                reason: 'Changed from table',
-                changedBy: 'HR',
-              }),
-            });
-            if (!shiftRes.ok) {
-              const errData = await shiftRes.json().catch(() => ({}));
-              showToast('warning', errData.error || 'Shift history not updated.');
-            }
-          } catch (e) {
-            console.error('Shift history update:', e);
-            showToast('warning', 'Shift history not updated.');
-          }
-        }
-      }
 
       // Update local state immediately for instant feedback
       // IMPORTANT: Use the returned employee data which has the updated shift
@@ -363,6 +368,53 @@ export default function EmployeeShiftPage() {
   async function handleFormSubmit(formData) {
     setIsSaving(true);
     try {
+      // IMPORTANT: Record shift history BEFORE saving employee so the old shift is still on the Employee model
+      if (editingEmployee && formData.shift && formData.effectiveFromDate) {
+        const prevShiftRaw = String(editingEmployee.shift || '').trim();
+        const prevShiftIdRaw = String(editingEmployee.shiftId || editingEmployee._shiftId || '').trim();
+        const newShift = String(formData.shift).trim();
+
+        // Resolve old shift code for comparison
+        const prevCode = prevShiftRaw.toUpperCase();
+        let newCode = '';
+        if (/^[0-9a-fA-F]{24}$/.test(newShift)) {
+          const found = shifts.find((s) => s._id?.toString() === newShift);
+          newCode = found ? found.code.toUpperCase() : '';
+        } else {
+          newCode = newShift.toUpperCase();
+        }
+
+        if (newCode && newCode !== prevCode) {
+          const shiftId = /^[0-9a-fA-F]{24}$/.test(newShift)
+            ? newShift
+            : (shifts.find((s) => (s.code || '').toUpperCase() === newCode)?._id?.toString?.());
+          if (shiftId) {
+            try {
+              const shiftRes = await fetch('/api/hr/employee-shifts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  empCode: formData.empCode.trim(),
+                  shiftId,
+                  effectiveDate: formData.effectiveFromDate,
+                  reason: 'Updated from Manage Employee',
+                  changedBy: 'HR',
+                  previousShiftCode: prevCode,
+                  previousShiftId: /^[0-9a-fA-F]{24}$/.test(prevShiftIdRaw) ? prevShiftIdRaw : undefined,
+                }),
+              });
+              if (!shiftRes.ok) {
+                const errData = await shiftRes.json().catch(() => ({}));
+                showToast('warning', errData.error || 'Shift history not updated; employee saved.');
+              }
+            } catch (e) {
+              console.error('Shift history update:', e);
+              showToast('warning', 'Shift history not updated; employee saved.');
+            }
+          }
+        }
+      }
+
       const body = {
         empCode: formData.empCode.trim(),
         name: formData.name || undefined,
@@ -392,39 +444,6 @@ export default function EmployeeShiftPage() {
       const employee = data.data?.employee ?? data.employee;
       if (!employee) {
         throw new Error('Invalid response: no employee returned');
-      }
-
-      // If shift changed in edit mode, record effective-from date in shift history
-      if (editingEmployee && formData.shift && formData.effectiveFromDate) {
-        const prevShift = String(editingEmployee.shift || editingEmployee.shiftId || '').trim();
-        const newShift = String(formData.shift).trim();
-        if (newShift !== prevShift) {
-          const shiftId = /^[0-9a-fA-F]{24}$/.test(newShift)
-            ? newShift
-            : (shifts.find((s) => (s.code || '').toUpperCase() === newShift.toUpperCase())?._id?.toString?.());
-          if (shiftId) {
-            try {
-              const shiftRes = await fetch('/api/hr/employee-shifts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  empCode: formData.empCode.trim(),
-                  shiftId,
-                  effectiveDate: formData.effectiveFromDate,
-                  reason: 'Updated from Manage Employee',
-                  changedBy: 'HR',
-                }),
-              });
-              if (!shiftRes.ok) {
-                const errData = await shiftRes.json().catch(() => ({}));
-                showToast('warning', errData.error || 'Shift history not updated; employee saved.');
-              }
-            } catch (e) {
-              console.error('Shift history update:', e);
-              showToast('warning', 'Shift history not updated; employee saved.');
-            }
-          }
-        }
       }
 
       // Update employees list

@@ -1,4 +1,5 @@
 // app/api/hr/shifts/[id]/route.js
+import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
 import Shift from '../../../../../models/Shift';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
@@ -59,10 +60,36 @@ export async function PUT(req, { params }) {
     const body = await req.json();
     const { name, code, startTime, endTime, crossesMidnight, gracePeriod, description, isActive } = body;
 
+    // Fetch the existing shift first so we only update fields that actually changed
+    const existing = await Shift.findById(id).lean().maxTimeMS(2000);
+    if (!existing) {
+      return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
+    }
+
     const update = {};
-    if (name !== undefined) update.name = name;
-    if (code !== undefined) update.code = code.toUpperCase();
-    if (startTime !== undefined) {
+    if (name !== undefined && name !== existing.name) {
+      // Check if another shift already uses this name
+      const nameConflict = await Shift.findOne({ name, _id: { $ne: id } }).lean();
+      if (nameConflict) {
+        return NextResponse.json(
+          { error: `Another shift already has the name "${name}"` },
+          { status: 400 }
+        );
+      }
+      update.name = name;
+    }
+    if (code !== undefined && code.toUpperCase() !== existing.code) {
+      const upperCode = code.toUpperCase();
+      const codeConflict = await Shift.findOne({ code: upperCode, _id: { $ne: id } }).lean();
+      if (codeConflict) {
+        return NextResponse.json(
+          { error: `Another shift already has the code "${upperCode}"` },
+          { status: 400 }
+        );
+      }
+      update.code = upperCode;
+    }
+    if (startTime !== undefined && startTime !== existing.startTime) {
       const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timeRegex.test(startTime)) {
         return NextResponse.json(
@@ -72,7 +99,7 @@ export async function PUT(req, { params }) {
       }
       update.startTime = startTime;
     }
-    if (endTime !== undefined) {
+    if (endTime !== undefined && endTime !== existing.endTime) {
       const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
       if (!timeRegex.test(endTime)) {
         return NextResponse.json(
@@ -82,12 +109,19 @@ export async function PUT(req, { params }) {
       }
       update.endTime = endTime;
     }
-    if (crossesMidnight !== undefined) update.crossesMidnight = crossesMidnight;
-    if (gracePeriod !== undefined) update.gracePeriod = gracePeriod;
-    if (description !== undefined) update.description = description;
-    if (isActive !== undefined) update.isActive = isActive;
+    if (crossesMidnight !== undefined && crossesMidnight !== existing.crossesMidnight) update.crossesMidnight = crossesMidnight;
+    if (gracePeriod !== undefined && gracePeriod !== existing.gracePeriod) update.gracePeriod = gracePeriod;
+    if (description !== undefined && description !== (existing.description || '')) update.description = description;
+    if (isActive !== undefined && isActive !== existing.isActive) update.isActive = isActive;
 
-    // OPTIMIZATION: Use lean() and select only required fields
+    // If nothing changed, return the existing shift as-is
+    if (Object.keys(update).length === 0) {
+      const shift = existing;
+      const response = NextResponse.json({ shift });
+      response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+      return response;
+    }
+
     const shift = await Shift.findByIdAndUpdate(
       id, 
       { $set: update }, 
@@ -98,7 +132,6 @@ export async function PUT(req, { params }) {
       .maxTimeMS(3000);
 
     if (!shift) {
-      console.error('Shift not found with ID:', id);
       return NextResponse.json({ error: 'Shift not found' }, { status: 404 });
     }
 
@@ -114,9 +147,11 @@ export async function PUT(req, { params }) {
         { status: 400 }
       );
     }
-    if (err.code === 11000) {
+    if (err.code === 11000 || String(err.code) === '11000' || err.message?.includes('E11000')) {
+      const dupField = err.message?.includes('name_1') ? 'name' : 
+                        err.message?.includes('code_1') ? 'code' : 'name or code';
       return NextResponse.json(
-        { error: 'Shift with this name or code already exists' },
+        { error: `Shift with this ${dupField} already exists` },
         { status: 400 }
       );
     }

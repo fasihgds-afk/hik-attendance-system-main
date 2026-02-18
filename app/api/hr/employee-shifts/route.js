@@ -96,7 +96,11 @@ export async function POST(req) {
     await connectDB();
 
     const body = await req.json();
-    const { empCode, shiftId, effectiveDate, reason, changedBy } = body;
+    const {
+      empCode, shiftId, effectiveDate, reason, changedBy,
+      previousShiftCode: bodyPrevCode,
+      previousShiftId: bodyPrevId,
+    } = body;
 
     if (!empCode || !shiftId || !effectiveDate) {
       return NextResponse.json(
@@ -142,16 +146,18 @@ export async function POST(req) {
 
     if (existingHistory.length === 0) {
       // No history exists — create a record for the PREVIOUS shift so old dates are preserved
-      const prevShiftCode = employee.shift || '';
-      const prevShiftId = employee.shiftId || null;
-      if (prevShiftCode || prevShiftId) {
-        // Resolve the previous shift
+      // Use previousShiftCode/Id from the request body (reliable), or fall back to Employee model
+      const prevShiftCode = bodyPrevCode || employee.shift || '';
+      const prevShiftId = bodyPrevId || (employee.shiftId ? employee.shiftId.toString() : null);
+
+      // Don't create old history if the "previous" shift is the same as the new one
+      if ((prevShiftCode && prevShiftCode.toUpperCase() !== shift.code.toUpperCase()) ||
+          (prevShiftId && prevShiftId !== shiftId)) {
         let prevShift = prevShiftId ? await Shift.findById(prevShiftId).lean() : null;
         if (!prevShift && prevShiftCode) {
-          prevShift = await Shift.findOne({ code: prevShiftCode, isActive: true }).lean();
+          prevShift = await Shift.findOne({ code: prevShiftCode.toUpperCase(), isActive: true }).lean();
         }
         if (prevShift) {
-          // Create history for old shift: from a far-back date to day before new shift
           await EmployeeShiftHistory.create({
             empCode,
             shiftId: prevShift._id,
@@ -164,11 +170,38 @@ export async function POST(req) {
         }
       }
     } else {
-      // Close any open (endDate=null) assignments
-      await EmployeeShiftHistory.updateMany(
-        { empCode, endDate: null },
-        { $set: { endDate: prevEndStr } }
+      // History exists — but check if all records are for the SAME shift as the new one being assigned
+      // (this means the old buggy code created wrong records). If so, clean them up.
+      const allSameAsNew = existingHistory.every(
+        (h) => h.shiftCode && h.shiftCode.toUpperCase() === shift.code.toUpperCase()
       );
+
+      if (allSameAsNew && bodyPrevCode && bodyPrevCode.toUpperCase() !== shift.code.toUpperCase()) {
+        // All history records are for the NEW shift (wrong) — delete them and re-create correct old shift
+        await EmployeeShiftHistory.deleteMany({ empCode });
+
+        let prevShift = bodyPrevId ? await Shift.findById(bodyPrevId).lean() : null;
+        if (!prevShift && bodyPrevCode) {
+          prevShift = await Shift.findOne({ code: bodyPrevCode.toUpperCase(), isActive: true }).lean();
+        }
+        if (prevShift) {
+          await EmployeeShiftHistory.create({
+            empCode,
+            shiftId: prevShift._id,
+            shiftCode: prevShift.code,
+            effectiveDate: '2020-01-01',
+            endDate: prevEndStr,
+            reason: 'Auto-corrected: previous shift before first change',
+            changedBy: changedBy || 'system',
+          });
+        }
+      } else {
+        // Normal case: close any open (endDate=null) assignments
+        await EmployeeShiftHistory.updateMany(
+          { empCode, endDate: null },
+          { $set: { endDate: prevEndStr } }
+        );
+      }
     }
 
     // Create new shift assignment

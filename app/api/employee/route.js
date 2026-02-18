@@ -233,7 +233,8 @@ export async function POST(req) {
     // Validate input
     const validation = validateEmployee(body, true);
     if (!validation.success) {
-      throw new ValidationError('Validation failed', validation.errors);
+      const fieldErrors = (validation.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
+      throw new ValidationError(`Validation failed: ${fieldErrors || 'unknown'}`, validation.errors);
     }
 
     const validatedData = validation.data;
