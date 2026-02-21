@@ -464,7 +464,7 @@ export async function GET(req) {
         const useDynamicShifts = shiftCount > 0;
         const departmentPolicyMap = new Map();
         (departmentDocs || []).forEach((d) => {
-          if (d.name != null) departmentPolicyMap.set(String(d.name).trim(), d.saturdayPolicy || 'alternate');
+          if (d.name != null) departmentPolicyMap.set(String(d.name).trim().toLowerCase(), d.saturdayPolicy || 'alternate');
         });
 
     const monthStartDate = `${monthPrefix}-01`;
@@ -1352,7 +1352,7 @@ export async function POST(req) {
     });
     const departmentPolicyMap = new Map();
     (departmentDocs || []).forEach((d) => {
-      if (d.name != null) departmentPolicyMap.set(String(d.name).trim(), d.saturdayPolicy || 'alternate');
+      if (d.name != null) departmentPolicyMap.set(String(d.name).trim().toLowerCase(), d.saturdayPolicy || 'alternate');
     });
     if (!emp) {
       throw new NotFoundError(`Employee ${empCode}`);
