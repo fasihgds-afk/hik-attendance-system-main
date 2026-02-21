@@ -847,10 +847,14 @@ export async function GET(req) {
         // Ensure HR Leaves (LeaveRecord) paid leave always reflects on monthly sheet
         if (paidLeaveKeys.has(key)) status = 'Paid Leave';
 
-        // Department Saturday policy override: if this Saturday is a WORKING day
-        // per the alternate policy, don't allow it to show as Holiday
+        // Department Saturday policy overrides:
+        // 1) Working Saturday should not show as Holiday
         if (weekendInfo.isSaturday && !isWeekendOff && status === 'Holiday') {
           status = hasPunch ? 'Present' : 'Absent';
+        }
+        // 2) Off Saturday should not show as Absent (unless employee actually came to work)
+        if (weekendInfo.isSaturday && isWeekendOff && status === 'Absent' && !hasPunch) {
+          status = 'Holiday';
         }
 
         const reason = doc?.reason || '';
@@ -1496,9 +1500,12 @@ export async function POST(req) {
 
     attendanceStatus = normalizeStatus(rawStatus, { isWeekendOff });
 
-    // Department Saturday policy override: working Saturday should not be Holiday
+    // Department Saturday policy overrides:
     if (dow === 6 && !isWeekendOff && attendanceStatus === 'Holiday') {
       attendanceStatus = hasPunch ? 'Present' : 'Absent';
+    }
+    if (dow === 6 && isWeekendOff && attendanceStatus === 'Absent' && !hasPunch) {
+      attendanceStatus = 'Holiday';
     }
 
     const totalPunches = checkIn && checkOut ? 2 : hasPunch ? 1 : 0;
