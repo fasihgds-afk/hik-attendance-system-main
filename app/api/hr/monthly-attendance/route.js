@@ -571,6 +571,27 @@ export async function GET(req) {
 
       let saturdayIndex = 0;
 
+      // Auto-detect Saturday group from actual attendance pattern
+      {
+        let satNum = 0;
+        let oddPunches = 0, evenPunches = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+          const wf = weekendFlags.get(d);
+          if (!wf || !wf.isSaturday) continue;
+          satNum++;
+          if (satNum > 4) continue;
+          const dk = `${emp.empCode}|${monthPrefix}-${String(d).padStart(2, '0')}`;
+          const satDoc = docsByEmpDate.get(dk);
+          const hasSatPunch = satDoc && (satDoc.checkIn || satDoc.checkOut);
+          if (hasSatPunch) {
+            if (satNum === 1 || satNum === 3) oddPunches++;
+            else evenPunches++;
+          }
+        }
+        if (oddPunches > evenPunches) emp.saturdayGroup = 'A';
+        else if (evenPunches > oddPunches) emp.saturdayGroup = 'B';
+      }
+
       // Cache for shift lookups per employee (to avoid repeated lookups for same date)
       const shiftCache = new Map();
       let employeeShiftObj = null; // Cache employee's current shift object
