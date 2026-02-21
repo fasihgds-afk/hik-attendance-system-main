@@ -572,24 +572,34 @@ export async function GET(req) {
       let saturdayIndex = 0;
 
       // Auto-detect Saturday group from actual attendance pattern
+      // Uses both punches AND no-punches to determine which group the employee is in
+      // Group A: works 1st & 3rd (odd), off 2nd & 4th (even)
+      // Group B: off 1st & 3rd (odd), works 2nd & 4th (even)
       {
         let satNum = 0;
         let oddPunches = 0, evenPunches = 0;
+        let oddNoPunch = 0, evenNoPunch = 0;
         for (let d = 1; d <= daysInMonth; d++) {
           const wf = weekendFlags.get(d);
           if (!wf || !wf.isSaturday) continue;
           satNum++;
           if (satNum > 4) continue;
+          // Skip future days — no data to detect from
+          if (monthRelation > 0 || (monthRelation === 0 && d > companyToday.day)) continue;
           const dk = `${emp.empCode}|${monthPrefix}-${String(d).padStart(2, '0')}`;
           const satDoc = docsByEmpDate.get(dk);
           const hasSatPunch = satDoc && (satDoc.checkIn || satDoc.checkOut);
-          if (hasSatPunch) {
-            if (satNum === 1 || satNum === 3) oddPunches++;
-            else evenPunches++;
+          if (satNum === 1 || satNum === 3) {
+            if (hasSatPunch) oddPunches++; else oddNoPunch++;
+          } else {
+            if (hasSatPunch) evenPunches++; else evenNoPunch++;
           }
         }
-        if (oddPunches > evenPunches) emp.saturdayGroup = 'A';
-        else if (evenPunches > oddPunches) emp.saturdayGroup = 'B';
+        // Score: punches on your working Saturdays + no-punches on your off Saturdays
+        const scoreA = oddPunches + evenNoPunch;
+        const scoreB = evenPunches + oddNoPunch;
+        if (scoreA > scoreB) emp.saturdayGroup = 'A';
+        else if (scoreB > scoreA) emp.saturdayGroup = 'B';
       }
 
       // Cache for shift lookups per employee (to avoid repeated lookups for same date)
@@ -847,14 +857,20 @@ export async function GET(req) {
         // Ensure HR Leaves (LeaveRecord) paid leave always reflects on monthly sheet
         if (paidLeaveKeys.has(key)) status = 'Paid Leave';
 
-        // Department Saturday policy overrides:
-        // 1) Working Saturday should not show as Holiday
-        if (weekendInfo.isSaturday && !isWeekendOff && status === 'Holiday') {
-          status = hasPunch ? 'Present' : 'Absent';
-        }
-        // 2) Off Saturday should not show as Absent (unless employee actually came to work)
-        if (weekendInfo.isSaturday && isWeekendOff && status === 'Absent' && !hasPunch) {
-          status = 'Holiday';
+        // Department Saturday policy overrides — only for auto-generated statuses
+        // If HR manually set the status (Holiday, Paid Leave, etc.), respect their decision
+        const rawLower = (rawStatus || '').trim().toLowerCase();
+        const isHRManualStatus = rawStatus && !['', 'present', 'absent', 'p', 'a', 'no punch'].includes(rawLower);
+
+        if (weekendInfo.isSaturday && !isHRManualStatus) {
+          // Working Saturday should not auto-show as Holiday
+          if (!isWeekendOff && status === 'Holiday') {
+            status = hasPunch ? 'Present' : 'Absent';
+          }
+          // Off Saturday should not auto-show as Absent
+          if (isWeekendOff && status === 'Absent' && !hasPunch) {
+            status = 'Holiday';
+          }
         }
 
         const reason = doc?.reason || '';
@@ -1500,12 +1516,17 @@ export async function POST(req) {
 
     attendanceStatus = normalizeStatus(rawStatus, { isWeekendOff });
 
-    // Department Saturday policy overrides:
-    if (dow === 6 && !isWeekendOff && attendanceStatus === 'Holiday') {
-      attendanceStatus = hasPunch ? 'Present' : 'Absent';
-    }
-    if (dow === 6 && isWeekendOff && attendanceStatus === 'Absent' && !hasPunch) {
-      attendanceStatus = 'Holiday';
+    // Department Saturday policy overrides — only when HR didn't explicitly set a status
+    // In PATCH, `status` comes from the request body: if HR chose a status, respect it
+    const hrExplicitlySetStatus = !!status;
+
+    if (dow === 6 && !hrExplicitlySetStatus) {
+      if (!isWeekendOff && attendanceStatus === 'Holiday') {
+        attendanceStatus = hasPunch ? 'Present' : 'Absent';
+      }
+      if (isWeekendOff && attendanceStatus === 'Absent' && !hasPunch) {
+        attendanceStatus = 'Holiday';
+      }
     }
 
     const totalPunches = checkIn && checkOut ? 2 : hasPunch ? 1 : 0;
