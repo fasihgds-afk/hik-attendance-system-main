@@ -476,7 +476,7 @@ export async function GET(req) {
         date: { $gte: monthStartDate, $lte: monthEndDate },
       }
     )
-      .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType')
+      .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited')
       .lean()
       .maxTimeMS(4000); // Reduced timeout for faster response
 
@@ -857,17 +857,13 @@ export async function GET(req) {
         // Ensure HR Leaves (LeaveRecord) paid leave always reflects on monthly sheet
         if (paidLeaveKeys.has(key)) status = 'Paid Leave';
 
-        // Department Saturday policy overrides — only for auto-generated statuses
-        // If HR manually set the status (Holiday, Paid Leave, etc.), respect their decision
-        const rawLower = (rawStatus || '').trim().toLowerCase();
-        const isHRManualStatus = rawStatus && !['', 'present', 'absent', 'p', 'a', 'no punch'].includes(rawLower);
+        // Department Saturday policy overrides — skip if HR manually edited this record
+        const wasManuallyEdited = doc?.manuallyEdited === true;
 
-        if (weekendInfo.isSaturday && !isHRManualStatus) {
-          // Working Saturday should not auto-show as Holiday
+        if (weekendInfo.isSaturday && !wasManuallyEdited) {
           if (!isWeekendOff && status === 'Holiday') {
             status = hasPunch ? 'Present' : 'Absent';
           }
-          // Off Saturday should not auto-show as Absent
           if (isWeekendOff && status === 'Absent' && !hasPunch) {
             status = 'Holiday';
           }
@@ -1550,6 +1546,7 @@ export async function POST(req) {
       earlyExcused: finalEarlyExcused,
       // Quarter-based: store leaveType 'paid' only (no casual/annual)
       ...(attendanceStatus === 'Paid Leave' && { leaveType: 'paid' }),
+      manuallyEdited: true,
       updatedAt: new Date(),
     };
 
