@@ -1,5 +1,5 @@
 // app/api/employee/leaves/route.js
-// Quarter-based paid leave; limit per quarter from LeavePolicy (configurable from HR frontend)
+// Quarter-based paid leave with restricted carry-forward (Q1->Q2 and Q3->Q4 only)
 import { connectDB } from '../../../../lib/db';
 import LeaveRecord from '../../../../models/LeaveRecord';
 import { getQuarterFromDate, getQuarterRange, getCurrentQuarter, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
@@ -9,6 +9,25 @@ import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function getQuarterAllocationsWithCarry(leavesPerQuarter, q1Taken, q2Taken, q3Taken, q4Taken) {
+  const base = leavesPerQuarter;
+  const q1Allocated = base;
+  const q1Remaining = Math.max(0, q1Allocated - q1Taken);
+  const q2Allocated = base + q1Remaining; // carry only from Q1 -> Q2
+  const q2Remaining = Math.max(0, q2Allocated - q2Taken);
+  const q3Allocated = base;
+  const q3Remaining = Math.max(0, q3Allocated - q3Taken);
+  const q4Allocated = base + q3Remaining; // carry only from Q3 -> Q4
+  const q4Remaining = Math.max(0, q4Allocated - q4Taken);
+
+  return {
+    q1: { allocated: q1Allocated, remaining: q1Remaining },
+    q2: { allocated: q2Allocated, remaining: q2Remaining },
+    q3: { allocated: q3Allocated, remaining: q3Remaining },
+    q4: { allocated: q4Allocated, remaining: q4Remaining },
+  };
+}
 
 // GET /api/employee/leaves?empCode=XXX&year=YYYY - Balance by quarter (current quarter + full year optional)
 export async function GET(req) {
@@ -59,13 +78,20 @@ export async function GET(req) {
       const { quarter } = getQuarterFromDate(dateStr);
       if (countByQuarter[quarter] !== undefined) countByQuarter[quarter] += 1;
     });
+    const allocations = getQuarterAllocationsWithCarry(
+      leavesPerQuarter,
+      countByQuarter[1] || 0,
+      countByQuarter[2] || 0,
+      countByQuarter[3] || 0,
+      countByQuarter[4] || 0
+    );
 
     const quarters = [1, 2, 3, 4].map((q) => ({
       quarter: q,
       label: getQuarterLabel(year, q),
-      allocated: leavesPerQuarter,
+      allocated: allocations[`q${q}`].allocated,
       taken: countByQuarter[q] || 0,
-      remaining: Math.max(0, leavesPerQuarter - (countByQuarter[q] || 0)),
+      remaining: allocations[`q${q}`].remaining,
       ...getQuarterRange(year, q),
     }));
 
@@ -80,7 +106,7 @@ export async function GET(req) {
             year: currentYear,
             taken: currentQuarterData.taken,
             remaining: currentQuarterData.remaining,
-            allocated: leavesPerQuarter,
+            allocated: currentQuarterData.allocated,
           }
         : null,
       quarters,

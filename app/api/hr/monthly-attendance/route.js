@@ -1576,7 +1576,13 @@ export async function POST(req) {
           const policy = await getLeavePolicy();
           const { year: qYear, quarter } = getQuarterFromDate(date);
           const quarterRecord = await PaidLeaveQuarter.getOrCreate(empCode, qYear, quarter, policy.leavesPerQuarter, session);
-          const maxAllowed = quarterRecord.leavesAllocated ?? policy.leavesPerQuarter;
+          const maxAllowed = await PaidLeaveQuarter.getMaxAllowedForQuarter(
+            empCode,
+            qYear,
+            quarter,
+            policy.leavesPerQuarter,
+            session
+          );
           if (quarterRecord.leavesTaken >= maxAllowed) {
             const quarterLabel = getQuarterLabel(qYear, quarter);
             throw new ValidationError(
@@ -1588,6 +1594,7 @@ export async function POST(req) {
               [{ empCode, date, leaveType: 'paid', reason: reason || '', markedBy: 'HR' }],
               { session }
             );
+            quarterRecord.leavesAllocated = maxAllowed;
             quarterRecord.leavesTaken = (quarterRecord.leavesTaken || 0) + 1;
             await quarterRecord.save({ session });
           }
@@ -1608,7 +1615,13 @@ export async function POST(req) {
             const policy = await getLeavePolicy();
             const { year: qYear, quarter } = getQuarterFromDate(date);
             const quarterRecord = await PaidLeaveQuarter.getOrCreate(empCode, qYear, quarter, policy.leavesPerQuarter, session);
-            const maxAllowed = quarterRecord.leavesAllocated ?? policy.leavesPerQuarter;
+            const maxAllowed = await PaidLeaveQuarter.getMaxAllowedForQuarter(
+              empCode,
+              qYear,
+              quarter,
+              policy.leavesPerQuarter,
+              session
+            );
             if (quarterRecord.leavesTaken >= maxAllowed) {
               const quarterLabel = getQuarterLabel(qYear, quarter);
               throw new ValidationError(
@@ -1619,6 +1632,7 @@ export async function POST(req) {
               [{ empCode, date, leaveType: 'paid', reason: reason || '', markedBy: 'HR' }],
               { session }
             );
+            quarterRecord.leavesAllocated = maxAllowed;
             quarterRecord.leavesTaken = (quarterRecord.leavesTaken || 0) + 1;
             await quarterRecord.save({ session });
           }
