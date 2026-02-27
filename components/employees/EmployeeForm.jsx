@@ -30,6 +30,12 @@ export default function EmployeeForm({
     designation: employee?.designation || '',
     phoneNumber: employee?.phoneNumber || '',
     cnic: employee?.cnic || '',
+    bankDetails: {
+      bankName: employee?.bankDetails?.bankName || '',
+      accountTitle: employee?.bankDetails?.accountTitle || '',
+      accountNumber: employee?.bankDetails?.accountNumber || '',
+      iban: employee?.bankDetails?.iban || '',
+    },
     profileImageBase64: employee?.profileImageBase64 || '',
     profileImageUrl: employee?.profileImageUrl || '',
   });
@@ -95,6 +101,12 @@ export default function EmployeeForm({
         designation: employee.designation || '',
         phoneNumber: employee.phoneNumber || '',
         cnic: employee.cnic || '',
+        bankDetails: {
+          bankName: employee?.bankDetails?.bankName || '',
+          accountTitle: employee?.bankDetails?.accountTitle || '',
+          accountNumber: employee?.bankDetails?.accountNumber || '',
+          iban: employee?.bankDetails?.iban || '',
+        },
         profileImageBase64: employee.profileImageBase64 || '',
         profileImageUrl: employee.profileImageUrl || '',
       });
@@ -112,6 +124,12 @@ export default function EmployeeForm({
         designation: '',
         phoneNumber: '',
         cnic: '',
+        bankDetails: {
+          bankName: '',
+          accountTitle: '',
+          accountNumber: '',
+          iban: '',
+        },
         profileImageBase64: '',
         profileImageUrl: '',
       });
@@ -455,6 +473,91 @@ export default function EmployeeForm({
                 value={formData.cnic}
                 onChange={(e) => handleChange('cnic', e.target.value)}
                 placeholder="XXXXX-XXXXXXX-X"
+                style={inputStyle}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section: Bank Details (Private) */}
+        <div style={{ marginBottom: 28 }}>
+          <h3
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: '#111827',
+              marginBottom: 16,
+              paddingBottom: 8,
+              borderBottom: '2px solid #e5e7eb',
+            }}
+          >
+            Bank Details (Private)
+          </h3>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: 20,
+              marginBottom: 24,
+            }}
+          >
+            <div>
+              <label style={labelStyle}>Bank Name</label>
+              <input
+                type="text"
+                value={formData.bankDetails?.bankName || ''}
+                onChange={(e) =>
+                  handleChange('bankDetails', {
+                    ...(formData.bankDetails || {}),
+                    bankName: e.target.value,
+                  })
+                }
+                placeholder="e.g. HBL"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Account Title</label>
+              <input
+                type="text"
+                value={formData.bankDetails?.accountTitle || ''}
+                onChange={(e) =>
+                  handleChange('bankDetails', {
+                    ...(formData.bankDetails || {}),
+                    accountTitle: e.target.value,
+                  })
+                }
+                placeholder="Account holder name"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Account Number</label>
+              <input
+                type="text"
+                value={formData.bankDetails?.accountNumber || ''}
+                onChange={(e) =>
+                  handleChange('bankDetails', {
+                    ...(formData.bankDetails || {}),
+                    accountNumber: e.target.value,
+                  })
+                }
+                placeholder="Bank account number"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>IBAN</label>
+              <input
+                type="text"
+                value={formData.bankDetails?.iban || ''}
+                onChange={(e) =>
+                  handleChange('bankDetails', {
+                    ...(formData.bankDetails || {}),
+                    iban: e.target.value,
+                  })
+                }
+                placeholder="PKXX...."
                 style={inputStyle}
               />
             </div>

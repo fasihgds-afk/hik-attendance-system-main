@@ -39,6 +39,13 @@ const EmployeeSchema = new mongoose.Schema(
     phoneNumber: String,
     cnic: String,
 
+    bankDetails: {
+      bankName: String,
+      accountTitle: String,
+      accountNumber: String,
+      iban: String,
+    },
+
     profileImageBase64: String,
     profileImageUrl: String,
   },

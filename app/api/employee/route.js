@@ -5,6 +5,12 @@ import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/quer
 import { NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
 import { validateEmployee } from '../../../lib/validations/employee';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
+import {
+  decryptBankDetails,
+  encryptBankDetails,
+  hasAnyBankDetails,
+  normalizeBankDetailsInput,
+} from '../../../lib/security/bankDetailsCrypto';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -60,6 +66,8 @@ export async function GET(req) {
       if (!employee) {
         throw new NotFoundError(`Employee ${empCode}`);
       }
+
+      employee.bankDetails = decryptBankDetails(employee.bankDetails);
       
       // OPTIMIZATION: Only normalize shift if it's an ObjectId (skip if already a code)
       if (employee.shift) {
@@ -256,6 +264,19 @@ export async function POST(req) {
       update.monthlySalary = Number(update.monthlySalary);
     }
 
+    if (validatedData.bankDetails !== undefined) {
+      const normalizedBankDetails = normalizeBankDetailsInput(validatedData.bankDetails);
+      if (hasAnyBankDetails(normalizedBankDetails)) {
+        try {
+          update.bankDetails = encryptBankDetails(normalizedBankDetails);
+        } catch (e) {
+          throw new ValidationError(e.message || 'Failed to secure bank details');
+        }
+      } else {
+        update.bankDetails = null;
+      }
+    }
+
     // Handle shift field: Convert ObjectId to shift code if needed
     if (update.shift) {
       const shiftValue = String(update.shift).trim();
@@ -296,6 +317,8 @@ export async function POST(req) {
       { $set: update },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean();
+
+    employee.bankDetails = decryptBankDetails(employee.bankDetails);
 
     const isNew = !employee.createdAt || new Date(employee.createdAt).getTime() > Date.now() - 1000;
     

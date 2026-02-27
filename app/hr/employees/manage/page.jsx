@@ -425,6 +425,7 @@ export default function EmployeeShiftPage() {
         designation: formData.designation || undefined,
         phoneNumber: formData.phoneNumber || undefined,
         cnic: formData.cnic || undefined,
+        bankDetails: formData.bankDetails || undefined,
         profileImageBase64: formData.profileImageBase64 || undefined,
         profileImageUrl: formData.profileImageUrl || undefined,
       };
@@ -547,8 +548,21 @@ export default function EmployeeShiftPage() {
   }
 
   // Open modal for editing existing employee
-  function openEditModal(emp) {
-    setEditingEmployee(emp);
+  async function openEditModal(emp) {
+    try {
+      const res = await fetch(`/api/employee?empCode=${encodeURIComponent(emp.empCode)}`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const response = await res.json();
+        const fullEmployee = response?.data?.employee || response?.employee || emp;
+        setEditingEmployee(fullEmployee);
+      } else {
+        setEditingEmployee(emp);
+      }
+    } catch {
+      setEditingEmployee(emp);
+    }
     loadDepartments(); // Refresh so department dropdown is up to date
     setIsModalOpen(true);
     setShowShiftHistory(false);
