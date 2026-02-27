@@ -2,6 +2,7 @@
 import "./globals.css";
 import { Providers } from "./providers";
 import MobileOnlyGuard from "@/components/guards/MobileOnlyGuard";
+import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata = {
@@ -25,6 +26,7 @@ export default function RootLayout({ children }) {
           {/* ✅ Now the whole app (including /login) is wrapped in SessionProvider */}
           <Providers>{children}</Providers>
         </MobileOnlyGuard>
+        <Analytics />
         <SpeedInsights />
       </body>
     </html>
