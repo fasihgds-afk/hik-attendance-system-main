@@ -322,6 +322,8 @@ export default function MonthlyHrPage() {
     () => baseExportColumns.map((c) => ({ ...c, enabled: true }))
   );
   const [exportIncludeDays, setExportIncludeDays] = useState(true);
+  const [exportIncludeBankDetails, setExportIncludeBankDetails] = useState(false);
+  const [exportMaskBankDetails, setExportMaskBankDetails] = useState(true);
   const [showExportSettings, setShowExportSettings] = useState(false);
 
   // Generate theme-aware table styles AFTER all hooks
@@ -599,6 +601,25 @@ export default function MonthlyHrPage() {
     }
 
     try {
+      let bankMap = new Map();
+      if (exportIncludeBankDetails) {
+        const bankRes = await fetch('/api/hr/employees/bank-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empCodes: filteredEmployees.map((e) => e.empCode).filter(Boolean),
+            mask: exportMaskBankDetails,
+          }),
+        });
+        if (!bankRes.ok) {
+          const txt = await bankRes.text();
+          throw new Error(txt || 'Failed to load bank details for export');
+        }
+        const bankJson = await bankRes.json();
+        const items = Array.isArray(bankJson?.items) ? bankJson.items : [];
+        bankMap = new Map(items.map((it) => [it.empCode, it]));
+      }
+
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Global Digital Solutions';
       workbook.created = new Date();
@@ -629,6 +650,14 @@ export default function MonthlyHrPage() {
                 width: 24,
               };
             })
+          : []),
+        ...(exportIncludeBankDetails
+          ? [
+              { header: 'Bank Name', key: 'bankName', width: 22 },
+              { header: 'Account Title', key: 'accountTitle', width: 24 },
+              { header: 'Account Number', key: 'accountNumber', width: 20 },
+              { header: 'IBAN', key: 'iban', width: 22 },
+            ]
           : []),
       ];
 
@@ -713,6 +742,11 @@ export default function MonthlyHrPage() {
 
       // Freeze header row + first two columns
       sheet.views = [{ state: 'frozen', ySplit: 3, xSplit: 2 }];
+      // Professional usability: enable autofilter on header row
+      sheet.autoFilter = {
+        from: { row: 3, column: 1 },
+        to: { row: 3, column: lastColIndex },
+      };
 
       // Table header row (row 3)
       const headerRowIndex = 3;
@@ -865,6 +899,14 @@ export default function MonthlyHrPage() {
 
             rowData[key] = `${st}${punchText ? ' ' + punchText : ''}${extra}`;
           });
+        }
+
+        if (exportIncludeBankDetails) {
+          const bank = bankMap.get(emp.empCode) || {};
+          rowData.bankName = bank.bankName || '';
+          rowData.accountTitle = bank.accountTitle || '';
+          rowData.accountNumber = bank.accountNumber || '';
+          rowData.iban = bank.iban || '';
         }
 
         const row = sheet.addRow(rowData);
@@ -1386,6 +1428,40 @@ export default function MonthlyHrPage() {
                       />
                       <span>Include per-day columns</span>
                     </label>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        cursor: 'pointer',
+                        marginTop: 6,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={exportIncludeBankDetails}
+                        onChange={(e) => setExportIncludeBankDetails(e.target.checked)}
+                      />
+                      <span>Include bank details (HR only)</span>
+                    </label>
+                    {exportIncludeBankDetails && (
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          cursor: 'pointer',
+                          marginTop: 6,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={exportMaskBankDetails}
+                          onChange={(e) => setExportMaskBankDetails(e.target.checked)}
+                        />
+                        <span>Mask sensitive fields</span>
+                      </label>
+                    )}
                   </div>
                 </div>
               )}
