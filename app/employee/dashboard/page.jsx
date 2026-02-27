@@ -1393,7 +1393,7 @@ export default function EmployeeDashboardPage() {
           }
           .employee-top-row {
             grid-template-columns: 1fr !important;
-            gap: 12px !important;
+            gap: 10px !important;
           }
           .employee-profile-card {
             flex-direction: column !important;
@@ -1852,8 +1852,8 @@ export default function EmployeeDashboardPage() {
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 16,
-            marginBottom: 18,
+            gap: 10,
+            marginBottom: 14,
             alignItems: "stretch",
           }}
         >
@@ -1906,7 +1906,7 @@ export default function EmployeeDashboardPage() {
                 ✏️
               </button>
             </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
               <div
                   style={{
                     fontSize: 16,
@@ -1922,7 +1922,7 @@ export default function EmployeeDashboardPage() {
                   style={{
                     fontSize: 12,
                     color: colors.text.secondary,
-                    marginBottom: 8,
+                    marginBottom: 2,
                   }}
                 >
                   Emp Code:{" "}
