@@ -2000,16 +2000,33 @@ export default function EmployeeDashboardPage() {
                 justifyContent: "space-between",
               }}
             >
-            <div
-              style={{
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: 1.1,
-                color: "#e5fdf4",
-                marginBottom: 4,
-              }}
-            >
-              Today&apos;s Attendance
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 1.1,
+                  color: "#e5fdf4",
+                }}
+              >
+                Today&apos;s Attendance
+              </div>
+              {!loading && todayDayObj?.status && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "#ffffff",
+                    backgroundColor: "rgba(15, 23, 42, 0.28)",
+                    border: "1px solid rgba(255,255,255,0.25)",
+                    borderRadius: 999,
+                    padding: "3px 8px",
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  {todayDayObj.status}
+                </div>
+              )}
             </div>
 
             {loading ? (
@@ -2024,49 +2041,52 @@ export default function EmployeeDashboardPage() {
               <>
                 <div
                   style={{
-                    fontSize: 20,
-                    fontWeight: 800,
-                    marginBottom: 2,
-                    color: "#ffffff",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "6px 12px",
+                    marginBottom: 8,
                   }}
                 >
-                  {todayDayObj.status || "—"}
+                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
+                    Date: <strong>{todayDateLabel}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
+                    Shift: <strong>{displayShift || "-"}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
+                    In:{" "}
+                    <strong>
+                      {todayDayObj.checkIn
+                        ? formatTimeShort(todayDayObj.checkIn)
+                        : "-"}
+                    </strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
+                    Out:{" "}
+                    <strong>
+                      {todayDayObj.checkOut
+                        ? formatTimeShort(todayDayObj.checkOut)
+                        : "-"}
+                    </strong>
+                  </div>
                 </div>
+
                 <div
                   style={{
-                    fontSize: 12,
-                    color: "#e5fdf4",
-                    marginBottom: 2,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+                    gap: 6,
                   }}
                 >
-                  Date: <strong>{todayDateLabel}</strong>
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#e5fdf4",
-                    marginBottom: 2,
-                  }}
-                >
-                  In:{" "}
-                  <strong>
-                    {todayDayObj.checkIn
-                      ? formatTimeShort(todayDayObj.checkIn)
-                      : "-"}
-                  </strong>{" "}
-                  · Out:{" "}
-                  <strong>
-                    {todayDayObj.checkOut
-                      ? formatTimeShort(todayDayObj.checkOut)
-                      : "-"}
-                  </strong>
-                </div>
-                <div style={{ fontSize: 12, color: "#e5fdf4" }}>
-                  Late: <strong>{todayDayObj.late ? "Yes" : "No"}</strong> ·
-                  Early Leave:{" "}
-                  <strong>{todayDayObj.earlyLeave ? "Yes" : "No"}</strong> ·
-                  Excused:{" "}
-                  <strong>{todayDayObj.excused ? "Yes" : "No"}</strong>
+                  <div style={{ fontSize: 11, color: "#ecfdf5", backgroundColor: "rgba(15,23,42,0.2)", borderRadius: 8, padding: "5px 6px" }}>
+                    Late: <strong>{todayDayObj.late ? "Yes" : "No"}</strong>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#ecfdf5", backgroundColor: "rgba(15,23,42,0.2)", borderRadius: 8, padding: "5px 6px" }}>
+                    Early: <strong>{todayDayObj.earlyLeave ? "Yes" : "No"}</strong>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#ecfdf5", backgroundColor: "rgba(15,23,42,0.2)", borderRadius: 8, padding: "5px 6px" }}>
+                    Excused: <strong>{todayDayObj.excused ? "Yes" : "No"}</strong>
+                  </div>
                 </div>
               </>
             )}
