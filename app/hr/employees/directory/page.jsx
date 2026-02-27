@@ -148,7 +148,7 @@ export default function EmployeeDirectoryPage() {
               Employee Directory
             </div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>
-              Read-only HR lookup page with basic employee info
+              Read-only HR view with searchable employee details
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -190,7 +190,7 @@ export default function EmployeeDirectoryPage() {
             }}
           >
             <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
-              <div style={{ fontSize: 11, color: colors.text.muted }}>Loaded Employees</div>
+              <div style={{ fontSize: 11, color: colors.text.muted }}>Employees on This Page</div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{rows.length}</div>
             </div>
             <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
@@ -198,7 +198,7 @@ export default function EmployeeDirectoryPage() {
               <div style={{ fontSize: 22, fontWeight: 700 }}>{pagination.total}</div>
             </div>
             <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
-              <div style={{ fontSize: 11, color: colors.text.muted }}>Departments (page)</div>
+              <div style={{ fontSize: 11, color: colors.text.muted }}>Departments in View</div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{departmentCount}</div>
             </div>
           </div>
@@ -310,7 +310,7 @@ export default function EmployeeDirectoryPage() {
             <table
               style={{
                 width: '100%',
-                minWidth: 860,
+                minWidth: 1080,
                 borderCollapse: 'collapse',
                 borderRadius: 10,
                 overflow: 'hidden',
@@ -319,7 +319,16 @@ export default function EmployeeDirectoryPage() {
             >
               <thead>
                 <tr>
-                  {['Emp Code', 'Name', 'Department', 'Designation', 'Shift', 'Email'].map((heading) => (
+                  {[
+                    'Emp Code',
+                    'Name',
+                    'Department',
+                    'Designation',
+                    'Shift',
+                    'Salary',
+                    'Saturday Group',
+                    'Email',
+                  ].map((heading) => (
                     <th
                       key={heading}
                       style={{
@@ -341,7 +350,7 @@ export default function EmployeeDirectoryPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       style={{
                         padding: 18,
                         textAlign: 'center',
@@ -356,7 +365,7 @@ export default function EmployeeDirectoryPage() {
                 ) : rows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       style={{
                         padding: 18,
                         textAlign: 'center',
@@ -372,7 +381,7 @@ export default function EmployeeDirectoryPage() {
                   filteredDepartmentGroups.flatMap((group) => [
                     <tr key={`group-${group.departmentName}`}>
                       <td
-                        colSpan={6}
+                        colSpan={8}
                         style={{
                           padding: '10px 12px',
                           fontSize: 12,
@@ -420,6 +429,10 @@ export default function EmployeeDirectoryPage() {
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.department || '-'}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.designation || '-'}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.shift || '-'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>
+                              {employee.monthlySalary != null ? Number(employee.monthlySalary).toLocaleString() : '-'}
+                            </td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.saturdayGroup || '-'}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.email || '-'}</td>
                           </tr>
                         ))),

@@ -513,7 +513,7 @@ export default function HrLeavesPage() {
             background: colors.background.card,
           }}
         >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Employees Shown</div>
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Employees in List</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: colors.text.primary }}>{filteredLeaves.length}</div>
         </div>
         <div
@@ -524,7 +524,7 @@ export default function HrLeavesPage() {
             background: colors.background.card,
           }}
         >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Leaves Taken</div>
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Total Leave Days Used</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#dc2626' }}>{dashboardSummary.taken}</div>
         </div>
         <div
@@ -535,7 +535,7 @@ export default function HrLeavesPage() {
             background: colors.background.card,
           }}
         >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Leaves Remaining</div>
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Total Leave Days Left</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#16a34a' }}>{dashboardSummary.remaining}</div>
         </div>
         <div
@@ -546,11 +546,21 @@ export default function HrLeavesPage() {
             background: colors.background.card,
           }}
         >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Low / Exhausted</div>
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Low Balance / Zero Balance</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: colors.text.primary }}>
             {dashboardSummary.lowBalance} / {dashboardSummary.exhausted}
           </div>
         </div>
+      </div>
+      <div
+        style={{
+          marginTop: -4,
+          marginBottom: 12,
+          fontSize: 12,
+          color: colors.text.secondary,
+        }}
+      >
+        These totals are calculated for the current year and current filters.
       </div>
 
       {/* Table */}
