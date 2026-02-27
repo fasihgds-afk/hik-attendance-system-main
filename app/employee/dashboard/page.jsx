@@ -1153,6 +1153,8 @@ export default function EmployeeDashboardPage() {
     employee?.monthlySalary ??
     session?.user?.monthlySalary ??
     0;
+  const displayNetSalary = myRecord?.netSalary ?? null;
+  const displayDeductDays = myRecord?.salaryDeductDays ?? 0;
 
   const displayBankDetails = employee?.bankDetails || null;
 
@@ -1424,6 +1426,14 @@ export default function EmployeeDashboardPage() {
           .employee-table td {
             padding: 6px 4px !important;
             font-size: 11px !important;
+          }
+        }
+        @media (max-width: 1100px) {
+          .employee-top-row {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .employee-comp-card {
+            grid-column: 1 / -1 !important;
           }
         }
         @media (max-width: 480px) {
@@ -1841,7 +1851,7 @@ export default function EmployeeDashboardPage() {
           className="employee-top-row"
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1.5fr)",
+            gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr)",
             gap: 16,
             marginBottom: 18,
             alignItems: "stretch",
@@ -1896,7 +1906,7 @@ export default function EmployeeDashboardPage() {
                 ✏️
               </button>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div
                   style={{
                     fontSize: 16,
@@ -1920,57 +1930,33 @@ export default function EmployeeDashboardPage() {
                     {empCode || "-"}
                   </strong>
                 </div>
-                <div
-                  className="employee-profile-meta-grid"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "6px 12px",
-                    marginBottom: 8,
-                  }}
-                >
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
-                    Dept:{" "}
-                    <strong style={{ color: colors.text.primary }}>{displayDept}</strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
-                    Shift:{" "}
-                    <strong style={{ color: colors.text.primary }}>{displayShift}</strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
-                    Designation:{" "}
-                    <strong style={{ color: colors.text.primary }}>
-                      {displayDesignation}
-                    </strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
-                    Salary:{" "}
-                    <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
-                  </div>
+              <div
+                className="employee-profile-meta-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "6px 12px",
+                }}
+              >
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  Dept:{" "}
+                  <strong style={{ color: colors.text.primary }}>{displayDept}</strong>
                 </div>
-                <div
-                  style={{
-                    marginTop: 2,
-                    padding: "7px 9px",
-                    borderRadius: 10,
-                    backgroundColor: colors.background.secondary,
-                    border: `1px solid ${colors.border.default}`,
-                  }}
-                >
-                  <div style={{ fontSize: 10, color: colors.text.tertiary, marginBottom: 3 }}>
-                    BANK DETAILS
-                  </div>
-                  <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
-                    {displayBankDetails?.bankName || "-"} ·{" "}
-                    {displayBankDetails?.accountTitle || "-"}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
-                    A/C: <strong style={{ color: colors.text.primary }}>{maskAccountNumber(displayBankDetails?.accountNumber)}</strong>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
-                    IBAN: <strong style={{ color: colors.text.primary }}>{maskIban(displayBankDetails?.iban)}</strong>
-                  </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  Shift:{" "}
+                  <strong style={{ color: colors.text.primary }}>{displayShift}</strong>
                 </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  Designation:{" "}
+                  <strong style={{ color: colors.text.primary }}>
+                    {displayDesignation}
+                  </strong>
+                </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  Salary:{" "}
+                  <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
+                </div>
+              </div>
               {loadingEmployee && (
                 <div
                   style={{
@@ -2090,6 +2076,97 @@ export default function EmployeeDashboardPage() {
                 </div>
               </>
             )}
+          </div>
+
+          {/* COMPENSATION CARD */}
+          <div
+            className="employee-comp-card"
+            style={{
+              borderRadius: 18,
+              padding: "12px 14px",
+              background: colors.gradient.card,
+              border: `1px solid ${colors.border.default}`,
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.1, color: colors.text.tertiary, marginBottom: 8 }}>
+              Compensation & Bank
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 10px", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                Gross: <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                Net: <strong style={{ color: colors.text.primary }}>{displayNetSalary != null ? formatCurrencyPKR(displayNetSalary) : "-"}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                Deduct days: <strong style={{ color: colors.text.primary }}>{formatSalaryDays(displayDeductDays)}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                Slip: <strong style={{ color: colors.text.primary }}>{canViewSalarySlip ? "Available" : "Pending"}</strong>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "7px 9px",
+                borderRadius: 10,
+                backgroundColor: colors.background.secondary,
+                border: `1px solid ${colors.border.default}`,
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontSize: 10, color: colors.text.tertiary, marginBottom: 3 }}>BANK DETAILS</div>
+              <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
+                {displayBankDetails?.bankName || "-"} · {displayBankDetails?.accountTitle || "-"}
+              </div>
+              <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
+                A/C: <strong style={{ color: colors.text.primary }}>{maskAccountNumber(displayBankDetails?.accountNumber)}</strong>
+              </div>
+              <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
+                IBAN: <strong style={{ color: colors.text.primary }}>{maskIban(displayBankDetails?.iban)}</strong>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setShowEditProfile(true)}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.primary[500]}`,
+                  backgroundColor: colors.primary[500],
+                  color: "#ffffff",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Update Bank
+              </button>
+              <button
+                type="button"
+                disabled={!canViewSalarySlip || !myRecord}
+                onClick={() => canViewSalarySlip && myRecord && setShowSalarySlip(true)}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border.default}`,
+                  backgroundColor: canViewSalarySlip && myRecord ? colors.background.tertiary : colors.background.secondary,
+                  color: colors.text.primary,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  cursor: canViewSalarySlip && myRecord ? "pointer" : "not-allowed",
+                  opacity: canViewSalarySlip && myRecord ? 1 : 0.6,
+                }}
+              >
+                Salary Slip
+              </button>
+            </div>
 
           </div>
         </div>
@@ -2208,7 +2285,7 @@ export default function EmployeeDashboardPage() {
                             label="Paid leave left (this quarter)"
                             value={leaveBalance.summary.currentQuarter.remaining ?? leaveBalance.summary.leavesPerQuarter ?? 6}
                             color="#22c55e"
-                            hint={`${leaveBalance.summary.currentQuarter.remaining ?? 0} of ${leaveBalance.summary.currentQuarter.allocated ?? 6} · no carry-forward`}
+                            hint={`${leaveBalance.summary.currentQuarter.remaining ?? 0} of ${leaveBalance.summary.currentQuarter.allocated ?? 6} `}
                           />
                         </>
                       ) : leaveBalance.summary?.quarters?.length > 0 ? (
