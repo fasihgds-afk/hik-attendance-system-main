@@ -14,6 +14,8 @@ export default function EmployeeDirectoryPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedDepartment, setSelectedDepartment] = useState('ALL');
+  const [collapsedDepartments, setCollapsedDepartments] = useState({});
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -65,6 +67,54 @@ export default function EmployeeDirectoryPage() {
     () => new Set(rows.map((employee) => employee.department || 'Unassigned')).size,
     [rows]
   );
+
+  const rowsByDepartment = useMemo(() => {
+    const grouped = rows.reduce((acc, employee) => {
+      const departmentName = employee.department || 'Unassigned';
+      if (!acc[departmentName]) acc[departmentName] = [];
+      acc[departmentName].push(employee);
+      return acc;
+    }, {});
+
+    return Object.keys(grouped)
+      .sort((a, b) => a.localeCompare(b))
+      .map((departmentName) => ({
+        departmentName,
+        employees: grouped[departmentName].slice().sort((a, b) => {
+          return String(a.empCode || '').localeCompare(String(b.empCode || ''));
+        }),
+      }));
+  }, [rows]);
+
+  useEffect(() => {
+    setCollapsedDepartments((prev) => {
+      const next = {};
+      rowsByDepartment.forEach((group) => {
+        next[group.departmentName] = prev[group.departmentName] ?? false;
+      });
+      return next;
+    });
+  }, [rowsByDepartment]);
+
+  const filteredDepartmentGroups = useMemo(() => {
+    if (selectedDepartment === 'ALL') return rowsByDepartment;
+    return rowsByDepartment.filter((group) => group.departmentName === selectedDepartment);
+  }, [rowsByDepartment, selectedDepartment]);
+
+  function toggleDepartment(departmentName) {
+    setCollapsedDepartments((prev) => ({
+      ...prev,
+      [departmentName]: !prev[departmentName],
+    }));
+  }
+
+  function setAllDepartmentsCollapsed(isCollapsed) {
+    const next = {};
+    rowsByDepartment.forEach((group) => {
+      next[group.departmentName] = isCollapsed;
+    });
+    setCollapsedDepartments(next);
+  }
 
   return (
     <div
@@ -175,6 +225,87 @@ export default function EmployeeDirectoryPage() {
             />
           </div>
 
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setSelectedDepartment('ALL')}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 999,
+                border: `1px solid ${selectedDepartment === 'ALL' ? colors.primary[500] : colors.border.default}`,
+                backgroundColor:
+                  selectedDepartment === 'ALL' ? colors.background.secondary : colors.background.card,
+                color: colors.text.primary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              All Departments
+            </button>
+            {rowsByDepartment.map((group) => (
+              <button
+                key={`chip-${group.departmentName}`}
+                type="button"
+                onClick={() => setSelectedDepartment(group.departmentName)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  border: `1px solid ${
+                    selectedDepartment === group.departmentName
+                      ? colors.primary[500]
+                      : colors.border.default
+                  }`,
+                  backgroundColor:
+                    selectedDepartment === group.departmentName
+                      ? colors.background.secondary
+                      : colors.background.card,
+                  color: colors.text.primary,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                {group.departmentName} ({group.employees.length})
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => setAllDepartmentsCollapsed(false)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border.default}`,
+                backgroundColor: colors.background.secondary,
+                color: colors.text.primary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Expand All
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllDepartmentsCollapsed(true)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border.default}`,
+                backgroundColor: colors.background.secondary,
+                color: colors.text.primary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Collapse All
+            </button>
+          </div>
+
           <div style={{ width: '100%', overflowX: 'auto' }}>
             <table
               style={{
@@ -238,26 +369,61 @@ export default function EmployeeDirectoryPage() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((employee, index) => (
-                    <tr
-                      key={employee._id || `${employee.empCode}-${index}`}
-                      style={{
-                        backgroundColor:
-                          index % 2 === 0
-                            ? colors.background.table.row
-                            : colors.background.table.rowEven,
-                      }}
-                    >
-                      <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.empCode || '-'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 600 }}>
-                        {employee.name || '-'}
+                  filteredDepartmentGroups.flatMap((group) => [
+                    <tr key={`group-${group.departmentName}`}>
+                      <td
+                        colSpan={6}
+                        style={{
+                          padding: '10px 12px',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: colors.text.primary,
+                          backgroundColor: colors.background.table.header,
+                          borderTop: `1px solid ${colors.border.table}`,
+                          borderBottom: `1px solid ${colors.border.table}`,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleDepartment(group.departmentName)}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: colors.text.primary,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                        >
+                          {collapsedDepartments[group.departmentName] ? '▶' : '▼'} {group.departmentName} (
+                          {group.employees.length})
+                        </button>
                       </td>
-                      <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.department || '-'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.designation || '-'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.shift || '-'}</td>
-                      <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.email || '-'}</td>
-                    </tr>
-                  ))
+                    </tr>,
+                    ...(collapsedDepartments[group.departmentName]
+                      ? []
+                      : group.employees.map((employee, index) => (
+                          <tr
+                            key={employee._id || `${group.departmentName}-${employee.empCode}-${index}`}
+                            style={{
+                              backgroundColor:
+                                index % 2 === 0
+                                  ? colors.background.table.row
+                                  : colors.background.table.rowEven,
+                            }}
+                          >
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.empCode || '-'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 600 }}>
+                              {employee.name || '-'}
+                            </td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.department || '-'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.designation || '-'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.shift || '-'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.email || '-'}</td>
+                          </tr>
+                        ))),
+                  ])
                 )}
               </tbody>
             </table>
