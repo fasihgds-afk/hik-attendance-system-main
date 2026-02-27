@@ -838,30 +838,30 @@ function SummaryItem({ label, value, color, hint }) {
   return (
     <div
       style={{
-        borderRadius: 14,
-        padding: "10px 12px",
+        borderRadius: 12,
+        padding: "8px 10px",
         backgroundColor: colors.background.card,
         border: `1px solid ${colors.border.default}`,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
-        gap: 4,
-        minHeight: 72,
+        justifyContent: "center",
+        gap: 2,
+        minHeight: 62,
       }}
     >
       <div
         style={{
-          fontSize: 11,
+          fontSize: 10,
           color: colors.text.tertiary,
           textTransform: "uppercase",
-          letterSpacing: 0.8,
+          letterSpacing: 0.6,
         }}
       >
         {label}
       </div>
       <div
         style={{
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: 800,
           color: color || colors.text.primary,
         }}
@@ -871,7 +871,7 @@ function SummaryItem({ label, value, color, hint }) {
       {hint && (
         <div
           style={{
-            fontSize: 10,
+            fontSize: 9,
             color: "#6b7280",
           }}
         >
@@ -1398,6 +1398,9 @@ export default function EmployeeDashboardPage() {
             align-items: center !important;
             text-align: center !important;
           }
+          .employee-profile-meta-grid {
+            grid-template-columns: 1fr !important;
+          }
           .employee-profile-avatar {
             margin-bottom: 12px !important;
           }
@@ -1431,7 +1434,7 @@ export default function EmployeeDashboardPage() {
             font-size: 16px !important;
           }
           .employee-main-card {
-            padding: 12px !important;
+            padding: 10px !important;
           }
           .employee-summary-grid {
             grid-template-columns: 1fr !important;
@@ -1841,6 +1844,7 @@ export default function EmployeeDashboardPage() {
             gridTemplateColumns: "minmax(0, 1.7fr) minmax(0, 1.5fr)",
             gap: 16,
             marginBottom: 18,
+            alignItems: "stretch",
           }}
         >
           {/* PROFILE CARD */}
@@ -1848,15 +1852,16 @@ export default function EmployeeDashboardPage() {
             className="employee-profile-card"
               style={{
                 borderRadius: 18,
-                padding: "14px 16px",
+                padding: "12px 14px",
                 background: colors.gradient.card,
                 border: `1px solid ${colors.border.default}`,
                 display: "flex",
-                gap: 14,
+                gap: 12,
+                height: "100%",
               }}
             >
             <div className="employee-profile-avatar" style={{ flexShrink: 0, position: 'relative' }}>
-              {renderEmployeeAvatar(avatarSource, 88)}
+              {renderEmployeeAvatar(avatarSource, 78)}
               <button
                 type="button"
                 onClick={() => setShowEditProfile(true)}
@@ -1894,9 +1899,9 @@ export default function EmployeeDashboardPage() {
             <div style={{ flex: 1 }}>
               <div
                   style={{
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: 800,
-                    marginBottom: 4,
+                    marginBottom: 2,
                     letterSpacing: 0.3,
                     color: colors.text.primary,
                   }}
@@ -1905,9 +1910,9 @@ export default function EmployeeDashboardPage() {
                 </div>
                 <div
                   style={{
-                    fontSize: 12.5,
+                    fontSize: 12,
                     color: colors.text.secondary,
-                    marginBottom: 6,
+                    marginBottom: 8,
                   }}
                 >
                   Emp Code:{" "}
@@ -1915,44 +1920,54 @@ export default function EmployeeDashboardPage() {
                     {empCode || "-"}
                   </strong>
                 </div>
-                <div style={{ fontSize: 12.5, color: colors.text.secondary }}>
-                  Dept:{" "}
-                  <strong style={{ color: colors.text.primary }}>{displayDept}</strong>
-                </div>
-                <div style={{ fontSize: 12.5, color: colors.text.secondary }}>
-                  Designation:{" "}
-                  <strong style={{ color: colors.text.primary }}>
-                    {displayDesignation}
-                  </strong>
-                </div>
-                <div style={{ fontSize: 12.5, color: colors.text.secondary }}>
-                  Shift:{" "}
-                  <strong style={{ color: colors.text.primary }}>{displayShift}</strong>
-                </div>
-                <div style={{ fontSize: 12.5, color: colors.text.secondary, marginTop: 2 }}>
-                  Salary:{" "}
-                  <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
+                <div
+                  className="employee-profile-meta-grid"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "6px 12px",
+                    marginBottom: 8,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    Dept:{" "}
+                    <strong style={{ color: colors.text.primary }}>{displayDept}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    Shift:{" "}
+                    <strong style={{ color: colors.text.primary }}>{displayShift}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    Designation:{" "}
+                    <strong style={{ color: colors.text.primary }}>
+                      {displayDesignation}
+                    </strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    Salary:{" "}
+                    <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
+                  </div>
                 </div>
                 <div
                   style={{
-                    marginTop: 10,
-                    padding: "8px 10px",
+                    marginTop: 2,
+                    padding: "7px 9px",
                     borderRadius: 10,
                     backgroundColor: colors.background.secondary,
                     border: `1px solid ${colors.border.default}`,
                   }}
                 >
-                  <div style={{ fontSize: 11, color: colors.text.tertiary, marginBottom: 4 }}>
+                  <div style={{ fontSize: 10, color: colors.text.tertiary, marginBottom: 3 }}>
                     BANK DETAILS
                   </div>
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
                     {displayBankDetails?.bankName || "-"} ·{" "}
                     {displayBankDetails?.accountTitle || "-"}
                   </div>
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
                     A/C: <strong style={{ color: colors.text.primary }}>{maskAccountNumber(displayBankDetails?.accountNumber)}</strong>
                   </div>
-                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                  <div style={{ fontSize: 11.5, color: colors.text.secondary }}>
                     IBAN: <strong style={{ color: colors.text.primary }}>{maskIban(displayBankDetails?.iban)}</strong>
                   </div>
                 </div>
@@ -1974,40 +1989,44 @@ export default function EmployeeDashboardPage() {
           <div
               style={{
                 borderRadius: 18,
-                padding: "14px 16px",
+                padding: "12px 14px",
                 background: theme === 'dark' 
                   ? `linear-gradient(135deg, ${colors.primary[700]}, ${colors.success}, ${colors.primary[800]})`
                   : `linear-gradient(135deg, ${colors.primary[600]}, ${colors.success}, ${colors.primary[500]})`,
                 border: `1px solid ${colors.success}`,
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
               }}
             >
             <div
               style={{
-                fontSize: 12,
+                fontSize: 11,
                 textTransform: "uppercase",
-                letterSpacing: 1.5,
+                letterSpacing: 1.1,
                 color: "#e5fdf4",
-                marginBottom: 6,
+                marginBottom: 4,
               }}
             >
               Today&apos;s Attendance
             </div>
 
             {loading ? (
-              <div style={{ fontSize: 12.5, color: "#ecfdf5" }}>
+              <div style={{ fontSize: 12, color: "#ecfdf5" }}>
                 Loading latest data…
               </div>
             ) : !todayDayObj ? (
-              <div style={{ fontSize: 12.5, color: "#ecfdf5" }}>
+              <div style={{ fontSize: 12, color: "#ecfdf5" }}>
                 No record found for today yet.
               </div>
             ) : (
               <>
                 <div
                   style={{
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: 800,
-                    marginBottom: 4,
+                    marginBottom: 2,
                     color: "#ffffff",
                   }}
                 >
@@ -2015,18 +2034,18 @@ export default function EmployeeDashboardPage() {
                 </div>
                 <div
                   style={{
-                    fontSize: 12.5,
+                    fontSize: 12,
                     color: "#e5fdf4",
-                    marginBottom: 4,
+                    marginBottom: 2,
                   }}
                 >
                   Date: <strong>{todayDateLabel}</strong>
                 </div>
                 <div
                   style={{
-                    fontSize: 12.5,
+                    fontSize: 12,
                     color: "#e5fdf4",
-                    marginBottom: 4,
+                    marginBottom: 2,
                   }}
                 >
                   In:{" "}
@@ -2042,7 +2061,7 @@ export default function EmployeeDashboardPage() {
                       : "-"}
                   </strong>
                 </div>
-                <div style={{ fontSize: 12.5, color: "#e5fdf4" }}>
+                <div style={{ fontSize: 12, color: "#e5fdf4" }}>
                   Late: <strong>{todayDayObj.late ? "Yes" : "No"}</strong> ·
                   Early Leave:{" "}
                   <strong>{todayDayObj.earlyLeave ? "Yes" : "No"}</strong> ·
@@ -2068,15 +2087,15 @@ export default function EmployeeDashboardPage() {
           <div
               style={{
                 borderRadius: 18,
-                padding: "14px 16px",
+                padding: "12px 14px",
                 background: colors.gradient.card,
                 border: `1px solid ${colors.border.default}`,
               }}
             >
               <div
                 style={{
-                  fontSize: 14.5,
-                  marginBottom: 8,
+                  fontSize: 13.5,
+                  marginBottom: 6,
                   fontWeight: 600,
                   color: colors.text.primary,
                 }}
@@ -2098,7 +2117,7 @@ export default function EmployeeDashboardPage() {
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-                    gap: 8,
+                    gap: 6,
                     fontSize: 12,
                   }}
                 >
@@ -2247,15 +2266,15 @@ export default function EmployeeDashboardPage() {
             <div
                 style={{
                   borderRadius: 18,
-                  padding: "12px 14px",
+                  padding: "10px 12px",
                   background: colors.gradient.card,
                   border: `1px solid ${colors.border.default}`,
                 }}
               >
                 <div
                   style={{
-                    fontSize: 14.5,
-                    marginBottom: 8,
+                    fontSize: 13.5,
+                    marginBottom: 6,
                     fontWeight: 600,
                     color: colors.text.primary,
                   }}
