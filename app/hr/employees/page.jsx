@@ -218,6 +218,10 @@ export default function HrDashboardPage() {
     router.push("/hr/employees/manage");
   }
 
+  function openEmployeesDirectory() {
+    router.push("/hr/employees/directory");
+  }
+
   function openShiftManagement() {
     router.push("/hr/shifts");
   }
@@ -528,6 +532,42 @@ export default function HrDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               Employees
+            </button>
+
+            <button
+              type="button"
+              onClick={openEmployeesDirectory}
+              style={{
+                padding: "10px 18px",
+                borderRadius: 12,
+                border: "1px solid rgba(255, 255, 255, 0.25)",
+                backgroundColor: "rgba(255, 255, 255, 0.15)",
+                color: "#ffffff",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                backdropFilter: "blur(10px)",
+                transition: "all 0.2s",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
+              }}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h10M7 12h10M7 17h7M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
+              </svg>
+              Directory
             </button>
 
             <button
@@ -1440,6 +1480,41 @@ export default function HrDashboardPage() {
                     </svg>
                     Open Manager
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={openEmployeesDirectory}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border.default}`,
+                      background: colors.background.card,
+                      color: colors.text.primary,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      justifyContent: "center",
+                      flex: "1 1 auto",
+                      whiteSpace: "nowrap",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.borderColor = colors.primary[500];
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.borderColor = colors.border.default;
+                    }}
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h10" />
+                    </svg>
+                    View Directory
+                  </button>
                 </div>
               </div>
 
@@ -1868,63 +1943,103 @@ export default function HrDashboardPage() {
 
             <div
               style={{
-                borderRadius: 16,
-                padding: "16px 18px",
-                background:
-                  "radial-gradient(circle at top, #020617, #020617)",
-                border: "1px solid rgba(37,99,235,0.85)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: 14,
               }}
             >
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                Employee Shift Management
-              </div>
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>
-                Same screen as your old <strong>EmployeeShiftPage</strong>: add
-                employees, edit details, change shifts and upload profile
-                photos.
-              </div>
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                  background: "radial-gradient(circle at top, #020617, #020617)",
+                  border: "1px solid rgba(37,99,235,0.85)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  Employee Shift Management
+                </div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                  Add employees, edit full profiles, shift assignments, salary details, and secure bank details.
+                </div>
 
-              <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
-                {isAdmin && (
+                <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={openRegisterModal}
+                      style={{
+                        padding: "8px 16px",
+                        borderRadius: 999,
+                        border: "none",
+                        background: "linear-gradient(135deg,#f97316,#fb7185)",
+                        color: "#111827",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      + Register New User
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={openRegisterModal}
+                    onClick={openEmployeesManage}
                     style={{
-                      padding: "8px 16px",
+                      padding: "8px 18px",
                       borderRadius: 999,
                       border: "none",
-                      background:
-                        "linear-gradient(135deg,#f97316,#fb7185)",
-                      color: "#111827",
-                      fontSize: 12,
+                      background: "linear-gradient(135deg,#22c55e,#2dd4bf)",
+                      color: "#022c22",
+                      fontSize: 13,
                       fontWeight: 700,
                       cursor: "pointer",
                     }}
                   >
-                    + Register New User
+                    Open Employee Manager
                   </button>
-                )}
+                </div>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={openEmployeesManage}
-                  style={{
-                    padding: "8px 18px",
-                    borderRadius: 999,
-                    border: "none",
-                    background:
-                      "linear-gradient(135deg,#22c55e,#2dd4bf)",
-                    color: "#022c22",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Open Employee Manager
-                </button>
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                  background: "radial-gradient(circle at top, #0b1a33, #020617)",
+                  border: "1px solid rgba(16,185,129,0.65)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  Employee Directory (Read-Only)
+                </div>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                  Fast lookup page for HR with basic employee information only. No edit controls, cleaner for quick checks.
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  <button
+                    type="button"
+                    onClick={openEmployeesDirectory}
+                    style={{
+                      padding: "8px 18px",
+                      borderRadius: 999,
+                      border: "none",
+                      background: "linear-gradient(135deg,#10b981,#34d399)",
+                      color: "#022c22",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Open Directory
+                  </button>
+                </div>
               </div>
             </div>
           </div>
