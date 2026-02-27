@@ -35,6 +35,7 @@ export default function HrLeavesPage() {
   const [leavesPerQuarter, setLeavesPerQuarter] = useState(6);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [balanceFilter, setBalanceFilter] = useState('all'); // all | low | exhausted | none_taken
   const [showMarkLeaveModal, setShowMarkLeaveModal] = useState(false);
   const [markLeaveData, setMarkLeaveData] = useState({
     empCode: '',
@@ -151,12 +152,156 @@ export default function HrLeavesPage() {
   // Filter leaves based on search query (quarter-based: paidLeaves have q1,q2,q3,q4)
   const filteredLeaves = paidLeaves.filter((leave) => {
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = (
       leave.empCode?.toLowerCase().includes(query) ||
       leave.employeeName?.toLowerCase().includes(query) ||
       leave.department?.toLowerCase().includes(query)
     );
+
+    if (!matchesSearch) return false;
+
+    const totalAllocated =
+      (leave.q1?.allocated || leavesPerQuarter) +
+      (leave.q2?.allocated || leavesPerQuarter) +
+      (leave.q3?.allocated || leavesPerQuarter) +
+      (leave.q4?.allocated || leavesPerQuarter);
+    const totalTaken =
+      (leave.q1?.taken || 0) +
+      (leave.q2?.taken || 0) +
+      (leave.q3?.taken || 0) +
+      (leave.q4?.taken || 0);
+    const totalRemaining = Math.max(0, totalAllocated - totalTaken);
+
+    if (balanceFilter === 'low') return totalRemaining > 0 && totalRemaining <= 2;
+    if (balanceFilter === 'exhausted') return totalRemaining === 0;
+    if (balanceFilter === 'none_taken') return totalTaken === 0;
+    return true;
   });
+
+  const dashboardSummary = filteredLeaves.reduce(
+    (acc, leave) => {
+      const totalAllocated =
+        (leave.q1?.allocated || leavesPerQuarter) +
+        (leave.q2?.allocated || leavesPerQuarter) +
+        (leave.q3?.allocated || leavesPerQuarter) +
+        (leave.q4?.allocated || leavesPerQuarter);
+      const totalTaken =
+        (leave.q1?.taken || 0) +
+        (leave.q2?.taken || 0) +
+        (leave.q3?.taken || 0) +
+        (leave.q4?.taken || 0);
+      const totalRemaining = Math.max(0, totalAllocated - totalTaken);
+
+      acc.allocated += totalAllocated;
+      acc.taken += totalTaken;
+      acc.remaining += totalRemaining;
+      if (totalRemaining === 0) acc.exhausted += 1;
+      if (totalRemaining > 0 && totalRemaining <= 2) acc.lowBalance += 1;
+      return acc;
+    },
+    {
+      allocated: 0,
+      taken: 0,
+      remaining: 0,
+      exhausted: 0,
+      lowBalance: 0,
+    }
+  );
+
+  function getQuarterCellStyle(remaining, allocated) {
+    if (allocated <= 0) return { tone: '#64748b', bg: 'rgba(100,116,139,0.12)' };
+    if (remaining <= 0) return { tone: '#dc2626', bg: 'rgba(220,38,38,0.12)' };
+    if (remaining <= 1) return { tone: '#d97706', bg: 'rgba(217,119,6,0.12)' };
+    return { tone: '#16a34a', bg: 'rgba(22,163,74,0.12)' };
+  }
+
+  function QuarterUsageCell({ leave, quarter, quarterLabel }) {
+    const quarterData = leave[quarter] || {
+      taken: 0,
+      allocated: leavesPerQuarter,
+      remaining: leavesPerQuarter,
+      dates: [],
+    };
+
+    const taken = quarterData.taken || 0;
+    const allocated = quarterData.allocated || leavesPerQuarter;
+    const remaining = Math.max(0, quarterData.remaining ?? allocated - taken);
+    const progress = allocated > 0 ? Math.min(100, Math.round((taken / allocated) * 100)) : 0;
+    const styleToken = getQuarterCellStyle(remaining, allocated);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600 }}>
+            {taken} / {allocated}
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: styleToken.tone,
+              background: styleToken.bg,
+              border: `1px solid ${styleToken.tone}55`,
+              borderRadius: 999,
+              padding: '2px 8px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {remaining} left
+          </span>
+        </div>
+
+        <div
+          style={{
+            width: '100%',
+            height: 7,
+            borderRadius: 999,
+            overflow: 'hidden',
+            background: colors.background.input,
+            border: `1px solid ${colors.border.default}`,
+          }}
+        >
+          <div
+            style={{
+              width: `${progress}%`,
+              height: '100%',
+              background: styleToken.tone,
+              transition: 'width 200ms ease',
+            }}
+          />
+        </div>
+
+        {(quarterData.dates?.length || 0) > 0 ? (
+          <button
+            type="button"
+            onClick={() =>
+              setViewDatesFor({
+                empCode: leave.empCode,
+                employeeName: leave.employeeName,
+                quarter: Number(quarter.replace('q', '')),
+                quarterLabel,
+                dates: quarterData.dates || [],
+              })
+            }
+            style={{
+              width: 'fit-content',
+              fontSize: 11,
+              color: colors.primary,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+            }}
+          >
+            View dates
+          </button>
+        ) : (
+          <span style={{ fontSize: 11, color: colors.text.tertiary }}>No dates</span>
+        )}
+      </div>
+    );
+  }
 
   // Table styles
   const thStyle = {
@@ -300,6 +445,39 @@ export default function HrLeavesPage() {
               minWidth: 300,
             }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'low', label: 'Low Balance' },
+              { id: 'exhausted', label: 'Exhausted' },
+              { id: 'none_taken', label: 'No Leave Taken' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setBalanceFilter(item.id)}
+                style={{
+                  padding: '7px 11px',
+                  borderRadius: 999,
+                  border: `1px solid ${
+                    balanceFilter === item.id ? colors.primary : colors.border.default
+                  }`,
+                  background:
+                    balanceFilter === item.id
+                      ? theme === 'dark'
+                        ? 'rgba(59,130,246,0.2)'
+                        : 'rgba(59,130,246,0.12)'
+                      : colors.background.input,
+                  color: balanceFilter === item.id ? colors.primary : colors.text.secondary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           onClick={() => setShowMarkLeaveModal(true)}
@@ -316,6 +494,63 @@ export default function HrLeavesPage() {
         >
           + Mark Leave
         </button>
+      </div>
+
+      {/* Leave Summary Cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: `1px solid ${colors.border.default}`,
+            background: colors.background.card,
+          }}
+        >
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Employees Shown</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: colors.text.primary }}>{filteredLeaves.length}</div>
+        </div>
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: `1px solid ${colors.border.default}`,
+            background: colors.background.card,
+          }}
+        >
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Leaves Taken</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#dc2626' }}>{dashboardSummary.taken}</div>
+        </div>
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: `1px solid ${colors.border.default}`,
+            background: colors.background.card,
+          }}
+        >
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Leaves Remaining</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#16a34a' }}>{dashboardSummary.remaining}</div>
+        </div>
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: `1px solid ${colors.border.default}`,
+            background: colors.background.card,
+          }}
+        >
+          <div style={{ fontSize: 11, color: colors.text.secondary }}>Low / Exhausted</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: colors.text.primary }}>
+            {dashboardSummary.lowBalance} / {dashboardSummary.exhausted}
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -365,68 +600,16 @@ export default function HrLeavesPage() {
                   <td style={tdStyle}>{leave.employeeName || '-'}</td>
                   <td style={tdStyle}>{leave.department || '-'}</td>
                   <td style={tdStyle}>
-                    {leave.q1 ? (
-                      <span>
-                        {leave.q1.taken} / {leave.q1.allocated}
-                        {(leave.q1.dates?.length || 0) > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setViewDatesFor({ empCode: leave.empCode, employeeName: leave.employeeName, quarter: 1, quarterLabel: 'Q1 (Jan–Mar)', dates: leave.q1.dates || [] })}
-                            style={{ marginLeft: 6, fontSize: 11, color: colors.primary, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            View
-                          </button>
-                        )}
-                      </span>
-                    ) : `0 / ${leavesPerQuarter}`}
+                    <QuarterUsageCell leave={leave} quarter="q1" quarterLabel="Q1 (Jan–Mar)" />
                   </td>
                   <td style={tdStyle}>
-                    {leave.q2 ? (
-                      <span>
-                        {leave.q2.taken} / {leave.q2.allocated}
-                        {(leave.q2.dates?.length || 0) > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setViewDatesFor({ empCode: leave.empCode, employeeName: leave.employeeName, quarter: 2, quarterLabel: 'Q2 (Apr–Jun)', dates: leave.q2.dates || [] })}
-                            style={{ marginLeft: 6, fontSize: 11, color: colors.primary, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            View
-                          </button>
-                        )}
-                      </span>
-                    ) : `0 / ${leavesPerQuarter}`}
+                    <QuarterUsageCell leave={leave} quarter="q2" quarterLabel="Q2 (Apr–Jun)" />
                   </td>
                   <td style={tdStyle}>
-                    {leave.q3 ? (
-                      <span>
-                        {leave.q3.taken} / {leave.q3.allocated}
-                        {(leave.q3.dates?.length || 0) > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setViewDatesFor({ empCode: leave.empCode, employeeName: leave.employeeName, quarter: 3, quarterLabel: 'Q3 (Jul–Sep)', dates: leave.q3.dates || [] })}
-                            style={{ marginLeft: 6, fontSize: 11, color: colors.primary, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            View
-                          </button>
-                        )}
-                      </span>
-                    ) : `0 / ${leavesPerQuarter}`}
+                    <QuarterUsageCell leave={leave} quarter="q3" quarterLabel="Q3 (Jul–Sep)" />
                   </td>
                   <td style={tdStyle}>
-                    {leave.q4 ? (
-                      <span>
-                        {leave.q4.taken} / {leave.q4.allocated}
-                        {(leave.q4.dates?.length || 0) > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setViewDatesFor({ empCode: leave.empCode, employeeName: leave.employeeName, quarter: 4, quarterLabel: 'Q4 (Oct–Dec)', dates: leave.q4.dates || [] })}
-                            style={{ marginLeft: 6, fontSize: 11, color: colors.primary, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                          >
-                            View
-                          </button>
-                        )}
-                      </span>
-                    ) : `0 / ${leavesPerQuarter}`}
+                    <QuarterUsageCell leave={leave} quarter="q4" quarterLabel="Q4 (Oct–Dec)" />
                   </td>
                   <td style={tdStyle}>
                     <button
