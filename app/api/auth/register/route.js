@@ -58,7 +58,10 @@ export async function POST(req) {
         throw new ValidationError('empCode is required for EMPLOYEE role');
       }
 
-      employeeDoc = await Employee.findOne({ empCode }).lean();
+      employeeDoc = await Employee.findOne({ empCode })
+        .select('empCode')
+        .lean()
+        .maxTimeMS(1500);
       if (!employeeDoc) {
         throw new NotFoundError(`Employee with empCode ${empCode}`);
       }

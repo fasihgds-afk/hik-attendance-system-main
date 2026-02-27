@@ -23,7 +23,14 @@ export const authOptions = {
       },
       async authorize(credentials) {
         const startTime = Date.now();
-        
+        const { mode, email, password, empCode } = credentials || {};
+
+        // Fail fast for malformed requests before DB work.
+        if (!mode) return null;
+        if (mode === 'HR' && (!email || !password)) return null;
+        if (mode === 'EMPLOYEE' && !empCode) return null;
+        if (mode !== 'HR' && mode !== 'EMPLOYEE') return null;
+
         try {
           // OPTIMIZATION: Fast connection check - connectDB() now has fast path for existing connections
           await connectDB();
@@ -32,12 +39,8 @@ export const authOptions = {
           return null;
         }
 
-        const { mode, email, password, empCode } = credentials;
-
         // ---------- HR / ADMIN LOGIN ----------
         if (mode === "HR") {
-          if (!email || !password) return null;
-
           try {
             // Optimize: Use lean() and select only needed fields for faster query
             // Email is indexed, so this should be fast
@@ -78,8 +81,6 @@ export const authOptions = {
 
         // ---------- EMPLOYEE LOGIN (empCode only) ----------
         if (mode === "EMPLOYEE") {
-          if (!empCode) return null;
-
           try {
             // Optimize: Use lean() and select only needed fields
             // empCode is indexed, so this should be fast

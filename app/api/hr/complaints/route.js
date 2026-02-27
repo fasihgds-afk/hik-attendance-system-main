@@ -10,6 +10,11 @@ export const dynamic = 'force-dynamic';
 
 const VALID_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
 const VALID_CATEGORIES = ['salary_increment', 'leave', 'attendance', 'work_environment', 'hr_policy', 'other'];
+const EMP_CODE_ONLY_REGEX = /^\d+$/;
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // GET /api/hr/complaints?status=...&search=...&period=all|week|month
 // period: all = all time, week = last 7 days, month = last 30 days. Results sorted latest first.
@@ -26,13 +31,19 @@ export async function GET(req) {
     if (status && VALID_STATUSES.includes(status)) filter.status = status;
     if (category && VALID_CATEGORIES.includes(category)) filter.category = category;
     if (search) {
-      filter.$or = [
-        { empCode: new RegExp(search, 'i') },
-        { employeeName: new RegExp(search, 'i') },
-        { department: new RegExp(search, 'i') },
-        { designation: new RegExp(search, 'i') },
-        { subject: new RegExp(search, 'i') },
-      ];
+      const safeSearch = escapeRegex(search);
+      if (EMP_CODE_ONLY_REGEX.test(search)) {
+        // Prefer exact/indexed lookup when searching by employee code.
+        filter.empCode = search;
+      } else {
+        filter.$or = [
+          { empCode: new RegExp(`^${safeSearch}`, 'i') },
+          { employeeName: new RegExp(safeSearch, 'i') },
+          { department: new RegExp(safeSearch, 'i') },
+          { designation: new RegExp(safeSearch, 'i') },
+          { subject: new RegExp(safeSearch, 'i') },
+        ];
+      }
     }
 
     if (period === 'week' || period === 'month') {

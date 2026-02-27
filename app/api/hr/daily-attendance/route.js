@@ -2,7 +2,6 @@
 // Punch-based: first punch = check-in, last punch = check-out. Aggregation for efficiency.
 // Preserves paid leave and manual attendance edits.
 
-import mongoose from 'mongoose';
 import { connectDB } from '../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -222,14 +221,8 @@ export async function POST(req) {
     });
 
     if (bulkOps.length > 0) {
-      const session = await mongoose.startSession();
-      try {
-        await session.withTransaction(async () => {
-          await ShiftAttendance.bulkWrite(bulkOps, { ordered: false, maxTimeMS: 5000, session });
-        });
-      } finally {
-        await session.endSession();
-      }
+      // Single-collection bulk write does not need a transaction; avoiding it reduces latency.
+      await ShiftAttendance.bulkWrite(bulkOps, { ordered: false, maxTimeMS: 5000 });
     }
 
     const shiftOrder = new Map();

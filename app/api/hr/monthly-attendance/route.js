@@ -542,13 +542,20 @@ export async function GET(req) {
 
     // PERFORMANCE: Pre-calculate weekend flags for all days to avoid repeated calculations
     const weekendFlags = new Map();
+    const firstFourSaturdays = [];
+    let saturdayCounter = 0;
     for (let day = 1; day <= daysInMonth; day++) {
       const { dow } = getCompanyLocalDateParts(year, monthIndex, day);
+      const isSaturday = dow === 6;
       weekendFlags.set(day, {
         dow,
         isSunday: dow === 0,
-        isSaturday: dow === 6,
+        isSaturday,
       });
+      if (isSaturday && saturdayCounter < 4) {
+        saturdayCounter += 1;
+        firstFourSaturdays.push({ day, saturdayIndex: saturdayCounter });
+      }
     }
 
     const employeesOut = [];
@@ -576,14 +583,11 @@ export async function GET(req) {
       // Group A: works 1st & 3rd (odd), off 2nd & 4th (even)
       // Group B: off 1st & 3rd (odd), works 2nd & 4th (even)
       {
-        let satNum = 0;
         let oddPunches = 0, evenPunches = 0;
         let oddNoPunch = 0, evenNoPunch = 0;
-        for (let d = 1; d <= daysInMonth; d++) {
-          const wf = weekendFlags.get(d);
-          if (!wf || !wf.isSaturday) continue;
-          satNum++;
-          if (satNum > 4) continue;
+        for (const sat of firstFourSaturdays) {
+          const d = sat.day;
+          const satNum = sat.saturdayIndex;
           // Skip future days — no data to detect from
           if (monthRelation > 0 || (monthRelation === 0 && d > companyToday.day)) continue;
           const dk = `${emp.empCode}|${monthPrefix}-${String(d).padStart(2, '0')}`;

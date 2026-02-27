@@ -25,6 +25,9 @@ AttendanceEventSchema.index({ eventTime: 1, minor: 1, empCode: 1 });
 // Index for single employee queries (empCode + eventTime range)
 AttendanceEventSchema.index({ empCode: 1, eventTime: 1 });
 
+// Index for employee + minor + date-range lookups used by attendance endpoints.
+AttendanceEventSchema.index({ empCode: 1, minor: 1, eventTime: 1 });
+
 // Index for eventTime range queries (for daily attendance)
 AttendanceEventSchema.index({ eventTime: 1, minor: 1 });
 

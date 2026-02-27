@@ -24,7 +24,10 @@ export async function GET(req) {
       );
     }
 
-    const employee = await Employee.findOne({ empCode }).lean();
+    const employee = await Employee.findOne({ empCode })
+      .select('empCode shift shiftId')
+      .lean()
+      .maxTimeMS(2000);
     if (!employee) {
       return NextResponse.json(
         { error: 'Employee not found' },
@@ -40,10 +43,11 @@ export async function GET(req) {
         $or: [{ endDate: null }, { endDate: { $gte: date } }],
       })
         .sort({ effectiveDate: -1 })
-        .lean();
+        .lean()
+        .maxTimeMS(2000);
 
       if (history) {
-        const shift = await Shift.findById(history.shiftId).lean();
+        const shift = await Shift.findById(history.shiftId).lean().maxTimeMS(1500);
         return NextResponse.json({
           shift,
           shiftCode: history.shiftCode,
@@ -55,25 +59,34 @@ export async function GET(req) {
     // If no date provided, return all shift history for this employee
     const history = await EmployeeShiftHistory.find({ empCode })
       .sort({ effectiveDate: -1 })
-      .lean();
+      .lean()
+      .maxTimeMS(2500);
 
-    // Populate shift details
-    const historyWithShifts = await Promise.all(
-      history.map(async (h) => {
-        const shift = h.shiftId ? await Shift.findById(h.shiftId).lean() : null;
-        return {
-          ...h,
-          shift,
-        };
-      })
+    // Populate shift details with a single batch query (avoids N+1 queries).
+    const shiftIds = Array.from(
+      new Set(
+        history
+          .map((h) => (h.shiftId ? String(h.shiftId) : null))
+          .filter(Boolean)
+      )
     );
+    const shifts = shiftIds.length
+      ? await Shift.find({ _id: { $in: shiftIds } }).lean().maxTimeMS(2500)
+      : [];
+    const shiftMap = new Map(shifts.map((s) => [String(s._id), s]));
+    const historyWithShifts = history.map((h) => ({
+      ...h,
+      shift: h.shiftId ? shiftMap.get(String(h.shiftId)) || null : null,
+    }));
 
     // Also get current shift
     let currentShift = null;
     if (employee.shiftId) {
-      currentShift = await Shift.findById(employee.shiftId).lean();
+      currentShift = await Shift.findById(employee.shiftId).lean().maxTimeMS(1500);
     } else if (employee.shift) {
-      currentShift = await Shift.findOne({ code: employee.shift, isActive: true }).lean();
+      currentShift = await Shift.findOne({ code: employee.shift, isActive: true })
+        .lean()
+        .maxTimeMS(1500);
     }
 
     return NextResponse.json({
