@@ -15,6 +15,12 @@ export default function EmployeeProfileEdit({ employee, onSave, onCancel, loadin
     name: '',
     phoneNumber: '',
     email: '',
+    bankDetails: {
+      bankName: '',
+      accountTitle: '',
+      accountNumber: '',
+      iban: '',
+    },
     profileImageBase64: null,
     profileImageUrl: null,
   });
@@ -29,6 +35,12 @@ export default function EmployeeProfileEdit({ employee, onSave, onCancel, loadin
         name: employee.name || '',
         phoneNumber: employee.phoneNumber || '',
         email: employee.email || '',
+        bankDetails: {
+          bankName: employee?.bankDetails?.bankName || '',
+          accountTitle: employee?.bankDetails?.accountTitle || '',
+          accountNumber: employee?.bankDetails?.accountNumber || '',
+          iban: employee?.bankDetails?.iban || '',
+        },
         profileImageBase64: employee.profileImageBase64 || null,
         profileImageUrl: employee.profileImageUrl || null,
       });
@@ -132,6 +144,15 @@ export default function EmployeeProfileEdit({ employee, onSave, onCancel, loadin
       }
     }
 
+    const iban = formData?.bankDetails?.iban?.trim() || '';
+    if (iban.length > 0) {
+      const normalizedIban = iban.replace(/\s+/g, '').toUpperCase();
+      const ibanRegex = /^[A-Z]{2}[A-Z0-9]{13,32}$/;
+      if (!ibanRegex.test(normalizedIban)) {
+        newErrors.iban = 'Please enter a valid IBAN';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -149,6 +170,12 @@ export default function EmployeeProfileEdit({ employee, onSave, onCancel, loadin
       name: formData.name.trim(),
       email: formData.email.trim() || undefined,
       phoneNumber: formData.phoneNumber.trim() || undefined,
+      bankDetails: {
+        bankName: formData?.bankDetails?.bankName?.trim() || '',
+        accountTitle: formData?.bankDetails?.accountTitle?.trim() || '',
+        accountNumber: formData?.bankDetails?.accountNumber?.trim() || '',
+        iban: formData?.bankDetails?.iban?.replace(/\s+/g, '').toUpperCase() || '',
+      },
     });
   };
 
@@ -206,7 +233,7 @@ export default function EmployeeProfileEdit({ employee, onSave, onCancel, loadin
             marginTop: 4,
             margin: 0,
           }}>
-            Update your personal information
+            Update your personal and bank information
           </p>
         </div>
 
@@ -373,6 +400,68 @@ export default function EmployeeProfileEdit({ employee, onSave, onCancel, loadin
               }}
             />
             {errors.phoneNumber && <div style={errorStyle}>{errors.phoneNumber}</div>}
+          </div>
+
+          {/* Bank Details */}
+          <div style={{ paddingTop: 6 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: colors.text.primary,
+                marginBottom: 10,
+                textTransform: 'uppercase',
+                letterSpacing: 0.7,
+              }}
+            >
+              Bank Details
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Bank Name</label>
+                <input
+                  type="text"
+                  value={formData?.bankDetails?.bankName || ''}
+                  onChange={(e) => handleInputChange('bankDetails', { ...(formData.bankDetails || {}), bankName: e.target.value })}
+                  placeholder="e.g. HBL"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Account Title</label>
+                <input
+                  type="text"
+                  value={formData?.bankDetails?.accountTitle || ''}
+                  onChange={(e) => handleInputChange('bankDetails', { ...(formData.bankDetails || {}), accountTitle: e.target.value })}
+                  placeholder="Account holder name"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Account Number</label>
+                <input
+                  type="text"
+                  value={formData?.bankDetails?.accountNumber || ''}
+                  onChange={(e) => handleInputChange('bankDetails', { ...(formData.bankDetails || {}), accountNumber: e.target.value })}
+                  placeholder="Account number"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>IBAN</label>
+                <input
+                  type="text"
+                  value={formData?.bankDetails?.iban || ''}
+                  onChange={(e) => handleInputChange('bankDetails', { ...(formData.bankDetails || {}), iban: e.target.value })}
+                  placeholder="PKXX..."
+                  style={{
+                    ...inputStyle,
+                    borderColor: errors.iban ? colors.error : colors.border.input,
+                  }}
+                />
+                {errors.iban && <div style={errorStyle}>{errors.iban}</div>}
+              </div>
+            </div>
           </div>
         </div>
 

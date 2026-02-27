@@ -636,6 +636,30 @@ function formatSalaryDays(value) {
   return num.toFixed(3);
 }
 
+function formatCurrencyPKR(amount) {
+  const value = Number(amount || 0);
+  return new Intl.NumberFormat("en-PK", {
+    style: "currency",
+    currency: "PKR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function maskAccountNumber(accountNumber = "") {
+  const raw = String(accountNumber || "").replace(/\s+/g, "");
+  if (!raw) return "-";
+  if (raw.length <= 4) return raw;
+  return `${"*".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+}
+
+function maskIban(iban = "") {
+  const raw = String(iban || "").replace(/\s+/g, "").toUpperCase();
+  if (!raw) return "-";
+  if (raw.length <= 8) return raw;
+  return `${raw.slice(0, 4)}${"*".repeat(Math.max(0, raw.length - 8))}${raw.slice(-4)}`;
+}
+
 // CLASSIFY CELL LIKE MONTHLY HR COLORS / STATUSES
 function classifyDayForRow(day, colors, theme = 'dark') {
   const base = {
@@ -1054,6 +1078,7 @@ export default function EmployeeDashboardPage() {
           name: formData.name,
           email: formData.email,
           phoneNumber: formData.phoneNumber,
+          bankDetails: formData.bankDetails,
           profileImageBase64: formData.profileImageBase64,
           profileImageUrl: formData.profileImageUrl,
         }),
@@ -1067,7 +1092,8 @@ export default function EmployeeDashboardPage() {
       const data = await res.json();
       
       // Update local employee state
-      setEmployee(data.employee);
+      const updatedEmployee = data?.data?.employee || data?.employee || null;
+      if (updatedEmployee) setEmployee(updatedEmployee);
       
       // Reload employee profile to get updated data
       const profileRes = await fetch(
@@ -1076,8 +1102,9 @@ export default function EmployeeDashboardPage() {
       );
       if (profileRes.ok) {
         const profileData = await profileRes.json();
-        if (profileData.employee) {
-          setEmployee(profileData.employee);
+        const freshEmployee = profileData?.data?.employee || profileData?.employee || null;
+        if (freshEmployee) {
+          setEmployee(freshEmployee);
         }
       }
 
@@ -1120,6 +1147,14 @@ export default function EmployeeDashboardPage() {
 
   const displayShift =
     myRecord?.shift || employee?.shift || session?.user?.shift || "-";
+
+  const displaySalary =
+    myRecord?.monthlySalary ??
+    employee?.monthlySalary ??
+    session?.user?.monthlySalary ??
+    0;
+
+  const displayBankDetails = employee?.bankDetails || null;
 
   const avatarSource = {
     name: displayName,
@@ -1893,6 +1928,33 @@ export default function EmployeeDashboardPage() {
                 <div style={{ fontSize: 12.5, color: colors.text.secondary }}>
                   Shift:{" "}
                   <strong style={{ color: colors.text.primary }}>{displayShift}</strong>
+                </div>
+                <div style={{ fontSize: 12.5, color: colors.text.secondary, marginTop: 2 }}>
+                  Salary:{" "}
+                  <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
+                </div>
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    backgroundColor: colors.background.secondary,
+                    border: `1px solid ${colors.border.default}`,
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: colors.text.tertiary, marginBottom: 4 }}>
+                    BANK DETAILS
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    {displayBankDetails?.bankName || "-"} ·{" "}
+                    {displayBankDetails?.accountTitle || "-"}
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    A/C: <strong style={{ color: colors.text.primary }}>{maskAccountNumber(displayBankDetails?.accountNumber)}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: colors.text.secondary }}>
+                    IBAN: <strong style={{ color: colors.text.primary }}>{maskIban(displayBankDetails?.iban)}</strong>
+                  </div>
                 </div>
               {loadingEmployee && (
                 <div
