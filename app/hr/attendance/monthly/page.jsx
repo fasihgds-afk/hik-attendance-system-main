@@ -323,7 +323,6 @@ export default function MonthlyHrPage() {
   );
   const [exportIncludeDays, setExportIncludeDays] = useState(true);
   const [exportIncludeBankDetails, setExportIncludeBankDetails] = useState(false);
-  const [exportMaskBankDetails, setExportMaskBankDetails] = useState(true);
   const [showExportSettings, setShowExportSettings] = useState(false);
 
   // Generate theme-aware table styles AFTER all hooks
@@ -608,7 +607,7 @@ export default function MonthlyHrPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             empCodes: filteredEmployees.map((e) => e.empCode).filter(Boolean),
-            mask: exportMaskBankDetails,
+            mask: true,
           }),
         });
         if (!bankRes.ok) {
@@ -1444,24 +1443,6 @@ export default function MonthlyHrPage() {
                       />
                       <span>Include bank details (HR only)</span>
                     </label>
-                    {exportIncludeBankDetails && (
-                      <label
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          cursor: 'pointer',
-                          marginTop: 6,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={exportMaskBankDetails}
-                          onChange={(e) => setExportMaskBankDetails(e.target.checked)}
-                        />
-                        <span>Mask sensitive fields</span>
-                      </label>
-                    )}
                   </div>
                 </div>
               )}
