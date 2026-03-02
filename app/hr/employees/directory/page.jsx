@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
-import PaginationControls from '@/components/common/PaginationControls';
 
 export default function EmployeeDirectoryPage() {
   const router = useRouter();
@@ -13,46 +12,47 @@ export default function EmployeeDirectoryPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
   const [selectedDepartment, setSelectedDepartment] = useState('ALL');
   const [collapsedDepartments, setCollapsedDepartments] = useState({});
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 50,
-    total: 0,
-    totalPages: 1,
-  });
+  const [totalEmployees, setTotalEmployees] = useState(0);
 
   async function loadEmployees() {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('limit', '50');
-      if (search.trim()) params.set('search', search.trim());
-
-      const res = await fetch(`/api/employee?${params.toString()}`, {
+      // Fetch all rows for directory so department groups stay together.
+      // Uses HR employees endpoint with exact total count.
+      const firstRes = await fetch('/api/hr/employees?page=1&limit=50', {
         cache: 'no-store',
       });
+      if (!firstRes.ok) throw new Error(`Failed to load directory (${firstRes.status})`);
 
-      if (!res.ok) {
-        throw new Error(`Failed to load directory (${res.status})`);
+      const firstResponse = await firstRes.json();
+      if (!firstResponse.success) throw new Error(firstResponse.error || 'Failed to load employees');
+
+      const firstItems = firstResponse.data?.employees || [];
+      const meta = firstResponse.meta || {};
+      const totalPages = Math.max(1, Number(meta.totalPages || 1));
+      const total = Number(meta.total || firstItems.length || 0);
+
+      if (totalPages <= 1) {
+        setRows(firstItems);
+        setTotalEmployees(total);
+      } else {
+        const pageRequests = [];
+        for (let pageNumber = 2; pageNumber <= totalPages; pageNumber++) {
+          pageRequests.push(
+            fetch(`/api/hr/employees?page=${pageNumber}&limit=50`, { cache: 'no-store' }).then((r) => r.json())
+          );
+        }
+        const pageResponses = await Promise.all(pageRequests);
+        const extraItems = pageResponses.flatMap((r) => (r?.success ? r.data?.employees || [] : []));
+        setRows([...firstItems, ...extraItems]);
+        setTotalEmployees(total);
       }
-
-      const response = await res.json();
-      const items = response?.data?.items || response?.items || [];
-      const meta = response?.meta?.pagination || response?.pagination || {};
-
-      setRows(Array.isArray(items) ? items : []);
-      setPagination({
-        page: meta.page || page,
-        limit: meta.limit || 50,
-        total: meta.total || 0,
-        totalPages: meta.totalPages || 1,
-      });
     } catch (error) {
       console.error('Directory load error:', error);
       setRows([]);
+      setTotalEmployees(0);
     } finally {
       setLoading(false);
     }
@@ -61,45 +61,68 @@ export default function EmployeeDirectoryPage() {
   useEffect(() => {
     loadEmployees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search]);
+  }, []);
 
-  const departmentCount = useMemo(
-    () => new Set(rows.map((employee) => employee.department || 'Unassigned')).size,
-    [rows]
-  );
+  const visibleRows = useMemo(() => {
+    if (!search.trim()) return rows;
+    const query = search.trim().toLowerCase();
+    return rows.filter((employee) => {
+      const text = [
+        employee.empCode,
+        employee.name,
+        employee.department,
+        employee.designation,
+        employee.shift,
+        employee.email,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return text.includes(query);
+    });
+  }, [rows, search]);
 
-  const rowsByDepartment = useMemo(() => {
-    const grouped = rows.reduce((acc, employee) => {
+  const visibleRowsByDepartment = useMemo(() => {
+    const grouped = visibleRows.reduce((acc, employee) => {
       const departmentName = employee.department || 'Unassigned';
       if (!acc[departmentName]) acc[departmentName] = [];
       acc[departmentName].push(employee);
       return acc;
     }, {});
-
     return Object.keys(grouped)
       .sort((a, b) => a.localeCompare(b))
       .map((departmentName) => ({
         departmentName,
         employees: grouped[departmentName].slice().sort((a, b) => {
+          const designationA = String(a.designation || '').toLowerCase();
+          const designationB = String(b.designation || '').toLowerCase();
+          const rankA = designationA.includes('manager') ? 0 : designationA.includes('team lead') ? 1 : 2;
+          const rankB = designationB.includes('manager') ? 0 : designationB.includes('team lead') ? 1 : 2;
+          if (rankA !== rankB) return rankA - rankB;
           return String(a.empCode || '').localeCompare(String(b.empCode || ''));
         }),
       }));
-  }, [rows]);
+  }, [visibleRows]);
+
+  const departmentCount = useMemo(
+    () => new Set(visibleRows.map((employee) => employee.department || 'Unassigned')).size,
+    [visibleRows]
+  );
 
   useEffect(() => {
     setCollapsedDepartments((prev) => {
       const next = {};
-      rowsByDepartment.forEach((group) => {
+      visibleRowsByDepartment.forEach((group) => {
         next[group.departmentName] = prev[group.departmentName] ?? false;
       });
       return next;
     });
-  }, [rowsByDepartment]);
+  }, [visibleRowsByDepartment]);
 
   const filteredDepartmentGroups = useMemo(() => {
-    if (selectedDepartment === 'ALL') return rowsByDepartment;
-    return rowsByDepartment.filter((group) => group.departmentName === selectedDepartment);
-  }, [rowsByDepartment, selectedDepartment]);
+    if (selectedDepartment === 'ALL') return visibleRowsByDepartment;
+    return visibleRowsByDepartment.filter((group) => group.departmentName === selectedDepartment);
+  }, [visibleRowsByDepartment, selectedDepartment]);
 
   function toggleDepartment(departmentName) {
     setCollapsedDepartments((prev) => ({
@@ -110,7 +133,7 @@ export default function EmployeeDirectoryPage() {
 
   function setAllDepartmentsCollapsed(isCollapsed) {
     const next = {};
-    rowsByDepartment.forEach((group) => {
+    visibleRowsByDepartment.forEach((group) => {
       next[group.departmentName] = isCollapsed;
     });
     setCollapsedDepartments(next);
@@ -191,11 +214,11 @@ export default function EmployeeDirectoryPage() {
           >
             <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
               <div style={{ fontSize: 11, color: colors.text.muted }}>Employees on This Page</div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{rows.length}</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{visibleRows.length}</div>
             </div>
             <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
               <div style={{ fontSize: 11, color: colors.text.muted }}>Total Employees</div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{pagination.total}</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{totalEmployees}</div>
             </div>
             <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
               <div style={{ fontSize: 11, color: colors.text.muted }}>Departments in View</div>
@@ -207,7 +230,6 @@ export default function EmployeeDirectoryPage() {
             <input
               value={search}
               onChange={(event) => {
-                setPage(1);
                 setSearch(event.target.value);
               }}
               placeholder="Search by code, name, email..."
@@ -243,7 +265,7 @@ export default function EmployeeDirectoryPage() {
             >
               All Departments
             </button>
-            {rowsByDepartment.map((group) => (
+            {visibleRowsByDepartment.map((group) => (
               <button
                 key={`chip-${group.departmentName}`}
                 type="button"
@@ -362,7 +384,7 @@ export default function EmployeeDirectoryPage() {
                       Loading directory...
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : visibleRows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={8}
@@ -441,15 +463,6 @@ export default function EmployeeDirectoryPage() {
               </tbody>
             </table>
           </div>
-
-          <PaginationControls
-            currentPage={page}
-            totalPages={pagination.totalPages}
-            totalItems={pagination.total}
-            itemsPerPage={pagination.limit}
-            onPageChange={setPage}
-            loading={loading}
-          />
         </div>
       </div>
     </div>
