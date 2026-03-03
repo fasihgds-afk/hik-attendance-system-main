@@ -602,14 +602,26 @@ export default function MonthlyHrPage() {
     try {
       let bankMap = new Map();
       if (exportIncludeBankDetails) {
-        const bankRes = await fetch('/api/hr/employees/bank-details', {
+        let bankRes = await fetch('/api/hr/employees/bank-details', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             empCodes: filteredEmployees.map((e) => e.empCode).filter(Boolean),
-            mask: true,
+            // HR should receive unmasked bank details in Excel.
+            mask: false,
           }),
         });
+        // Non-HR roles are blocked by API for unmasked exports; retry masked safely.
+        if (bankRes.status === 403) {
+          bankRes = await fetch('/api/hr/employees/bank-details', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              empCodes: filteredEmployees.map((e) => e.empCode).filter(Boolean),
+              mask: true,
+            }),
+          });
+        }
         if (!bankRes.ok) {
           const txt = await bankRes.text();
           throw new Error(txt || 'Failed to load bank details for export');
