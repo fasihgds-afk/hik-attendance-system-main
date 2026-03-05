@@ -15,11 +15,14 @@ export async function GET(req) {
   try {
     await connectDB();
 
-    const departmentCounts = await Employee.aggregate([
-      { $group: { _id: { $ifNull: ['$department', 'Unassigned'] }, count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $project: { name: '$_id', count: 1, _id: 0 } },
-    ]).maxTimeMS(3000);
+    const departmentCounts = await Employee.aggregate(
+      [
+        { $group: { _id: { $ifNull: ['$department', 'Unassigned'] }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $project: { name: '$_id', count: 1, _id: 0 } },
+      ],
+      { maxTimeMS: 3000 }
+    );
 
     const total = departmentCounts.reduce((sum, d) => sum + d.count, 0);
 

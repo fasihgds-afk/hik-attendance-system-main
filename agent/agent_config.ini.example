@@ -1,0 +1,18 @@
+[agent]
+# Portal API base URL (no trailing slash)
+AGENT_API_BASE=http://localhost:3000
+
+# Required: Your employee code
+EMP_CODE=
+
+# Device identifier (default: whealthsvc-win)
+DEVICE_ID=whealthsvc-win
+
+# Device token (auto-generated on first run if empty)
+DEVICE_TOKEN=
+
+# Heartbeat interval in seconds (default: 15)
+HEARTBEAT_SECONDS=15
+
+# Idle threshold before break prompt in seconds (default: 180 = 3 min)
+IDLE_THRESHOLD_SECONDS=180

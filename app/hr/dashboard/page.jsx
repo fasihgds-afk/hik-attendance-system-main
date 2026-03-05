@@ -56,6 +56,7 @@ export default function HrDashboardPage() {
     return today.toISOString().slice(0, 10); // YYYY-MM-DD
   });
   const [rows, setRows] = useState([]);
+  const [monitoringSummary, setMonitoringSummary] = useState(null);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,6 +120,30 @@ export default function HrDashboardPage() {
 
   useEffect(() => {
     loadShifts();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadMonitoringSummary() {
+      try {
+        const res = await fetch('/api/hr/monitoring/summary', { cache: 'no-store' });
+        const json = await res.json();
+        if (!active) return;
+        if (res.ok && json?.success) {
+          setMonitoringSummary(json.data || null);
+        }
+      } catch {
+        if (active) setMonitoringSummary(null);
+      }
+    }
+
+    loadMonitoringSummary();
+    const timer = setInterval(loadMonitoringSummary, 10000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, []);
 
   // Auto-run Load and Save every 20 minutes
@@ -1095,6 +1120,73 @@ export default function HrDashboardPage() {
             padding: '24px 28px 28px',
           }}
         >
+          {/* Live monitoring summary cards */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 10,
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                borderRadius: 12,
+                padding: '10px 12px',
+                border: '1px solid #1d4ed8',
+                background: 'linear-gradient(135deg, #0b2545, #1e3a8a)',
+                color: '#dbeafe',
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.9 }}>Online Employees</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff' }}>
+                {monitoringSummary?.liveOnlineEmployees ?? '-'}
+              </div>
+            </div>
+            <div
+              style={{
+                borderRadius: 12,
+                padding: '10px 12px',
+                border: '1px solid #14532d',
+                background: 'linear-gradient(135deg, #052e16, #14532d)',
+                color: '#bbf7d0',
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.9 }}>Live Suspicious</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff' }}>
+                {monitoringSummary?.liveSuspiciousEmployees ?? '-'}
+              </div>
+            </div>
+            <div
+              style={{
+                borderRadius: 12,
+                padding: '10px 12px',
+                border: '1px solid #334155',
+                background: 'linear-gradient(135deg, #111827, #1f2937)',
+                color: '#d1d5db',
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.9 }}>Suspicious Hours (Today)</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff' }}>
+                {monitoringSummary?.suspiciousHoursToday ?? '-'}
+              </div>
+            </div>
+            <div
+              style={{
+                borderRadius: 12,
+                padding: '10px 12px',
+                border: '1px solid #1e40af',
+                background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+                color: '#bfdbfe',
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.9 }}>Total Devices</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff' }}>
+                {monitoringSummary?.totalDevices ?? '-'}
+              </div>
+            </div>
+          </div>
+
           {/* Legend + date + summary + stats */}
           <div style={{ marginBottom: 14 }}>
             {/* Shift legend */}
