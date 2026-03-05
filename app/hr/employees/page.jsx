@@ -58,6 +58,9 @@ export default function HrDashboardPage() {
   const [leaveStats, setLeaveStats] = useState([]);
   const [loadingLeaveStats, setLoadingLeaveStats] = useState(false);
 
+  // Department stats from API (accurate counts for ALL employees)
+  const [departmentCounts, setDepartmentCounts] = useState([]);
+
   // Lazy load function - only called when needed
   // OPTIMIZATION: Load paginated data, use meta.total for stats
   async function loadEmployees() {
@@ -121,6 +124,21 @@ export default function HrDashboardPage() {
     }
   }
 
+  // Load accurate department counts (ALL employees, not paginated)
+  async function loadDepartmentStats() {
+    try {
+      const res = await fetch("/api/hr/employees/dept-stats", { cache: "no-store" });
+      if (res.ok) {
+        const response = await res.json();
+        if (response.success && response.data?.departmentCounts) {
+          setDepartmentCounts(response.data.departmentCounts);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load department stats:", err);
+    }
+  }
+
   // Load leave statistics
   async function loadLeaveStats() {
     try {
@@ -149,30 +167,24 @@ export default function HrDashboardPage() {
       // OPTIMIZATION: Reduced delay for faster data loading (page still renders first)
       const timer = setTimeout(() => {
         loadEmployees();
+        loadDepartmentStats(); // Accurate counts for ALL employees
         loadLeaveStats();
       }, 100); // 100ms delay - faster perceived performance
 
       return () => clearTimeout(timer);
     } else if (tab === "overview" && dataLoaded) {
-      // Load leave stats if employees are already loaded
+      // Load leave stats and department stats if employees are already loaded
+      loadDepartmentStats();
       loadLeaveStats();
     }
   }, [tab, session, dataLoaded, statsLoading]);
 
-  // 📊 Compute stats from employees
-  // OPTIMIZATION: Use totalEmployees from API meta instead of employees.length
-  const stats = useMemo(() => {
-    if (!employees.length && totalEmployees === 0) {
-      return {
-        totalEmployees: 0,
-        totalDepartments: 0,
-        activeEmployees: 0,
-        departmentCounts: [],
-      };
-    }
 
+  // 📊 Compute stats from employees + department counts from API
+  // departmentCounts: Use API (accurate for ALL employees) when available, else fallback to first page
+  const stats = useMemo(() => {
     let activeCount = 0;
-    const deptMap = new Map();
+    let fallbackDeptCounts = [];
 
     employees.forEach((emp) => {
       if (
@@ -181,24 +193,31 @@ export default function HrDashboardPage() {
       ) {
         activeCount++;
       }
-
-      const dept = emp.department || "Unassigned";
-      deptMap.set(dept, (deptMap.get(dept) || 0) + 1);
     });
 
-    const departmentCounts = Array.from(deptMap.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
+    // Build fallback from first page only (used before API returns)
+    if (employees.length > 0) {
+      const deptMap = new Map();
+      employees.forEach((emp) => {
+        const dept = emp.department || "Unassigned";
+        deptMap.set(dept, (deptMap.get(dept) || 0) + 1);
+      });
+      fallbackDeptCounts = Array.from(deptMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+    }
 
-    // OPTIMIZATION: Use totalEmployees from API meta (accurate total)
-    // activeEmployees uses loaded employees count (approximation from first page)
+    // Use API department counts when available (accurate for ALL employees)
+    const deptCounts = departmentCounts.length > 0 ? departmentCounts : fallbackDeptCounts;
+    const totalDepts = deptCounts.length;
+
     return {
-      totalEmployees: totalEmployees || employees.length, // Use API meta total
-      totalDepartments: deptMap.size,
-      activeEmployees: activeCount || employees.length, // Approximation from first page
-      departmentCounts,
+      totalEmployees: totalEmployees || employees.length,
+      totalDepartments: totalDepts,
+      activeEmployees: activeCount || employees.length,
+      departmentCounts: deptCounts,
     };
-  }, [employees, totalEmployees]);
+  }, [employees, totalEmployees, departmentCounts]);
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -237,6 +256,11 @@ export default function HrDashboardPage() {
   function openComplaints() {
     router.push("/hr/complaints");
   }
+
+  function openLiveMonitoring() {
+    router.push("/hr/monitoring");
+  }
+
 
   function openRegisterModal() {
     setShowRegisterModal(true);
@@ -1923,6 +1947,88 @@ export default function HrDashboardPage() {
                   Open Complaints
                 </button>
               </div>
+
+              <div
+                style={{
+                  borderRadius: 14,
+                  padding: "18px",
+                  background: colors.gradient.card,
+                  border: "1px solid rgba(34, 211, 238, 0.35)",
+                  boxShadow: theme === "dark"
+                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+                  transition: "all 0.3s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(34, 211, 238, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(34, 211, 238, 0.55)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+                  e.currentTarget.style.borderColor = "rgba(34, 211, 238, 0.35)";
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        background: "linear-gradient(135deg, rgba(34, 211, 238, 0.22), rgba(34, 211, 238, 0.1))",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        border: "1px solid rgba(34, 211, 238, 0.35)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <svg width="20" height="20" fill="none" stroke="#22d3ee" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-6 2h5a2 2 0 002-2V10a2 2 0 00-2-2H9m-4 8h.01M5 12h.01M5 8h.01" />
+                      </svg>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Live Monitoring</h3>
+                      <p style={{ fontSize: 10, color: colors.text.muted, margin: 0 }}>Real-time employee status</p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10, color: "#22d3ee", fontWeight: 700 }}>LIVE</span>
+                </div>
+
+                <p style={{ fontSize: 11, color: colors.text.muted, marginBottom: 12, lineHeight: 1.5 }}>
+                  Open live monitoring to view active, idle, offline, and suspicious activity in one place.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={openLiveMonitoring}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "linear-gradient(135deg, #22d3ee, #06b6d4)",
+                    color: "#ecfeff",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    boxShadow: "0 4px 12px rgba(34, 211, 238, 0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    width: "100%",
+                    justifyContent: "center",
+                  }}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-6 2h5a2 2 0 002-2V10a2 2 0 00-2-2H9m-4 8h.01M5 12h.01M5 8h.01" />
+                  </svg>
+                  Open Live Monitor
+                </button>
+              </div>
+
             </div>
           </div>
         )}
