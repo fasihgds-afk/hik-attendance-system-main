@@ -69,11 +69,12 @@ class AgentState:
             and not self.awaiting_first_activity
         )
 
-    def on_popup_shown(self):
+    def on_popup_shown(self, break_start_time=None):
+        """Mark popup shown. Use break_start_time when triggered by lock (actual lock time)."""
         self.popup_visible = True
         self.popup_allowed = False
         self.break_active = True
-        self.break_start_time = time.time()
+        self.break_start_time = break_start_time if break_start_time is not None else time.time()
 
     def on_popup_submitted(self):
         self.popup_visible = False

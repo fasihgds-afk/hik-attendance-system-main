@@ -9,15 +9,16 @@ import {
 import Employee from '../../../../models/Employee';
 import Shift from '../../../../models/Shift';
 import BreakLog from '../../../../models/BreakLog';
-import { resolveShiftWindow, clipIntervalToShiftWindow } from '../../../../lib/shift/resolveShiftWindow';
+import { resolveShiftDateForBreak, clipIntervalToShiftWindow } from '../../../../lib/shift/resolveShiftWindow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Official = unlimited (company-related), General = 1h, Namaz = 25min
 const allowedByCategory = {
-  Official: 60,
-  General: 30,
-  Namaz: 30
+  Official: 9999,
+  General: 60,
+  Namaz: 25
 };
 
 const openSchema = z.object({
@@ -58,10 +59,6 @@ async function resolveEmployeeShift(empCode) {
   throw new Error(`No active shift for employee ${empCode}`);
 }
 
-function toDateStr(d) {
-  return d.toISOString().slice(0, 10);
-}
-
 export async function POST(req) {
   try {
     const raw = await req.json();
@@ -76,22 +73,16 @@ export async function POST(req) {
 
     const breakStartAt = body.startedAt || body.atIso ? new Date(body.startedAt || body.atIso) : new Date();
     const shift = await resolveEmployeeShift(empCode);
-    const shiftDate = toDateStr(breakStartAt);
-    const window = resolveShiftWindow({
-      date: shiftDate,
-      shift,
-      timezoneOffset: process.env.TIMEZONE_OFFSET || '+05:00'
-    });
-    if (!window) throw new Error('Unable to resolve shift window');
-    if (breakStartAt.getTime() < window.shiftStart.getTime()) {
-      throw new Error('Break cannot start before shift start');
-    }
+    const tzOffset = process.env.TIMEZONE_OFFSET || '+05:00';
+    const resolved = resolveShiftDateForBreak({ breakAt: breakStartAt, shift, timezoneOffset: tzOffset });
+    if (!resolved) throw new Error('Break time is outside any shift window');
+    const { shiftDate, window } = resolved;
 
     const created = await BreakLog.create({
       empCode,
       deviceId,
       category,
-      reason: String(body.reason || '').trim(),
+      reason: reasonText,
       status: 'OPEN',
       breakStartAt,
       shiftDate,

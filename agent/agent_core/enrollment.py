@@ -54,137 +54,117 @@ def gui_enroll():
     root.title("GDS Attendance Agent — Setup")
     root.overrideredirect(False)
     root.resizable(False, False)
-    root.configure(bg=THEME["bg_darkest"])
+    root.configure(bg="#e2e8f0")
     root.attributes("-topmost", True)
 
-    W, H = 520, 560
+    W, H = 460, 520
     root.geometry(f"{W}x{H}")
     root.update_idletasks()
     x = (root.winfo_screenwidth() - W) // 2
     y = (root.winfo_screenheight() - H) // 2
     root.geometry(f"{W}x{H}+{x}+{y}")
 
-    # ─── Header: logo + title (taller, centered) ─────
-    header = tk.Frame(root, bg=THEME["header_bg"], height=150)
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_columnconfigure(0, weight=1)
+    outer = tk.Frame(root, bg="#1e3a5f", padx=1, pady=1)
+    outer.grid(row=0, column=0, sticky="nsew")
+    card = tk.Frame(outer, bg="#ffffff", padx=1, pady=1)
+    card.pack(fill="both", expand=True)
+
+    # Header: professional navy
+    header = tk.Frame(card, bg="#0f172a", height=88)
     header.pack(fill="x")
     header.pack_propagate(False)
-    header_content = tk.Frame(header, bg=THEME["header_bg"])
-    header_content.pack(expand=True)
-
+    hc = tk.Frame(header, bg="#0f172a")
+    hc.pack(expand=True, padx=24, pady=18)
     try:
         logo_path = resource_path("gds.png")
         logo_img = tk.PhotoImage(file=logo_path)
-        scale = max(1, logo_img.width() // 80)
-        logo_img = logo_img.subsample(scale, scale)
+        logo_img = logo_img.subsample(max(1, logo_img.width() // 72), max(1, logo_img.width() // 72))
         root._logo = logo_img
-        tk.Label(header_content, image=logo_img,
-                 bg=THEME["header_bg"]).pack(side="left", padx=(0, 18))
+        tk.Label(hc, image=logo_img, bg="#0f172a").pack(side="left", padx=(0, 18))
     except Exception:
         pass
+    tb = tk.Frame(hc, bg="#0f172a")
+    tb.pack(side="left")
+    tk.Label(tb, text="Global Digital Solutions", font=("Segoe UI", 16, "bold"),
+             fg="white", bg="#0f172a").pack(anchor="w")
+    tk.Label(tb, text="Device Registration", font=("Segoe UI", 10),
+             fg="#94a3b8", bg="#0f172a").pack(anchor="w", pady=(2, 0))
 
-    title_block = tk.Frame(header_content, bg=THEME["header_bg"])
-    title_block.pack(side="left")
-    tk.Label(title_block, text="Global Digital Solutions",
-             font=("Segoe UI", 18, "bold"), fg="white",
-             bg=THEME["header_bg"]).pack(anchor="w")
-    tk.Label(title_block, text="Attendance Agent Setup",
-             font=("Segoe UI", 11), fg=THEME["text_muted"],
-             bg=THEME["header_bg"]).pack(anchor="w", pady=(2, 0))
-
-    # ── Accent line ──
-    tk.Frame(root, bg=THEME["primary"], height=3).pack(fill="x")
-
-    # ─── Body ─────────────────────────────────
-    body = tk.Frame(root, bg=THEME["bg_darkest"], padx=44, pady=30)
+    # Body: white, clean
+    body = tk.Frame(card, bg="#ffffff", padx=28, pady=28)
     body.pack(fill="both", expand=True)
 
-    # Employee Code
-    tk.Label(body, text="Employee Code",
-             font=("Segoe UI", 12, "bold"),
-             bg=THEME["bg_darkest"], fg=THEME["text_primary"]).pack(anchor="w")
+    tk.Label(body, text="Employee Code", font=("Segoe UI", 11, "bold"),
+             bg="#ffffff", fg="#334155").pack(anchor="w")
     tk.Label(body, text="Enter the code assigned by HR (e.g. EMP001)",
-             font=("Segoe UI", 9), fg=THEME["text_dark"],
-             bg=THEME["bg_darkest"]).pack(anchor="w", pady=(0, 4))
+             font=("Segoe UI", 9), fg="#64748b", bg="#ffffff").pack(anchor="w", pady=(0, 6))
     emp_var = tk.StringVar()
-    emp_frame = tk.Frame(body, bg=THEME["border"], padx=1, pady=1)
-    emp_frame.pack(fill="x", pady=(4, 18))
+    emp_frame = tk.Frame(body, bg="#e2e8f0", highlightbackground="#cbd5e1", highlightthickness=1)
+    emp_frame.pack(fill="x", pady=(0, 20))
     emp_entry = tk.Entry(emp_frame, textvariable=emp_var,
-                         font=("Segoe UI", 13),
-                         bg=THEME["bg_input"], fg=THEME["text_primary"],
-                         insertbackground=THEME["text_primary"],
+                         font=("Segoe UI", 12),
+                         bg="#ffffff", fg="#1e293b", insertbackground="#1e293b",
                          relief="flat", borderwidth=0)
-    emp_entry.pack(fill="x", ipady=10, padx=10, pady=4)
+    emp_entry.pack(fill="x", ipady=12, padx=14, pady=4)
 
-    # Server URL
-    tk.Label(body, text="Server URL",
-             font=("Segoe UI", 12, "bold"),
-             bg=THEME["bg_darkest"], fg=THEME["text_primary"]).pack(anchor="w")
-    tk.Label(body, text="Attendance portal address (pre-filled for GDS)",
-             font=("Segoe UI", 9), fg=THEME["text_dark"],
-             bg=THEME["bg_darkest"]).pack(anchor="w", pady=(0, 4))
+    tk.Label(body, text="Server URL", font=("Segoe UI", 11, "bold"),
+             bg="#ffffff", fg="#334155").pack(anchor="w")
+    tk.Label(body, text="Attendance portal address",
+             font=("Segoe UI", 9), fg="#64748b", bg="#ffffff").pack(anchor="w", pady=(0, 6))
     url_var = tk.StringVar(value="https://ams.globaldigitsolutions.com")
-    url_frame = tk.Frame(body, bg=THEME["border"], padx=1, pady=1)
-    url_frame.pack(fill="x", pady=(6, 18))
+    url_frame = tk.Frame(body, bg="#e2e8f0", highlightbackground="#cbd5e1", highlightthickness=1)
+    url_frame.pack(fill="x", pady=(0, 20))
     url_entry = tk.Entry(url_frame, textvariable=url_var,
-                         font=("Segoe UI", 13),
-                         bg=THEME["bg_input"], fg=THEME["text_primary"],
-                         insertbackground=THEME["text_primary"],
+                         font=("Segoe UI", 12),
+                         bg="#ffffff", fg="#1e293b", insertbackground="#1e293b",
                          relief="flat", borderwidth=0)
-    url_entry.pack(fill="x", ipady=10, padx=10, pady=4)
+    url_entry.pack(fill="x", ipady=12, padx=14, pady=4)
 
-    status = tk.Label(body, text="", font=("Segoe UI", 11),
-                      bg=THEME["bg_darkest"])
-    status.pack(pady=(0, 12))
+    status = tk.Label(body, text="", font=("Segoe UI", 10), bg="#ffffff")
+    status.pack(pady=(0, 14))
 
     def on_connect():
         emp = emp_var.get().strip()
         url = url_var.get().strip()
         if not emp:
-            status.config(text="Employee code is required.", fg=THEME["error"])
+            status.config(text="Please enter your employee code.", fg="#dc2626")
             return
         if not url:
-            status.config(text="Server URL is required.", fg=THEME["error"])
+            status.config(text="Please enter the server URL.", fg="#dc2626")
             return
-
-        status.config(text="Connecting...", fg=THEME["primary"])
+        status.config(text="Connecting...", fg="#2563eb")
         btn.config(state="disabled")
         root.update()
-
         try:
             config = enroll(url, emp)
             result["config"] = config
-            status.config(text="Enrolled! Starting agent...", fg=THEME["success"])
+            status.config(text="Success! Starting agent...", fg="#16a34a")
             root.after(800, root.quit)
         except requests.ConnectionError:
-            status.config(text=f"Cannot connect to {url}. Check network.",
-                          fg=THEME["error"])
+            status.config(text="Cannot connect. Check your network.", fg="#dc2626")
             btn.config(state="normal")
         except Exception as e:
-            err_msg = str(e)[:80]
-            status.config(text=f"Error: {err_msg}", fg=THEME["error"])
+            status.config(text=f"Error: {str(e)[:60]}", fg="#dc2626")
             btn.config(state="normal")
 
-    def on_enter(_e):
-        on_connect()
-
     btn = tk.Button(body, text="Connect & Start",
-                    font=("Segoe UI", 14, "bold"),
-                    bg=THEME["primary"], fg="white",
-                    activebackground=THEME["primary_hover"],
-                    activeforeground="white",
-                    relief="flat", padx=30, pady=14, cursor="hand2",
-                    command=on_connect)
+                    font=("Segoe UI", 12, "bold"),
+                    bg="#2563eb", fg="white",
+                    activebackground="#1d4ed8", activeforeground="white",
+                    relief="flat", padx=28, pady=12, cursor="hand2",
+                    command=on_connect, highlightthickness=0, bd=0)
     btn.pack(fill="x")
-    root.bind("<Return>", on_enter)
+    btn.bind("<Enter>", lambda e: btn.config(bg="#1d4ed8"))
+    btn.bind("<Leave>", lambda e: btn.config(bg="#2563eb"))
+    root.bind("<Return>", on_connect)
 
-    # ── Footer ──
-    tk.Frame(root, bg=THEME["border"], height=1).pack(fill="x", padx=44, pady=(0, 0))
-    footer = tk.Frame(root, bg=THEME["bg_darkest"], height=38)
+    footer = tk.Frame(card, bg="#f8fafc", height=40)
     footer.pack(fill="x")
     footer.pack_propagate(False)
-    tk.Label(footer, text=f"v{AGENT_VERSION}",
-             font=("Segoe UI", 8), fg=THEME["text_dark"],
-             bg=THEME["bg_darkest"]).pack(expand=True)
+    tk.Label(footer, text=f"Version {AGENT_VERSION}",
+             font=("Segoe UI", 9), fg="#64748b", bg="#f8fafc").pack(expand=True)
 
     root.protocol("WM_DELETE_WINDOW", root.quit)
     emp_entry.focus_set()

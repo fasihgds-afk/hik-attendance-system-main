@@ -1,6 +1,6 @@
 // app/api/hr/shifts/route.js
 import { connectDB } from '../../../../lib/db';
-import Shift from '../../../../models/Shift';
+import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
@@ -96,7 +96,7 @@ export async function POST(req) {
       startTime,
       endTime,
       crossesMidnight: crossesMidnight || false,
-      gracePeriod: gracePeriod || 15,
+      gracePeriod: gracePeriod ?? DEFAULT_GRACE_PERIOD,
       description: description || '',
       isActive: true,
     });

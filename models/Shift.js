@@ -1,6 +1,9 @@
 // models/Shift.js
 import mongoose from 'mongoose';
 
+/** Single source of truth: default grace period when shift.gracePeriod is not set */
+export const DEFAULT_GRACE_PERIOD = 20;
+
 const ShiftSchema = new mongoose.Schema(
   {
     name: {
@@ -33,8 +36,8 @@ const ShiftSchema = new mongoose.Schema(
     },
     gracePeriod: {
       type: Number,
-      default: 15,
-      // Grace period in minutes (default 15 minutes)
+      default: DEFAULT_GRACE_PERIOD,
+      // Grace period in minutes: check-in late / check-out early within this limit (configurable per shift)
     },
     isActive: {
       type: Boolean,

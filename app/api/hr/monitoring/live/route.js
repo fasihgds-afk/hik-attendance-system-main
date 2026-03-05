@@ -2,9 +2,11 @@ import { connectDB } from '../../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 import Device from '../../../../../models/Device';
 import Employee from '../../../../../models/Employee';
+import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../../models/Shift';
 import ShiftAttendance from '../../../../../models/ShiftAttendance';
 import BreakLog from '../../../../../models/BreakLog';
 import SuspiciousLog from '../../../../../models/SuspiciousLog';
+import { resolveShiftWindow } from '../../../../../lib/shift/resolveShiftWindow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +40,7 @@ export async function GET(req) {
     const date = String(searchParams.get('date') || toDateStrInOffset(process.env.TIMEZONE_OFFSET || '+05:00')).slice(0, 10);
     const now = new Date();
 
-    const [devices, employees, attendanceRows, breakRows, suspiciousRows] = await Promise.all([
+    const [devices, employees, shifts, attendanceRows, breakRows, suspiciousRows] = await Promise.all([
       Device.find({})
         .select('empCode deviceId currentStatus suspiciousActive lastSeenAt')
         .lean()
@@ -47,6 +49,7 @@ export async function GET(req) {
         .select('empCode name department designation shift')
         .lean()
         .maxTimeMS(4000),
+      Shift.find({ isActive: true }).select('code startTime endTime crossesMidnight gracePeriod').lean().maxTimeMS(4000),
       ShiftAttendance.find({ date })
         .select('empCode checkIn checkOut shift')
         .lean()
@@ -66,6 +69,7 @@ export async function GET(req) {
 
     const empMap = new Map(employees.map((e) => [String(e.empCode), e]));
     const attMap = new Map(attendanceRows.map((a) => [String(a.empCode), a]));
+    const shiftByCode = new Map(shifts.map((s) => [String(s.code || '').toUpperCase(), s]));
 
     const breaksByEmp = new Map();
     for (const b of breakRows) {
@@ -94,16 +98,32 @@ export async function GET(req) {
       const online = now.getTime() - lastSeenMs <= LIVE_OFFLINE_MS;
       const status = online ? d.currentStatus : 'OFFLINE';
 
+      const isPendingBreak = (b) => {
+        const r = String(b.reason || '').toLowerCase();
+        return r === 'pending' || r.includes('waiting for employee');
+      };
+      const validBreaks = breakList.filter((b) => !isPendingBreak(b));
+
       const effectiveCheckOut = att.checkOut || (att.checkIn ? now : null);
-      const workedHrs = toHoursFromDates(att.checkIn, effectiveCheckOut);
-      const totalBreakMin = breakList.reduce((acc, b) => {
+      const checkIn = att.checkIn ? new Date(att.checkIn) : null;
+      const tzOffset = process.env.TIMEZONE_OFFSET || '+05:00';
+      const shiftCode = String(att.shift || emp.shift || '').toUpperCase();
+      const shiftObj = shiftCode ? shiftByCode.get(shiftCode) : null;
+      const window = shiftObj ? resolveShiftWindow({ date, shift: shiftObj, timezoneOffset: tzOffset }) : null;
+      const graceMin = Number(shiftObj?.gracePeriod ?? DEFAULT_GRACE_PERIOD);
+      const latestAllowedCheckIn = window ? new Date(window.shiftStart.getTime() + graceMin * 60_000) : null;
+      const productivityStart = (checkIn && window && latestAllowedCheckIn && checkIn.getTime() <= latestAllowedCheckIn.getTime())
+        ? window.shiftStart
+        : checkIn;
+      const workedHrs = toHoursFromDates(productivityStart, effectiveCheckOut);
+      const totalBreakMin = validBreaks.reduce((acc, b) => {
         if (String(b.status || '').toUpperCase() === 'OPEN' && b.breakStartAt) {
           return acc + Math.max(0, Math.floor((now.getTime() - new Date(b.breakStartAt).getTime()) / 60000));
         }
         return acc + Number(b.durationMin || 0);
       }, 0);
-      const allowedBreakMin = breakList.reduce((acc, b) => acc + Number(b.allowedDurationMin || 0), 0);
-      const deductedBreakMin = breakList.reduce((acc, b) => acc + Number(b.exceededDurationMin || 0), 0);
+      const allowedBreakMin = validBreaks.reduce((acc, b) => acc + Number(b.allowedDurationMin || 0), 0);
+      const deductedBreakMin = validBreaks.reduce((acc, b) => acc + Number(b.exceededDurationMin || 0), 0);
 
       const suspiciousMin = suspiciousList.reduce((acc, s) => {
         if (s.active && !s.endedAt) {
@@ -120,7 +140,8 @@ export async function GET(req) {
         General: { totalMin: 0, allowedMin: 0 },
         Namaz: { totalMin: 0, allowedMin: 0 }
       };
-      for (const b of breakList) {
+      for (const b of validBreaks) {
+
         const raw = String(b.category || '').trim().toLowerCase();
         const key = raw === 'official' ? 'Official' : raw === 'general' ? 'General' : raw === 'namaz' ? 'Namaz' : null;
         if (!key) continue;
@@ -151,7 +172,7 @@ export async function GET(req) {
         productiveHrs: round(productiveHrs, 1),
         productivityPct: workedHrs > 0 ? Math.round((productiveHrs / workedHrs) * 100) : 0,
         breakDown: byCategory,
-        breakHistory: breakList
+        breakHistory: validBreaks
           .sort((a, b) => new Date(a.breakStartAt).getTime() - new Date(b.breakStartAt).getTime())
           .slice(-8)
       };
@@ -159,8 +180,8 @@ export async function GET(req) {
 
     const summary = {
       total: rows.length,
-      active: rows.filter((r) => r.status === 'ACTIVE').length,
-      idle: rows.filter((r) => r.status === 'IDLE' || r.status === 'BREAK').length,
+      active: rows.filter((r) => r.status === 'ACTIVE' && !r.suspiciousLive).length,
+      idle: rows.filter((r) => (r.status === 'IDLE' || r.status === 'BREAK') && !r.suspiciousLive).length,
       offline: rows.filter((r) => r.status === 'OFFLINE').length,
       suspicious: rows.filter((r) => r.suspiciousLive).length
     };

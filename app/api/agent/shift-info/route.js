@@ -2,7 +2,7 @@ import { connectDB } from '../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requiredString, verifyDevice } from '../../../../lib/agent/common';
 import Employee from '../../../../models/Employee';
-import Shift from '../../../../models/Shift';
+import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
 import { resolveShiftWindow } from '../../../../lib/shift/resolveShiftWindow';
 
 export const runtime = 'nodejs';
@@ -50,7 +50,7 @@ export async function GET(req) {
       timezoneOffset: process.env.TIMEZONE_OFFSET || '+05:00'
     });
 
-    const gracePeriod = Number(shift.gracePeriod || 0);
+    const gracePeriod = Number(shift.gracePeriod ?? DEFAULT_GRACE_PERIOD);
     const crossesMidnight = !!shift.crossesMidnight;
     return successResponse(
       {

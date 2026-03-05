@@ -91,125 +91,100 @@ class IdlePopup:
         top.grid_rowconfigure(0, weight=1)
         top.grid_columnconfigure(0, weight=1)
 
-        # Outer card with subtle glow effect (double border)
-        outer = tk.Frame(top, bg=THEME["primary"], padx=1, pady=1)
+        # Professional card: clean, centered, subtle border
+        top.grid_rowconfigure(0, weight=1)
+        top.grid_columnconfigure(0, weight=1)
+        outer = tk.Frame(top, bg="#1e3a5f", padx=1, pady=1)
         outer.grid(row=0, column=0)
-        card = tk.Frame(outer, bg=THEME["bg_card"], width=560)
-        card.pack()
+        card = tk.Frame(outer, bg="#ffffff", width=520)
+        card.pack(padx=1, pady=1)
 
-        # ── Header with large centered logo ──────────────
-        header = tk.Frame(card, bg=THEME["header_bg"], width=560, height=140)
+        # Header: corporate navy
+        header = tk.Frame(card, bg="#0f172a", height=88)
         header.pack(fill="x")
         header.pack_propagate(False)
-        header_content = tk.Frame(header, bg=THEME["header_bg"])
-        header_content.pack(expand=True)
-
+        hc = tk.Frame(header, bg="#0f172a")
+        hc.pack(expand=True, padx=28, pady=18)
         try:
             logo_path = resource_path("gds.png")
             logo_img = tk.PhotoImage(file=logo_path)
-            # Target ~80px logo (1020/80 ≈ 12.75 → subsample by 13)
-            scale = max(1, logo_img.width() // 80)
-            logo_img = logo_img.subsample(scale, scale)
+            logo_img = logo_img.subsample(max(1, logo_img.width() // 72), max(1, logo_img.width() // 72))
             top._logo = logo_img
-            tk.Label(header_content, image=logo_img,
-                     bg=THEME["header_bg"]).pack(side="left", padx=(0, 18))
+            tk.Label(hc, image=logo_img, bg="#0f172a").pack(side="left", padx=(0, 20))
         except Exception:
             pass
+        tb = tk.Frame(hc, bg="#0f172a")
+        tb.pack(side="left")
+        tk.Label(tb, text="Global Digital Solutions", font=("Segoe UI", 16, "bold"),
+                 fg="white", bg="#0f172a").pack(anchor="w")
+        tk.Label(tb, text="Break Reason Required", font=("Segoe UI", 10),
+                 fg="#94a3b8", bg="#0f172a").pack(anchor="w", pady=(2, 0))
 
-        title_block = tk.Frame(header_content, bg=THEME["header_bg"])
-        title_block.pack(side="left")
-        tk.Label(title_block, text="Global Digital Solutions",
-                 font=("Segoe UI", 18, "bold"), fg="white",
-                 bg=THEME["header_bg"]).pack(anchor="w")
-        tk.Label(title_block, text="Attendance & Break Monitor",
-                 font=("Segoe UI", 11), fg=THEME["text_muted"],
-                 bg=THEME["header_bg"]).pack(anchor="w", pady=(2, 0))
+        # Notice bar: soft amber
+        notice = tk.Frame(card, bg="#fef3c7", height=40)
+        notice.pack(fill="x")
+        notice.pack_propagate(False)
+        tk.Label(notice, text="You have been idle. Please select a break category and provide a reason.",
+                 font=("Segoe UI", 11), fg="#92400e", bg="#fef3c7").pack(expand=True)
 
-        # ── Idle warning banner ───────────────────────────
-        banner = tk.Frame(card, bg=THEME["warning"], height=44)
-        banner.pack(fill="x")
-        banner.pack_propagate(False)
-        tk.Label(banner, text="\u26a0  You Are Currently Idle  \u26a0",
-                 font=("Segoe UI", 13, "bold"), fg="#0f172a",
-                 bg=THEME["warning"]).pack(expand=True)
-
-        # ── Body ──────────────────────────────────────────
-        body = tk.Frame(card, bg=THEME["bg_card"], padx=44, pady=28, width=560)
+        # Body: white, clean
+        body = tk.Frame(card, bg="#ffffff", padx=32, pady=28)
         body.pack(fill="both")
 
-        tk.Label(body, text="Select break category",
-                 font=("Segoe UI", 13, "bold"),
-                 bg=THEME["bg_card"], fg=THEME["text_primary"]).pack(anchor="w", pady=(0, 12))
-
+        tk.Label(body, text="Break category", font=("Segoe UI", 11, "bold"),
+                 bg="#ffffff", fg="#334155").pack(anchor="w", pady=(0, 8))
         self._reason_var = tk.StringVar(value="")
         self._custom_var = tk.StringVar(value="")
-
-        radio_frame = tk.Frame(body, bg=THEME["bg_dark"],
-                               highlightbackground=THEME["border"], highlightthickness=1)
-        radio_frame.pack(fill="x")
-
+        radio_frame = tk.Frame(body, bg="#f8fafc", highlightbackground="#e2e8f0",
+                               highlightthickness=1)
+        radio_frame.pack(fill="x", pady=(0, 20))
         for i, reason in enumerate(BREAK_REASONS):
-            rb_bg = THEME["bg_dark"]
             rb = tk.Radiobutton(
                 radio_frame, text=reason, variable=self._reason_var, value=reason,
-                font=("Segoe UI", 13), bg=rb_bg,
-                fg=THEME["text_primary"], activebackground=THEME["bg_hover"],
-                activeforeground=THEME["text_primary"],
-                selectcolor=THEME["bg_input"],
-                anchor="w", padx=18, pady=8,
+                font=("Segoe UI", 12), bg="#f8fafc", fg="#1e293b",
+                activebackground="#f1f5f9", activeforeground="#1e293b",
+                selectcolor="#3b82f6", anchor="w", padx=20, pady=12,
                 command=lambda: self._safe_widget_config(self._submit_btn, state="normal"),
             )
             rb.pack(fill="x")
             if i < len(BREAK_REASONS) - 1:
-                tk.Frame(radio_frame, bg=THEME["border"], height=1).pack(fill="x")
+                tk.Frame(radio_frame, bg="#e2e8f0", height=1).pack(fill="x")
 
-        tk.Label(body, text="Enter reason (required)",
-                 font=("Segoe UI", 13, "bold"),
-                 bg=THEME["bg_card"], fg=THEME["text_primary"]).pack(anchor="w", pady=(20, 8))
-
-        entry_frame = tk.Frame(body, bg=THEME["border"], padx=1, pady=1)
+        tk.Label(body, text="Reason details (required)", font=("Segoe UI", 11, "bold"),
+                 bg="#ffffff", fg="#334155").pack(anchor="w", pady=(0, 8))
+        tk.Label(body, text="e.g. Meeting with manager, Lunch, Prayer break",
+                 font=("Segoe UI", 9), bg="#ffffff", fg="#64748b").pack(anchor="w", pady=(0, 6))
+        entry_frame = tk.Frame(body, bg="#e2e8f0", highlightbackground="#cbd5e1",
+                               highlightthickness=1)
         entry_frame.pack(fill="x")
         self._reason_entry = tk.Entry(
             entry_frame, textvariable=self._custom_var,
-            font=("Segoe UI", 13), width=45,
-            bg=THEME["bg_input"], fg=THEME["text_primary"],
-            insertbackground=THEME["text_primary"],
+            font=("Segoe UI", 12), width=50,
+            bg="#ffffff", fg="#1e293b", insertbackground="#1e293b",
             relief="flat", borderwidth=0,
         )
-        self._reason_entry.pack(fill="x", ipady=8, padx=8, pady=4)
+        self._reason_entry.pack(fill="x", ipady=12, padx=14, pady=4)
 
-        tk.Label(body,
-                 text="e.g. Meeting with manager, Lunch, Zuhr prayer, etc.",
-                 font=("Segoe UI", 9, "italic"),
-                 bg=THEME["bg_card"], fg=THEME["text_dark"]).pack(anchor="w", pady=(4, 0))
-
-        self._status_label = tk.Label(body, text="", font=("Segoe UI", 11),
-                                      bg=THEME["bg_card"])
-        self._status_label.pack(pady=(14, 0))
+        self._status_label = tk.Label(body, text="", font=("Segoe UI", 10), bg="#ffffff")
+        self._status_label.pack(pady=(16, 0))
 
         self._submit_btn = tk.Button(
-            body, text="Submit Break Reason",
-            font=("Segoe UI", 14, "bold"),
-            bg=THEME["primary"], fg="white",
-            activebackground=THEME["primary_hover"],
-            activeforeground="white",
-            relief="flat", padx=30, pady=14,
-            state="disabled", cursor="hand2",
-            command=self._on_submit,
+            body, text="Submit",
+            font=("Segoe UI", 12, "bold"),
+            bg="#2563eb", fg="white",
+            activebackground="#1d4ed8", activeforeground="white",
+            relief="flat", padx=28, pady=12, state="disabled", cursor="hand2",
+            command=self._on_submit, highlightthickness=0, bd=0,
         )
-        self._submit_btn.pack(pady=(14, 0), fill="x")
+        self._submit_btn.pack(pady=(16, 0), fill="x")
+        self._submit_btn.bind("<Enter>", lambda e: self._safe_widget_config(self._submit_btn, bg="#1d4ed8"))
+        self._submit_btn.bind("<Leave>", lambda e: self._safe_widget_config(self._submit_btn, bg="#2563eb"))
 
-        # ── Footer ────────────────────────────────────────
-        sep = tk.Frame(card, bg=THEME["border"], height=1)
-        sep.pack(fill="x", padx=44, pady=(0, 0))
-
-        footer = tk.Frame(card, bg=THEME["bg_card"], height=48)
+        footer = tk.Frame(card, bg="#f8fafc", height=40)
         footer.pack(fill="x")
         footer.pack_propagate(False)
-        tk.Label(footer,
-                 text="Select a category and type your reason. This form closes after submission.",
-                 font=("Segoe UI", 9), bg=THEME["bg_card"],
-                 fg=THEME["text_dark"]).pack(expand=True)
+        tk.Label(footer, text="This information is required for attendance tracking.",
+                 font=("Segoe UI", 9), bg="#f8fafc", fg="#64748b").pack(expand=True)
 
         log.info("Popup shown (main thread)")
 
@@ -260,10 +235,11 @@ class IdlePopup:
 
         def do_call():
             try:
-                self._submit_result = send_break_reason(config, r, c)
+                out = send_break_reason(config, r, c)
+                self._submit_result = out
             except Exception as e:
                 log.error("Break reason submit thread error: %s", e)
-                self._submit_result = False
+                self._submit_result = (False, None)
 
         threading.Thread(target=do_call, daemon=True).start()
         self._poll_submit(reason, custom)
@@ -278,7 +254,7 @@ class IdlePopup:
         if self._submit_result is None:
             if time.time() - self._submit_start_time > _SUBMIT_TIMEOUT:
                 log.warning("Submit poll timed out after %ds", _SUBMIT_TIMEOUT)
-                self._submit_result = False
+                self._submit_result = (False, None)
             else:
                 try:
                     self._root.after(150, lambda: self._poll_submit(reason, custom))
@@ -287,8 +263,11 @@ class IdlePopup:
                 return
 
         try:
-            if self._submit_result:
-                self._safe_widget_config(self._status_label, text="Submitted! Closing...", fg=THEME["success"])
+            ok = self._submit_result and (self._submit_result[0] if isinstance(self._submit_result, tuple) else self._submit_result)
+            if ok:
+                was_buffered = isinstance(self._submit_result, tuple) and self._submit_result[1] == "buffered"
+                msg = "Saved locally. Will sync when back online." if was_buffered else "Submitted! Closing..."
+                self._safe_widget_config(self._status_label, text=msg, fg=THEME["success"])
                 self._root.after(400, lambda: self._finish(reason, custom))
             else:
                 self._safe_widget_config(

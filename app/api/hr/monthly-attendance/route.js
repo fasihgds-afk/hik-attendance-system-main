@@ -33,7 +33,7 @@ import mongoose from 'mongoose';
 import { connectDB } from '../../../../lib/db';
 import Employee from '../../../../models/Employee';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
-import Shift from '../../../../models/Shift';
+import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
 import ViolationRules from '../../../../models/ViolationRules';
 import PaidLeaveQuarter from '../../../../models/PaidLeaveQuarter';
 import LeaveRecord from '../../../../models/LeaveRecord';
@@ -160,7 +160,7 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
   let startMin = 0;
   let endMin = 0;
   let rawEndMin = 0;
-  let gracePeriod = 15; // default
+  let gracePeriod = DEFAULT_GRACE_PERIOD; // from Shift model; overridden by shift.gracePeriod
   let crossesMidnight = false;
 
   // Get shift object - could be already an object or a code string
@@ -184,7 +184,7 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
     // Use shift times from database (fully dynamic)
     startMin = parseTimeToMinutes(shiftObj.startTime);
     rawEndMin = parseTimeToMinutes(shiftObj.endTime);
-    gracePeriod = shiftObj.gracePeriod || 15;
+    gracePeriod = shiftObj.gracePeriod ?? DEFAULT_GRACE_PERIOD;
     crossesMidnight = shiftObj.crossesMidnight || false;
     
     // For midnight-crossing shifts, normalize end time

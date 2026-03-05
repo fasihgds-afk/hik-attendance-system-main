@@ -29,8 +29,7 @@ def send_heartbeat(config, state_str, activity_score=None, autoclicker_detected=
     }
     if activity_score is not None:
         payload["activityScore"] = activity_score
-    if autoclicker_detected:
-        payload["autoClickerDetected"] = True
+    payload["autoClickerDetected"] = autoclicker_detected
 
     try:
         resp = http_client.http.post(url, json=payload, timeout=API_TIMEOUT_HEARTBEAT)
@@ -74,7 +73,7 @@ def send_break_start(config, break_start_time):
     for attempt in range(3):
         try:
             resp = http_client.http.post(url, json=payload, timeout=API_TIMEOUT_BREAK)
-            if resp.status_code == 200:
+            if resp.status_code in (200, 201):
                 log.info("Break opened in DB (form appeared)")
                 return True
             log.warning("Break start failed (attempt %d): HTTP %d", attempt + 1, resp.status_code)
@@ -89,12 +88,13 @@ def send_break_start(config, break_start_time):
 
 
 def send_break_reason(config, reason, custom_reason):
-    """Step 2: Update the open break with employee's chosen reason."""
+    """Step 2: Update the open break with employee's chosen reason.
+    Returns (True, 'success') on server success, (True, 'buffered') when saved locally for later sync."""
     reason = (reason or "").strip()
     custom_reason = (custom_reason or "").strip()
     if not reason or not custom_reason:
         log.warning("Break reason update skipped: reason/custom reason is required")
-        return False
+        return False, None
 
     url = f"{config['serverUrl']}/api/agent/break-log"
     payload = {
@@ -111,7 +111,7 @@ def send_break_reason(config, reason, custom_reason):
             resp = http_client.http.patch(url, json=payload, timeout=API_TIMEOUT_BREAK)
             if resp.status_code == 200:
                 log.info("Break reason updated: %s — %s", reason, custom_reason)
-                return True
+                return True, "success"
             log.warning("Break reason update failed (attempt %d): HTTP %d", attempt + 1, resp.status_code)
         except Exception as e:
             log.warning("Break reason update error (attempt %d): %s", attempt + 1, e)
@@ -120,9 +120,7 @@ def send_break_reason(config, reason, custom_reason):
 
     log.error("Break reason update FAILED after 3 attempts — buffering (will sync when online)")
     network.buffer_request("PATCH", url, payload)
-    # Returning True keeps the popup flow non-blocking while preserving data in
-    # the offline buffer. The request will be replayed by flush_buffer().
-    return True
+    return True, "buffered"
 
 
 def send_break_end(config):

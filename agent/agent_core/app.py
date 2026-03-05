@@ -299,6 +299,15 @@ class AgentApp:
             online_now = network.is_online(server_url)
             if online_now:
                 self._on_reconnect()
+        # When online: flush any buffered requests (e.g. break form submitted during brief outage)
+        elif network.has_buffered_requests():
+            last = getattr(self, "_last_buffered_flush", 0)
+            if time.time() - last >= 60:
+                self._last_buffered_flush = time.time()
+                def flush():
+                    time.sleep(1)
+                    network.flush_buffer()
+                threading.Thread(target=flush, daemon=True).start()
 
     def _start_offline_break(self):
         """Record internet disconnect as break start."""
@@ -382,60 +391,69 @@ class AgentApp:
         self._root.after(AUTOCLICKER_CHECK_SEC * 1000, self._check_autoclicker)
 
     def _show_cheat_warning(self):
-        """Show a professional warning popup when auto-clicker is detected."""
+        """Professional warning popup when auto-clicker is detected."""
         if self._cheat_warning_top is not None:
             return
         try:
             top = tk.Toplevel(self._root)
             self._cheat_warning_top = top
             top.title("Suspicious Activity Detected")
-            top.configure(bg=THEME["bg_card"])
+            top.configure(bg="#e2e8f0")
             top.attributes("-topmost", True)
             top.resizable(False, False)
 
-            W, H = 520, 320
+            W, H = 440, 360
             top.geometry(f"{W}x{H}")
             top.update_idletasks()
             x = (top.winfo_screenwidth() - W) // 2
             y = (top.winfo_screenheight() - H) // 2
             top.geometry(f"{W}x{H}+{x}+{y}")
 
-            # Red header bar
-            header = tk.Frame(top, bg=THEME["error"], height=56)
+            top.grid_rowconfigure(0, weight=1)
+            top.grid_columnconfigure(0, weight=1)
+            outer = tk.Frame(top, bg="#dc2626", padx=1, pady=1)
+            outer.grid(row=0, column=0, sticky="nsew")
+            card = tk.Frame(outer, bg="#ffffff", padx=1, pady=1)
+            card.pack(fill="both", expand=True)
+
+            # Header: professional red
+            header = tk.Frame(card, bg="#b91c1c", height=72)
             header.pack(fill="x")
             header.pack_propagate(False)
-            tk.Label(
-                header, text="\u26d4  Suspicious Activity Detected",
-                font=("Segoe UI", 16, "bold"), fg="white",
-                bg=THEME["error"],
-            ).pack(expand=True)
+            hc = tk.Frame(header, bg="#b91c1c")
+            hc.pack(expand=True, padx=24, pady=16)
+            tk.Label(hc, text="\u26a0", font=("Segoe UI", 24), fg="white", bg="#b91c1c").pack(side="left", padx=(0, 14))
+            tb = tk.Frame(hc, bg="#b91c1c")
+            tb.pack(side="left")
+            tk.Label(tb, text="Suspicious Activity Detected", font=("Segoe UI", 14, "bold"),
+                     fg="white", bg="#b91c1c").pack(anchor="w")
+            tk.Label(tb, text="Automated software detected", font=("Segoe UI", 10),
+                     fg="#fecaca", bg="#b91c1c").pack(anchor="w")
 
-            body = tk.Frame(top, bg=THEME["bg_card"], padx=36, pady=24)
+            # Body: white, professional
+            body = tk.Frame(card, bg="#ffffff", padx=28, pady=24)
             body.pack(fill="both", expand=True)
 
             msg = (
-                "We have detected automated clicking software running "
-                "on your system.\n\n"
-                "This activity is not allowed and has been marked as "
-                "suspicious. Your activity score has been set to zero "
+                "Automated clicking software has been detected on your system.\n\n"
+                "This activity is not permitted. Your productivity score has been set to zero "
                 "and HR has been notified.\n\n"
-                "Please close the auto-clicker software immediately "
-                "to resume normal tracking."
+                "Please close the software immediately to resume normal tracking."
             )
-            tk.Label(
-                body, text=msg, font=("Segoe UI", 11),
-                fg=THEME["text_primary"], bg=THEME["bg_card"],
-                wraplength=440, justify="left",
-            ).pack(fill="x", pady=(0, 16))
+            tk.Label(body, text=msg, font=("Segoe UI", 11),
+                     fg="#475569", bg="#ffffff", wraplength=360, justify="left").pack(anchor="w", pady=(0, 20))
 
-            tk.Button(
+            btn = tk.Button(
                 body, text="I Understand",
                 font=("Segoe UI", 12, "bold"),
-                bg=THEME["error"], fg="white",
-                activebackground="#dc2626", activeforeground="white",
-                relief="flat", padx=24, pady=10, cursor="hand2",
-                command=self._dismiss_cheat_warning,
-            ).pack()
+                bg="#dc2626", fg="white",
+                activebackground="#b91c1c", activeforeground="white",
+                relief="flat", padx=28, pady=12, cursor="hand2",
+                command=self._dismiss_cheat_warning, highlightthickness=0, bd=0,
+            )
+            btn.pack()
+            btn.bind("<Enter>", lambda e: btn.config(bg="#b91c1c"))
+            btn.bind("<Leave>", lambda e: btn.config(bg="#dc2626"))
 
             top.protocol("WM_DELETE_WINDOW", self._dismiss_cheat_warning)
             log.info("Auto-clicker warning popup shown")
@@ -465,7 +483,9 @@ class AgentApp:
 
     def _show_popup(self):
         """Show the idle popup and open a break in DB. Main thread only."""
-        self.state.on_popup_shown()
+        # Use lock_start_time when triggered by lock so break duration is correct
+        start_time = self.state.lock_start_time if self.state.was_locked else time.time()
+        self.state.on_popup_shown(break_start_time=start_time)
         self._popup.show()
 
         start_time = self.state.break_start_time
