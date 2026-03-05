@@ -313,8 +313,8 @@ export default function MonthlyHrPage() {
     { key: 'monthlySalary', label: 'Gross Salary' },
     { key: 'netSalary', label: 'Net Salary (After Deduction)' },
     { key: 'salaryDeductAmount', label: 'Salary Deduct (Amount)' },
-    { key: 'lateCount', label: 'Late Count' },
-    { key: 'earlyCount', label: 'Early Count' },
+    { key: 'lateCount', label: 'Late Violations' },
+    { key: 'earlyCount', label: 'Early Violations' },
     { key: 'salaryDeductDays', label: 'Salary Deduct (Days)' },
   ];
 
@@ -837,10 +837,10 @@ export default function MonthlyHrPage() {
               rowData[col.key] = emp.shift || '';
               break;
             case 'lateCount':
-              rowData[col.key] = emp.lateCount ?? 0;
+              rowData[col.key] = emp.lateViolationCount ?? emp.lateCount ?? 0;
               break;
             case 'earlyCount':
-              rowData[col.key] = emp.earlyCount ?? 0;
+              rowData[col.key] = emp.earlyViolationCount ?? emp.earlyCount ?? 0;
               break;
             case 'salaryDeductDays':
               rowData[col.key] = emp.salaryDeductDays ?? 0;
@@ -1852,16 +1852,18 @@ export default function MonthlyHrPage() {
                       ...headerCell,
                       minWidth: 70,
                     }}
+                    title="Late violations (counted separately for salary deduction)"
                   >
-                    Late
+                    Late Violations
                   </th>
                   <th
                     style={{
                       ...headerCell,
                       minWidth: 70,
                     }}
+                    title="Early violations (counted separately for salary deduction)"
                   >
-                    Early
+                    Early Violations
                   </th>
                   {dayNumbers.map((d) => (
                     <th key={d} style={headerCell}>
@@ -2045,7 +2047,7 @@ export default function MonthlyHrPage() {
                           {formatSalaryDays(emp.salaryDeductDays)}
                         </td>
 
-                        {/* Late */}
+                        {/* Late Violations (counted separately) */}
                         <td
                           style={{
                             ...baseCell,
@@ -2056,6 +2058,7 @@ export default function MonthlyHrPage() {
                             fontSize: 11,
                             minWidth: 70,
                           }}
+                          title="Late violations (counted separately for deduction)"
                         >
                           <span
                             style={{
@@ -2065,17 +2068,17 @@ export default function MonthlyHrPage() {
                               padding: '1px 6px',
                               borderRadius: 999,
                               backgroundColor:
-                                emp.lateCount > 0 ? '#fee2e2' : '#e5e7eb',
+                                (emp.lateViolationCount ?? emp.lateCount ?? 0) > 0 ? '#fee2e2' : '#e5e7eb',
                               color:
-                                emp.lateCount > 0 ? '#b91c1c' : '#4b5563',
+                                (emp.lateViolationCount ?? emp.lateCount ?? 0) > 0 ? '#b91c1c' : '#4b5563',
                               fontWeight: 600,
                             }}
                           >
-                            {emp.lateCount}
+                            {emp.lateViolationCount ?? emp.lateCount ?? 0}
                           </span>
                         </td>
 
-                        {/* Early */}
+                        {/* Early Violations (counted separately) */}
                         <td
                           style={{
                             ...baseCell,
@@ -2086,6 +2089,7 @@ export default function MonthlyHrPage() {
                             fontSize: 11,
                             minWidth: 70,
                           }}
+                          title="Early violations (counted separately for deduction)"
                         >
                           <span
                             style={{
@@ -2095,13 +2099,13 @@ export default function MonthlyHrPage() {
                               padding: '1px 6px',
                               borderRadius: 999,
                               backgroundColor:
-                                emp.earlyCount > 0 ? '#fee2e2' : '#e5e7eb',
+                                (emp.earlyViolationCount ?? emp.earlyCount ?? 0) > 0 ? '#fee2e2' : '#e5e7eb',
                               color:
-                                emp.earlyCount > 0 ? '#b91c1c' : '#4b5563',
+                                (emp.earlyViolationCount ?? emp.earlyCount ?? 0) > 0 ? '#b91c1c' : '#4b5563',
                               fontWeight: 600,
                             }}
                           >
-                            {emp.earlyCount}
+                            {emp.earlyViolationCount ?? emp.earlyCount ?? 0}
                           </span>
                         </td>
 

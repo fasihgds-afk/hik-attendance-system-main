@@ -2254,14 +2254,16 @@ export default function EmployeeDashboardPage() {
                     color="#f97373"
                   />
                   <SummaryItem
-                    label="Late arrivals"
-                    value={myRecord?.lateCount ?? 0}
+                    label="Late Violations"
+                    value={myRecord?.lateViolationCount ?? myRecord?.lateCount ?? 0}
                     color="#f97373"
+                    hint="Counted separately for deduction"
                   />
                   <SummaryItem
-                    label="Early leaves"
-                    value={myRecord?.earlyCount ?? 0}
+                    label="Early Violations"
+                    value={myRecord?.earlyViolationCount ?? myRecord?.earlyCount ?? 0}
                     color="#f97373"
+                    hint="Counted separately for deduction"
                   />
                   <SummaryItem
                     label="Salary deduct (days)"

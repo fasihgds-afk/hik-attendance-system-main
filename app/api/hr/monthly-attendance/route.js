@@ -240,12 +240,11 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
     //   - Check-out at 06:00 (360) → normalize to 1800 → earlyMinutes = 1800-1800 = 0 ✓
     //   - Check-out at 06:15 (375) → normalize to 1815 → earlyMinutes = 1800-1815 = -15 → 0 ✓
     //   - Check-out at 07:00 (420) → normalize to 1860 → earlyMinutes = 1800-1860 = -60 → 0 ✓
-    const maxCheckOutWindow = 8 * 60; // 08:00 = 480 minutes (reasonable upper bound for night shift check-outs)
-    if (outMin < maxCheckOutWindow) {
-      // Check-out is in early morning window (00:00-07:59) → normalize to next day
+    // Normalize to next day when checkout clock-time is before shift start clock-time.
+    // This handles midnight-crossing shifts reliably, including checkouts after 08:00.
+    if (outMin < startClock) {
       outMin += 24 * 60;
     }
-    // If outMin >= maxCheckOutWindow, it's after 08:00 (unusual case, might be data error)
     
     // Also normalize endMin if needed (endMin is already stored as next day time like 27:00 or 30:00)
     // For S1: endMin = 27:00 (03:00 next day) = 1620 minutes
@@ -570,8 +569,9 @@ export async function GET(req) {
       let absentDays = 0;
       let halfDays = 0;
       let missingPunchDays = 0;       // missing check-in OR check-out → 1 day
-      let violationDaysCount = 0;     // number of days with a violation
-      let violationBaseDays = 0;      // full days from 3rd, 6th, 9th, ...
+      let lateViolationCount = 0;     // late violations counted separately
+      let earlyViolationCount = 0;     // early violations counted separately
+      let violationBaseDays = 0;      // full days from 3rd, 6th, 9th, ... (each type)
       let perMinuteFineDays = 0;      // extra days from per-minute fine
       let totalLateMinutes = 0;       // sum of late minutes (beyond grace)
       let totalEarlyMinutes = 0;
@@ -948,9 +948,8 @@ export async function GET(req) {
           totalEarlyMinutes += earlyMinutes;
         }
 
-        // Only count violations if it's a working day with punches (not leave/holiday)
-        const hasViolationDay = (late && !lateExcused) || (earlyLeave && !earlyExcused);
-        const isWorkingDayWithViolation = hasViolationDay && 
+        // Working day check for violation deduction (not leave/holiday, has punches)
+        const isWorkingDayWithPunches = 
           status !== 'Holiday' && 
           status !== 'Paid Leave' && 
           status !== 'Un Paid Leave' && 
@@ -960,120 +959,54 @@ export async function GET(req) {
           checkOut;
 
         // =============================================================================
-        // SALARY DEDUCTION FORMULA FOR VIOLATION DAYS (LATE/EARLY DEPARTURE)
+        // SALARY DEDUCTION FORMULA - LATE AND EARLY COUNTED SEPARATELY
         // =============================================================================
         //
-        // VIOLATION POLICY OVERVIEW:
-        // --------------------------
-        // Violations are counted sequentially for each working day with late/early punches.
-        // Only violations on working days (not holidays/leaves) with actual check-in/out are counted.
+        // LATE and EARLY violations are tracked independently. Each has its own count.
+        // - 2 late + 2 early → 3rd late = 1 day, 3rd early = 1 day → Total 2 days
+        // - A day with BOTH late and early counts as 1 late + 1 early violation
         //
-        // VIOLATION COUNTING RULES:
-        // -------------------------
-        // 1st & 2nd violations: FREE (no salary deduction) - grace period
-        // 3rd violation:      → 1 FULL DAY deduction
-        // 4th violation:      → PER-MINUTE FINE (0.007 day per minute)
-        // 5th violation:      → PER-MINUTE FINE (0.007 day per minute)
-        // 6th violation:      → 1 FULL DAY deduction (total: 2 full days)
-        // 7th violation:      → PER-MINUTE FINE (0.007 day per minute)
-        // 8th violation:      → PER-MINUTE FINE (0.007 day per minute)
-        // 9th violation:      → 1 FULL DAY deduction (total: 3 full days)
-        // 10th violation:     → PER-MINUTE FINE (0.007 day per minute)
-        // 11th violation:     → PER-MINUTE FINE (0.007 day per minute)
-        // 12th violation:     → 1 FULL DAY deduction (total: 4 full days)
-        // ... and so on (pattern repeats every 3 violations)
-        //
-        // MATHEMATICAL FORMULA:
-        // ---------------------
-        // Pattern: Every 3rd violation (3, 6, 9, 12, 15, ...) = 1 full day
-        //          All other violations after 3rd (4, 5, 7, 8, 10, 11, ...) = per-minute fine
-        //
-        // Full Day Deductions = floor(violationCount / 3)
-        //   Examples:
-        //   - 3 violations → floor(3/3) = 1 full day
-        //   - 6 violations → floor(6/3) = 2 full days
-        //   - 9 violations → floor(9/3) = 3 full days
-        //
-        // Per-Minute Fine Days = sum of (violationMinutes × 0.007) for each violation
-        //   where violation is NOT a multiple of 3 AND > 3
-        //   Examples:
-        //   - 4th violation: 10 minutes late → 10 × 0.007 = 0.07 days
-        //   - 5th violation: 25 minutes late → 25 × 0.007 = 0.175 days
-        //   - 7th violation: 30 minutes late → 30 × 0.007 = 0.21 days
-        //
-        // Total Violation Days = Full Day Deductions + Per-Minute Fine Days
-        //
-        // EXAMPLE CALCULATIONS:
-        // ---------------------
-        // Example 1: Employee has 5 violations in a month
-        //   Violation #1: 15 min late (FREE - no deduction)
-        //   Violation #2: 20 min late (FREE - no deduction)
-        //   Violation #3: 10 min late → 1 FULL DAY (3rd violation)
-        //   Violation #4: 30 min late → 30 × 0.007 = 0.21 days (per-minute)
-        //   Violation #5: 45 min late → 45 × 0.007 = 0.315 days (per-minute)
-        //   Total = 1.0 + 0.21 + 0.315 = 1.525 days deduction
-        //
-        // Example 2: Employee has 8 violations in a month
-        //   Violations #1-2: FREE (grace period)
-        //   Violation #3: → 1 FULL DAY
-        //   Violation #4: 20 min → 0.14 days
-        //   Violation #5: 15 min → 0.105 days
-        //   Violation #6: → 1 FULL DAY (6th violation, total now 2 full days)
-        //   Violation #7: 25 min → 0.175 days
-        //   Violation #8: 10 min → 0.07 days
-        //   Total = 2.0 + 0.14 + 0.105 + 0.175 + 0.07 = 2.49 days deduction
-        //
-        // PER-MINUTE FINE DETAILS:
-        // ------------------------
-        // Rate: 0.007 days per minute (approximately 1 day per 143 minutes)
-        // Cap: Maximum 1 day per violation (safety check - if minutes exceed 143)
-        // Formula: fineForDay = min(violationMinutes × 0.007, 1.0)
-        //
-        // WHAT CONSTITUTES A VIOLATION:
-        // -----------------------------
-        // - Late arrival: Check-in AFTER shift start time + grace period (usually 15 min)
-        // - Early departure: Check-out BEFORE shift end time + grace period (usually 15 min)
-        // - Only counted if NOT excused (lateExcused/earlyExcused = false)
-        // - Only counted on working days with actual punches (not holidays/leaves)
-        // - Violation minutes = minutes BEYOND the grace period
-        //   Example: Shift starts 9:00, grace 15 min, check-in 9:20
-        //            Late minutes = (9:20 - 9:00) - 15 = 20 - 15 = 5 minutes
+        // RULES (same for both late and early):
+        // - 1st & 2nd: FREE | 3rd, 6th, 9th...: 1 FULL DAY | 4th, 5th, 7th, 8th...: PER-MINUTE FINE
         //
         // =============================================================================
-        if (isWorkingDayWithViolation) {
-          // Increment violation counter (1st violation, 2nd violation, 3rd violation, etc.)
-          violationDaysCount += 1;
-          const vNo = violationDaysCount; // Current violation number
 
-          // DETERMINE DEDUCTION TYPE BASED ON VIOLATION NUMBER:
-          // ---------------------------------------------------
-          // Use violation rules from database
+        // --- LATE VIOLATION (counted separately) ---
+        if (late && !lateExcused && isWorkingDayWithPunches) {
+          lateViolationCount += 1;
+          const vNo = lateViolationCount;
           const vConfig = violationRules.violationConfig;
-          
-          // Skip free violations (1st, 2nd, etc.) - no deduction for these
+
           if (vNo > vConfig.freeViolations) {
-            // Pattern check: Is this a "milestone" violation? (3rd, 6th, 9th, 12th, ...)
-            // These are multiples of milestoneInterval
             if (vNo % vConfig.milestoneInterval === 0) {
-              // ✓ MILESTONE VIOLATION: Add 1 FULL DAY deduction
               violationBaseDays += 1;
-              
-              // Note: No per-minute fine for milestone violations (full day only)
             } else {
-              // ✓ REGULAR VIOLATION: Apply per-minute fine
-              // PER-MINUTE FINE CALCULATION:
-              // ----------------------------
-              // Formula: fineForDay = violationMinutes × perMinuteRate
-              // Cap: Maximum maxPerMinuteFine days per violation
               const fineForThisDay = Math.min(
-                dayViolationMinutes * vConfig.perMinuteRate,
+                lateMinutes * vConfig.perMinuteRate,
                 vConfig.maxPerMinuteFine
               );
               perMinuteFineDays += fineForThisDay;
-              
             }
           }
-          // Note: vNo <= freeViolations means violations #1, #2, etc. are FREE (no deduction)
+        }
+
+        // --- EARLY VIOLATION (counted separately) ---
+        if (earlyLeave && !earlyExcused && isWorkingDayWithPunches) {
+          earlyViolationCount += 1;
+          const vNo = earlyViolationCount;
+          const vConfig = violationRules.violationConfig;
+
+          if (vNo > vConfig.freeViolations) {
+            if (vNo % vConfig.milestoneInterval === 0) {
+              violationBaseDays += 1;
+            } else {
+              const fineForThisDay = Math.min(
+                earlyMinutes * vConfig.perMinuteRate,
+                vConfig.maxPerMinuteFine
+              );
+              perMinuteFineDays += fineForThisDay;
+            }
+          }
         }
 
         // ----------------- ABSENT / MISSING PUNCH DEDUCTION -----------------------
@@ -1280,7 +1213,9 @@ export async function GET(req) {
         salaryDeductAmount: Number(salaryDeductAmount.toFixed(2)),
         lateCount,
         earlyCount,
-        violationDays: violationDaysCount,
+        lateViolationCount,
+        earlyViolationCount,
+        violationDays: lateViolationCount + earlyViolationCount, // total for backward compatibility
         missingPunchDays,
         unpaidLeaveDays,
         absentDays,

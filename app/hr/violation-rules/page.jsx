@@ -382,9 +382,24 @@ export default function ViolationRulesPage() {
               >
                 Violation Deduction Rules
               </h3>
-              <p style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 16 }}>
-                Configure how late/early violations are calculated and deducted from salary.
+              <p style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 8 }}>
+                Configure how late and early violations are calculated and deducted from salary.
               </p>
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  backgroundColor: theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#e0f2fe',
+                  border: `1px solid ${colors.primary[300]}`,
+                  marginBottom: 16,
+                }}
+              >
+                <p style={{ fontSize: 12, color: colors.text.secondary, margin: 0, lineHeight: 1.6 }}>
+                  <strong style={{ color: colors.primary[600] }}>Late & Early counted separately:</strong> Late violations and early violations are tracked independently. 
+                  Each type has its own count. Example: 2 late + 2 early → 3rd late = 1 day deduction, 3rd early = 1 day deduction → <strong>Total 2 days</strong>.
+                  The rules below apply to both types.
+                </p>
+              </div>
               <div
                 className="rules-form-grid"
                 style={{
@@ -422,7 +437,7 @@ export default function ViolationRulesPage() {
                     }}
                   />
                   <p style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
-                    First N violations are free (no deduction)
+                    First N violations are free per type (late and early each get their own free count)
                   </p>
                 </div>
                 <div>
@@ -454,7 +469,7 @@ export default function ViolationRulesPage() {
                     }}
                   />
                   <p style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
-                    Every Nth violation = 1 full day deduction
+                    Every Nth violation = 1 full day deduction (applied separately for late and early)
                   </p>
                 </div>
                 <div>
