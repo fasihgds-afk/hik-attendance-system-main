@@ -13,8 +13,11 @@ const bodySchema = z.object({
   empCode: z.string().min(1),
   deviceId: z.string().min(1),
   deviceToken: z.string().optional().default(''),
-  status: z.enum(['ACTIVE', 'IDLE', 'BREAK', 'SUSPICIOUS', 'OFFLINE']).default('ACTIVE'),
-  suspiciousActive: z.boolean().default(false),
+  status: z.enum(['ACTIVE', 'IDLE', 'BREAK', 'SUSPICIOUS', 'OFFLINE']).optional(),
+  state: z.enum(['ACTIVE', 'IDLE', 'BREAK', 'SUSPICIOUS', 'OFFLINE']).optional(),
+  suspiciousActive: z.boolean().optional(),
+  autoClickerDetected: z.boolean().optional(),
+  activityScore: z.number().optional(),
   hostName: z.string().optional().default(''),
   os: z.string().optional().default(''),
   appVersion: z.string().optional().default('')
@@ -28,6 +31,9 @@ export async function POST(req) {
     const headerToken = String(req.headers.get('x-device-token') || '').trim();
     const providedToken = headerToken || body.deviceToken;
     if (!providedToken) throw new UnauthorizedError('Missing device token');
+
+    const status = body.status || body.state || 'ACTIVE';
+    const suspiciousActive = body.suspiciousActive ?? body.autoClickerDetected ?? false;
 
     const existing = await Device.findOne({
       empCode: body.empCode,
@@ -44,8 +50,8 @@ export async function POST(req) {
       {
         $set: {
           deviceToken: providedToken,
-          currentStatus: body.status,
-          suspiciousActive: body.suspiciousActive,
+          currentStatus: status,
+          suspiciousActive,
           hostName: body.hostName,
           os: body.os,
           appVersion: body.appVersion,
@@ -62,7 +68,7 @@ export async function POST(req) {
 
     // Keep live suspicious state and historical suspicious minutes in sync.
     const wasSuspicious = !!existing?.suspiciousActive;
-    const isSuspicious = !!body.suspiciousActive;
+    const isSuspicious = suspiciousActive;
     if (!wasSuspicious && isSuspicious) {
       await SuspiciousLog.create({
         empCode: body.empCode,

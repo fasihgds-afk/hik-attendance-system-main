@@ -23,18 +23,23 @@ const allowedByCategory = {
 const openSchema = z.object({
   empCode: z.string().min(1),
   deviceId: z.string().min(1),
-  category: z.string().min(1),
+  deviceToken: z.string().optional(),
+  category: z.string().optional(),
   reason: z.string().optional().default(''),
-  atIso: z.string().datetime().optional()
+  customReason: z.string().optional(),
+  atIso: z.string().datetime().optional(),
+  startedAt: z.string().datetime().optional()
 });
 
 const patchSchema = z.object({
   empCode: z.string().min(1),
   deviceId: z.string().min(1),
-  breakId: z.string().min(1),
+  deviceToken: z.string().optional(),
+  breakId: z.string().optional(),
   action: z.enum(['update-reason', 'end-break']),
   category: z.string().optional(),
   reason: z.string().optional(),
+  customReason: z.string().optional(),
   atIso: z.string().datetime().optional()
 });
 
@@ -59,16 +64,17 @@ function toDateStr(d) {
 
 export async function POST(req) {
   try {
-    const body = openSchema.parse(await req.json());
+    const raw = await req.json();
+    const body = openSchema.parse(raw);
     const empCode = requiredString(body.empCode, 'empCode');
     const deviceId = requiredString(body.deviceId, 'deviceId');
-    const category = normalizeBreakCategory(body.category);
-    if (!category) throw new Error('Invalid break category');
+    const category = normalizeBreakCategory(body.category || body.reason || 'General');
+    const reasonText = String(body.customReason || body.reason || '').trim() || 'Pending';
 
     await connectDB();
-    await verifyDevice(req, empCode, deviceId);
+    await verifyDevice(req, empCode, deviceId, { body: raw });
 
-    const breakStartAt = body.atIso ? new Date(body.atIso) : new Date();
+    const breakStartAt = body.startedAt || body.atIso ? new Date(body.startedAt || body.atIso) : new Date();
     const shift = await resolveEmployeeShift(empCode);
     const shiftDate = toDateStr(breakStartAt);
     const window = resolveShiftWindow({
@@ -107,22 +113,26 @@ export async function POST(req) {
 
 export async function PATCH(req) {
   try {
-    const body = patchSchema.parse(await req.json());
+    const raw = await req.json();
+    const body = patchSchema.parse(raw);
     const empCode = requiredString(body.empCode, 'empCode');
     const deviceId = requiredString(body.deviceId, 'deviceId');
     await connectDB();
-    await verifyDevice(req, empCode, deviceId);
+    await verifyDevice(req, empCode, deviceId, { body: raw });
 
-    const doc = await BreakLog.findOne({
-      _id: body.breakId,
-      empCode,
-      deviceId
-    }).maxTimeMS(2000);
+    let doc;
+    if (body.breakId) {
+      doc = await BreakLog.findOne({ _id: body.breakId, empCode, deviceId }).maxTimeMS(2000);
+    } else {
+      doc = await BreakLog.findOne({ empCode, deviceId, status: 'OPEN' })
+        .sort({ breakStartAt: -1 })
+        .maxTimeMS(2000);
+    }
     if (!doc) throw new Error('Break log not found');
 
     if (body.action === 'update-reason') {
-      const category = body.category ? normalizeBreakCategory(body.category) : normalizeBreakCategory(doc.category);
-      const reason = String(body.reason || '').trim();
+      const category = normalizeBreakCategory(body.category || body.reason || doc.category);
+      const reason = String(body.customReason || body.reason || '').trim();
       if (!category) throw new Error('Invalid break category');
       if (!reason) throw new Error('Reason is required');
 

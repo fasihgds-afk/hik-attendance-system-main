@@ -50,17 +50,23 @@ export async function GET(req) {
       timezoneOffset: process.env.TIMEZONE_OFFSET || '+05:00'
     });
 
+    const gracePeriod = Number(shift.gracePeriod || 0);
+    const crossesMidnight = !!shift.crossesMidnight;
     return successResponse(
       {
         empCode,
         date,
+        shiftStart: shift.startTime,
+        shiftEnd: shift.endTime,
+        gracePeriod,
+        crossesMidnight,
         shift: {
           code: shift.code,
           name: shift.name,
           startTime: shift.startTime,
           endTime: shift.endTime,
-          crossesMidnight: !!shift.crossesMidnight,
-          gracePeriod: Number(shift.gracePeriod || 0)
+          crossesMidnight,
+          gracePeriod
         },
         window: {
           shiftStart: window?.shiftStart?.toISOString() || null,
