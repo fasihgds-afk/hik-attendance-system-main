@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/lib/theme/ThemeContext";
 
 export function Providers({ children }) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={false}>
       <ThemeProvider defaultTheme="dark">
         {children}
       </ThemeProvider>
