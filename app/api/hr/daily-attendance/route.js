@@ -24,6 +24,11 @@ function toEmpCodeKey(value) {
   return String(value).trim();
 }
 
+/** Composite key for (empCode, shift) to look up existing records. */
+function toEmpCodeShiftKey(empCode, shift) {
+  return `${toEmpCodeKey(empCode)}|${shift || 'Unknown'}`;
+}
+
 /**
  * Extract shift code from emp.shift / emp.shiftId (string, ObjectId, or formatted).
  */
@@ -86,7 +91,7 @@ export async function POST(req) {
         .lean()
         .maxTimeMS(2000),
       ShiftAttendance.find({ date })
-        .select('date empCode checkIn checkOut shift attendanceStatus reason leaveType')
+        .select('date empCode checkIn checkOut shift attendanceStatus reason leaveType totalPunches manuallyEdited late earlyLeave excused lateExcused earlyExcused')
         .lean()
         .maxTimeMS(2000),
       getFirstAndLastPunchPerEmployee(AttendanceEvent, startLocal, endLocal, 5000),
@@ -121,50 +126,52 @@ export async function POST(req) {
       });
     }
 
-    const existingByEmpCode = new Map();
+    const existingByEmpCodeShift = new Map();
     for (const record of existingRecords) {
-      const key = toEmpCodeKey(record.empCode);
-      if (!key) continue;
-      const existing = existingByEmpCode.get(key);
-      if (!existing || (!existing.checkOut && record.checkOut)) {
-        existingByEmpCode.set(key, record);
-      }
+      const key = toEmpCodeShiftKey(record.empCode, record.shift);
+      if (!toEmpCodeKey(record.empCode)) continue;
+      existingByEmpCodeShift.set(key, record);
     }
 
     const items = [];
 
     for (const emp of allEmployees) {
       const empKey = toEmpCodeKey(emp.empCode);
-      const existingRecord = existingByEmpCode.get(empKey);
+      const assignedShift = shiftForDateMap.get(empKey) || empInfoMap.get(empKey)?.shift || '';
+      const shift = assignedShift || 'Unknown';
+      const existingRecord = existingByEmpCodeShift.get(toEmpCodeShiftKey(empKey, shift));
       const punches = punchMap.get(empKey);
 
       let checkIn = null;
       let checkOut = null;
       let totalPunches = 0;
 
-      if (punches) {
+      // HR manually edited on Monthly page: preserve checkIn/checkOut, never overwrite with punch data
+      if (existingRecord?.manuallyEdited) {
+        if (existingRecord.checkIn) checkIn = new Date(existingRecord.checkIn);
+        if (existingRecord.checkOut) checkOut = new Date(existingRecord.checkOut);
+        totalPunches = checkIn && checkOut ? 2 : checkIn ? 1 : 0;
+      } else if (punches) {
         checkIn = punches.firstPunch || null;
         checkOut = punches.count > 1 ? punches.lastPunch : null;
         totalPunches = punches.count;
       }
 
-      if (!checkIn && existingRecord?.checkIn) {
-        checkIn = new Date(existingRecord.checkIn);
-        if (totalPunches === 0) totalPunches = checkOut ? 2 : 1;
+      if (!existingRecord?.manuallyEdited) {
+        if (!checkIn && existingRecord?.checkIn) {
+          checkIn = new Date(existingRecord.checkIn);
+          if (totalPunches === 0) totalPunches = checkOut ? 2 : 1;
+        }
+        if (!checkOut && existingRecord?.checkOut && totalPunches >= 1) {
+          const existingCheckOut = new Date(existingRecord.checkOut);
+          if (!isNaN(existingCheckOut.getTime())) checkOut = ensureCheckInBeforeCheckOut(checkIn, existingCheckOut) || checkOut;
+          if (checkOut && totalPunches === 1) totalPunches = 2;
+        }
+        checkOut = ensureCheckInBeforeCheckOut(checkIn, checkOut);
       }
-      if (!checkOut && existingRecord?.checkOut && totalPunches >= 1) {
-        const existingCheckOut = new Date(existingRecord.checkOut);
-        if (!isNaN(existingCheckOut.getTime())) checkOut = ensureCheckInBeforeCheckOut(checkIn, existingCheckOut) || checkOut;
-        if (checkOut && totalPunches === 1) totalPunches = 2;
-      }
-
-      checkOut = ensureCheckInBeforeCheckOut(checkIn, checkOut);
-
-      const assignedShift = shiftForDateMap.get(empKey) || empInfoMap.get(empKey)?.shift || '';
-      let shift = assignedShift || 'Unknown';
 
       let attendanceStatus = totalPunches > 0 ? 'Present' : 'Absent';
-      if (existingRecord && MANUAL_OR_LEAVE_STATUSES.has(existingRecord.attendanceStatus)) {
+      if (existingRecord && (MANUAL_OR_LEAVE_STATUSES.has(existingRecord.attendanceStatus) || existingRecord.manuallyEdited)) {
         attendanceStatus = existingRecord.attendanceStatus;
       }
 
@@ -181,14 +188,21 @@ export async function POST(req) {
         attendanceStatus,
         reason: existingRecord?.reason ?? '',
         leaveType: existingRecord?.leaveType ?? null,
+        manuallyEdited: existingRecord?.manuallyEdited ?? false,
+        late: existingRecord?.late ?? false,
+        earlyLeave: existingRecord?.earlyLeave ?? false,
+        excused: existingRecord?.excused ?? false,
+        lateExcused: existingRecord?.lateExcused ?? false,
+        earlyExcused: existingRecord?.earlyExcused ?? false,
       });
     }
 
     const presentItems = items.filter((item) => item.totalPunches > 0 || MANUAL_OR_LEAVE_STATUSES.has(item.attendanceStatus));
 
     const bulkOps = presentItems.map((item) => {
-      const existing = existingByEmpCode.get(toEmpCodeKey(item.empCode));
+      const existing = existingByEmpCodeShift.get(toEmpCodeShiftKey(item.empCode, item.shift));
       const preserveManual = existing && MANUAL_OR_LEAVE_STATUSES.has(existing.attendanceStatus);
+      const preserveManuallyEdited = existing?.manuallyEdited;
 
       const update = {
         date,
@@ -203,7 +217,21 @@ export async function POST(req) {
         updatedAt: new Date(),
       };
 
-      if (preserveManual) {
+      if (preserveManuallyEdited) {
+        // HR edited on Monthly page: preserve all manual fields, never overwrite
+        update.checkIn = existing.checkIn;
+        update.checkOut = existing.checkOut ?? null;
+        update.totalPunches = existing.totalPunches ?? (existing.checkIn && existing.checkOut ? 2 : existing.checkIn ? 1 : 0);
+        update.attendanceStatus = existing.attendanceStatus;
+        update.reason = existing.reason ?? '';
+        update.leaveType = existing.leaveType ?? null;
+        update.manuallyEdited = true;
+        update.late = existing.late ?? false;
+        update.earlyLeave = existing.earlyLeave ?? false;
+        update.excused = existing.excused ?? false;
+        update.lateExcused = existing.lateExcused ?? false;
+        update.earlyExcused = existing.earlyExcused ?? false;
+      } else if (preserveManual) {
         update.attendanceStatus = existing.attendanceStatus;
         if (existing.reason != null) update.reason = existing.reason;
         if (existing.leaveType != null) update.leaveType = existing.leaveType;
