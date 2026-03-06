@@ -1828,6 +1828,7 @@ export default function EmployeeDashboardPage() {
                 padding: "12px 14px",
                 background: colors.gradient.card,
                 border: `1px solid ${colors.border.default}`,
+                borderLeft: `3px solid ${colors.primary[500]}`,
                 boxShadow: theme === 'dark' ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.06)',
                 display: "flex",
                 gap: 10,
@@ -1875,24 +1876,12 @@ export default function EmployeeDashboardPage() {
                   style={{
                     fontSize: 14,
                     fontWeight: 700,
-                    marginBottom: 0,
+                    marginBottom: 2,
                     letterSpacing: 0.3,
                     color: colors.text.primary,
                   }}
                 >
                   {displayName}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: colors.text.secondary,
-                    marginBottom: 0,
-                  }}
-                >
-                  Emp Code:{" "}
-                  <strong style={{ color: colors.text.primary }}>
-                    {empCode || "-"}
-                  </strong>
                 </div>
               <div
                 className="employee-profile-meta-grid"
@@ -1909,8 +1898,6 @@ export default function EmployeeDashboardPage() {
                 <div style={{ color: colors.text.primary, fontWeight: 600 }}>{displayShift}</div>
                 <div style={{ color: colors.text.secondary }}>Designation</div>
                 <div style={{ color: colors.text.primary, fontWeight: 600 }}>{displayDesignation}</div>
-                <div style={{ color: colors.text.secondary }}>Salary</div>
-                <div style={{ color: colors.success, fontWeight: 600 }}>{formatCurrencyPKR(displaySalary)}</div>
               </div>
               {!loading && (todayDayObj || todayDateLabel !== '-') && (
                 <div
@@ -1942,26 +1929,29 @@ export default function EmployeeDashboardPage() {
                 onClick={() => router.push('/employee/productivity')}
                 style={{
                   marginTop: 6,
-                  padding: '5px 10px',
-                  borderRadius: 8,
-                  border: `1px solid ${colors.success}`,
-                  backgroundColor: colors.success,
-                  color: '#ffffff',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: `1px solid ${colors.border.default}`,
+                  background: 'transparent',
+                  color: colors.text.secondary,
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11,
-                  fontWeight: 600,
+                  gap: 4,
+                  fontSize: 10,
+                  fontWeight: 500,
                   transition: 'all 0.2s',
+                  alignSelf: 'flex-start',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.9';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.color = colors.success;
+                  e.currentTarget.style.borderColor = colors.success;
+                  e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.08)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.color = colors.text.secondary;
+                  e.currentTarget.style.borderColor = colors.border.default;
+                  e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
                 📊 Productivity
