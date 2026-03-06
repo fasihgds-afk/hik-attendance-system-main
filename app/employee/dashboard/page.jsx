@@ -1645,35 +1645,6 @@ export default function EmployeeDashboardPage() {
                 {displayName} · Code:{" "}
                 <strong style={{ letterSpacing: 0.5 }}>{empCode}</strong>
               </div>
-              <button
-                type="button"
-                onClick={() => router.push('/employee/productivity')}
-                style={{
-                  marginTop: 8,
-                  padding: "6px 14px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255, 255, 255, 0.4)",
-                  backgroundColor: "rgba(255, 255, 255, 0.15)",
-                  color: "#ffffff",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                📊 Productivity
-              </button>
             </div>
           </div>
 
@@ -1867,6 +1838,38 @@ export default function EmployeeDashboardPage() {
             >
             <div className="employee-profile-avatar" style={{ flexShrink: 0, position: 'relative' }}>
               {renderEmployeeAvatar(avatarSource, 78)}
+              <button
+                type="button"
+                onClick={() => router.push('/employee/productivity')}
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  border: `2px solid ${colors.background.card}`,
+                  backgroundColor: colors.success,
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 14,
+                  boxShadow: `0 2px 8px ${colors.success}40`,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.success;
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+                title="Productivity"
+              >
+                📊
+              </button>
               <button
                 type="button"
                 onClick={() => setShowEditProfile(true)}
