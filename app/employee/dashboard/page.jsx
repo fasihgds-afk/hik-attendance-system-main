@@ -1432,9 +1432,6 @@ export default function EmployeeDashboardPage() {
           .employee-top-row {
             grid-template-columns: 1fr 1fr !important;
           }
-          .employee-comp-card {
-            grid-column: 1 / -1 !important;
-          }
         }
         @media (max-width: 480px) {
           .employee-dashboard-container {
@@ -1812,13 +1809,13 @@ export default function EmployeeDashboardPage() {
           </div>
         )}
 
-        {/* TOP ROW */}
+        {/* TOP ROW - 2 equal cards (Profile + Compensation) */}
         <div
           className="employee-top-row"
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 10,
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+            gap: 14,
             marginBottom: 14,
             alignItems: "stretch",
           }}
@@ -1838,38 +1835,6 @@ export default function EmployeeDashboardPage() {
             >
             <div className="employee-profile-avatar" style={{ flexShrink: 0, position: 'relative' }}>
               {renderEmployeeAvatar(avatarSource, 78)}
-              <button
-                type="button"
-                onClick={() => router.push('/employee/productivity')}
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  border: `2px solid ${colors.background.card}`,
-                  backgroundColor: colors.success,
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  boxShadow: `0 2px 8px ${colors.success}40`,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = colors.success;
-                  e.currentTarget.style.transform = 'scale(1.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-                title="Productivity"
-              >
-                📊
-              </button>
               <button
                 type="button"
                 onClick={() => setShowEditProfile(true)}
@@ -1955,6 +1920,47 @@ export default function EmployeeDashboardPage() {
                   <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
                 </div>
               </div>
+              {!loading && (todayDayObj || todayDateLabel !== '-') && (
+                <div style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4, paddingTop: 6, borderTop: `1px solid ${colors.border.default}` }}>
+                  Today: <strong style={{ color: colors.text.primary }}>{todayDateLabel}</strong>
+                  {' · '}In: <strong>{todayDayObj?.checkIn ? formatTimeShort(todayDayObj.checkIn) : '-'}</strong>
+                  {' · '}Out: <strong>{todayDayObj?.checkOut ? formatTimeShort(todayDayObj.checkOut) : '-'}</strong>
+                  {todayDayObj?.status && (
+                    <span style={{ marginLeft: 6 }}>
+                      · <strong style={{ color: colors.success }}>{todayDayObj.status}</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => router.push('/employee/productivity')}
+                style={{
+                  marginTop: 8,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${colors.success}`,
+                  backgroundColor: colors.success,
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.9';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                📊 Productivity
+              </button>
               {loadingEmployee && (
                 <div
                   style={{
@@ -1967,113 +1973,6 @@ export default function EmployeeDashboardPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* TODAY CARD */}
-          <div
-              style={{
-                borderRadius: 18,
-                padding: "12px 14px",
-                background: theme === 'dark' 
-                  ? `linear-gradient(135deg, ${colors.primary[700]}, ${colors.success}, ${colors.primary[800]})`
-                  : `linear-gradient(135deg, ${colors.primary[600]}, ${colors.success}, ${colors.primary[500]})`,
-                border: `1px solid ${colors.success}`,
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: 1.1,
-                  color: "#e5fdf4",
-                }}
-              >
-                Today&apos;s Attendance
-              </div>
-              {!loading && todayDayObj?.status && (
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: "#ffffff",
-                    backgroundColor: "rgba(15, 23, 42, 0.28)",
-                    border: "1px solid rgba(255,255,255,0.25)",
-                    borderRadius: 999,
-                    padding: "3px 8px",
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  {todayDayObj.status}
-                </div>
-              )}
-            </div>
-
-            {loading ? (
-              <div style={{ fontSize: 12, color: "#ecfdf5" }}>
-                Loading latest data…
-              </div>
-            ) : !todayDayObj ? (
-              <div style={{ fontSize: 12, color: "#ecfdf5" }}>
-                No record found for today yet.
-              </div>
-            ) : (
-              <>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "6px 12px",
-                    marginBottom: 8,
-                  }}
-                >
-                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
-                    Date: <strong>{todayDateLabel}</strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
-                    Shift: <strong>{displayShift || "-"}</strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
-                    In:{" "}
-                    <strong>
-                      {todayDayObj.checkIn
-                        ? formatTimeShort(todayDayObj.checkIn)
-                        : "-"}
-                    </strong>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#e5fdf4" }}>
-                    Out:{" "}
-                    <strong>
-                      {todayDayObj.checkOut
-                        ? formatTimeShort(todayDayObj.checkOut)
-                        : "-"}
-                    </strong>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ fontSize: 11, color: "#ecfdf5", backgroundColor: "rgba(15,23,42,0.2)", borderRadius: 8, padding: "5px 6px" }}>
-                    Late: <strong>{todayDayObj.late ? "Yes" : "No"}</strong>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#ecfdf5", backgroundColor: "rgba(15,23,42,0.2)", borderRadius: 8, padding: "5px 6px" }}>
-                    Early: <strong>{todayDayObj.earlyLeave ? "Yes" : "No"}</strong>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#ecfdf5", backgroundColor: "rgba(15,23,42,0.2)", borderRadius: 8, padding: "5px 6px" }}>
-                    Excused: <strong>{todayDayObj.excused ? "Yes" : "No"}</strong>
-                  </div>
-                </div>
-              </>
-            )}
           </div>
 
           {/* COMPENSATION CARD */}
@@ -2093,6 +1992,13 @@ export default function EmployeeDashboardPage() {
             <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.1, color: colors.text.tertiary, marginBottom: 8 }}>
               Compensation & Bank
             </div>
+            {!loading && todayDayObj?.status && (
+              <div style={{ fontSize: 11, color: colors.text.tertiary, marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${colors.border.default}` }}>
+                Today&apos;s Status: <strong style={{ color: colors.success }}>{todayDayObj.status}</strong>
+                {' · '}In: <strong>{todayDayObj.checkIn ? formatTimeShort(todayDayObj.checkIn) : '-'}</strong>
+                {' · '}Out: <strong>{todayDayObj.checkOut ? formatTimeShort(todayDayObj.checkOut) : '-'}</strong>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 10px", marginBottom: 8 }}>
               <div style={{ fontSize: 12, color: colors.text.secondary }}>
                 Gross: <strong style={{ color: colors.success }}>{formatCurrencyPKR(displaySalary)}</strong>
