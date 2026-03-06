@@ -1645,6 +1645,35 @@ export default function EmployeeDashboardPage() {
                 {displayName} · Code:{" "}
                 <strong style={{ letterSpacing: 0.5 }}>{empCode}</strong>
               </div>
+              <button
+                type="button"
+                onClick={() => router.push('/employee/productivity')}
+                style={{
+                  marginTop: 8,
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255, 255, 255, 0.4)",
+                  backgroundColor: "rgba(255, 255, 255, 0.15)",
+                  color: "#ffffff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                📊 Productivity
+              </button>
             </div>
           </div>
 
@@ -1707,72 +1736,6 @@ export default function EmployeeDashboardPage() {
                 return <option key={m} value={m}>{monthName}</option>;
               })}
             </select>
-            {canViewSalarySlip && myRecord && (
-              <button
-                type="button"
-                onClick={() => setShowSalarySlip(true)}
-                style={{
-                  padding: "9px 18px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)",
-                  color: colors.primary[600],
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  boxShadow: "0 4px 12px rgba(255, 255, 255, 0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  transition: "all 0.2s",
-                  whiteSpace: "nowrap",
-                  height: "36px",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 16px rgba(255, 255, 255, 0.4)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(255, 255, 255, 0.3)";
-                }}
-              >
-                💰 Salary Slip
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => router.push('/employee/productivity')}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                color: "#ffffff",
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(255, 255, 255, 0.2)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-                transition: "all 0.2s",
-                whiteSpace: "nowrap",
-                height: "36px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(255, 255, 255, 0.4)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(255, 255, 255, 0.2)";
-              }}
-            >
-              📊 Productivity
-            </button>
             <button
               type="button"
               onClick={() => router.push('/employee/complaints')}
