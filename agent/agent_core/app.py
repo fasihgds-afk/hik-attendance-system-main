@@ -156,6 +156,7 @@ class AgentApp:
             elif kind == "key":
                 self._tracker.on_key_event()
 
+
         if had_input and self._is_within_shift():
             self.state.record_activity()
 
