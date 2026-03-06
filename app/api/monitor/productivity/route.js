@@ -1,3 +1,6 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../../auth/[...nextauth]/route';
+import { ForbiddenError } from '../../../../lib/errors/errorHandler';
 import { connectDB } from '../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
@@ -28,10 +31,19 @@ function overlapMinutes(startAt, endAt, dayStart, dayEnd) {
 
 export async function GET(req) {
   try {
+    const session = await getServerSession(authOptions);
     const { searchParams } = new URL(req.url);
     const empCode = String(searchParams.get('empCode') || '').trim();
     const date = String(searchParams.get('date') || new Date().toISOString().slice(0, 10)).slice(0, 10);
     if (!empCode) throw new Error('empCode is required');
+
+    // Require auth; employees can only fetch their own data; HR can fetch any
+    if (!session?.user) {
+      throw new ForbiddenError('Please sign in to view productivity');
+    }
+    if (session.user.role === 'EMPLOYEE' && String(session.user.empCode || '') !== empCode) {
+      throw new ForbiddenError('You can only view your own productivity');
+    }
 
     await connectDB();
     const { start: dayStart, end: dayEnd } = getDayBounds(date, process.env.TIMEZONE_OFFSET || '+05:00');
@@ -60,8 +72,17 @@ export async function GET(req) {
     }
 
     const totalBreakMin = breakLogs.reduce((acc, b) => acc + toNum(b.durationMin), 0);
+    const generalMin = breakLogs
+      .filter((b) => String(b.category || '').trim().toLowerCase() === 'general')
+      .reduce((acc, b) => acc + toNum(b.durationMin), 0);
+    const namazMin = breakLogs
+      .filter((b) => String(b.category || '').trim().toLowerCase() === 'namaz')
+      .reduce((acc, b) => acc + toNum(b.durationMin), 0);
     const allowedBreakMin = breakLogs.reduce((acc, b) => acc + toNum(b.allowedDurationMin), 0);
     const deductedBreakMin = breakLogs.reduce((acc, b) => acc + toNum(b.exceededDurationMin), 0);
+
+    // General: 60min allowed — only exceeded reduces productivity. Namaz: 25min — only exceeded. Official: always productive
+    const deductibleBreakMin = Math.max(0, generalMin - 60) + Math.max(0, namazMin - 25);
 
     const breakDown = categories.map((cat) => {
       const rows = breakLogs.filter((b) => b.category === cat);
@@ -86,7 +107,7 @@ export async function GET(req) {
     }, 0);
     const suspiciousMin = suspiciousClosedMin + suspiciousLiveMin;
 
-    const productiveHrs = Math.max(0, totalWorkedHrs - totalBreakMin / 60);
+    const productiveHrs = Math.max(0, totalWorkedHrs - deductibleBreakMin / 60);
     const suspiciousHrs = suspiciousMin / 60;
     const netProductiveHrs = Math.max(0, productiveHrs - suspiciousHrs);
     const productivityPct =

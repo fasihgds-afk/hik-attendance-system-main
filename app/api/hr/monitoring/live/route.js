@@ -116,14 +116,32 @@ export async function GET(req) {
         ? window.shiftStart
         : checkIn;
       const workedHrs = toHoursFromDates(productivityStart, effectiveCheckOut);
-      const totalBreakMin = validBreaks.reduce((acc, b) => {
+      const getBreakMin = (b) => {
         if (String(b.status || '').toUpperCase() === 'OPEN' && b.breakStartAt) {
-          return acc + Math.max(0, Math.floor((now.getTime() - new Date(b.breakStartAt).getTime()) / 60000));
+          return Math.max(0, Math.floor((now.getTime() - new Date(b.breakStartAt).getTime()) / 60000));
         }
-        return acc + Number(b.durationMin || 0);
-      }, 0);
+        return Number(b.durationMin || 0);
+      };
+      const catKey = (b) => {
+        const raw = String(b.category || '').trim().toLowerCase();
+        return raw === 'official' ? 'Official' : raw === 'general' ? 'General' : raw === 'namaz' ? 'Namaz' : null;
+      };
+      const totalBreakMin = validBreaks.reduce((acc, b) => acc + getBreakMin(b), 0);
       const allowedBreakMin = validBreaks.reduce((acc, b) => acc + Number(b.allowedDurationMin || 0), 0);
       const deductedBreakMin = validBreaks.reduce((acc, b) => acc + Number(b.exceededDurationMin || 0), 0);
+
+      let generalMin = 0;
+      let namazMin = 0;
+      for (const b of validBreaks) {
+        const k = catKey(b);
+        const m = getBreakMin(b);
+        if (k === 'General') generalMin += m;
+        else if (k === 'Namaz') namazMin += m;
+      }
+      // General: 60min allowed — only exceeded portion reduces productivity
+      // Namaz: 25min allowed — only exceeded portion reduces productivity
+      // Official: unlimited — always productive
+      const deductibleBreakMin = Math.max(0, generalMin - 60) + Math.max(0, namazMin - 25);
 
       const suspiciousMin = suspiciousList.reduce((acc, s) => {
         if (s.active && !s.endedAt) {
@@ -132,7 +150,7 @@ export async function GET(req) {
         return acc + Number(s.durationMin || 0);
       }, 0);
 
-      const productiveHrs = Math.max(0, workedHrs - totalBreakMin / 60 - suspiciousMin / 60);
+      const productiveHrs = Math.max(0, workedHrs - deductibleBreakMin / 60 - suspiciousMin / 60);
       const score = workedHrs > 0 ? Math.max(0, Math.min(100, Math.round((productiveHrs / workedHrs) * 100))) : 0;
 
       const byCategory = {
@@ -141,9 +159,7 @@ export async function GET(req) {
         Namaz: { totalMin: 0, allowedMin: 0 }
       };
       for (const b of validBreaks) {
-
-        const raw = String(b.category || '').trim().toLowerCase();
-        const key = raw === 'official' ? 'Official' : raw === 'general' ? 'General' : raw === 'namaz' ? 'Namaz' : null;
+        const key = catKey(b);
         if (!key) continue;
 
         const runningDurationMin =

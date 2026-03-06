@@ -164,10 +164,10 @@ def fetch_shift_info(config):
     params = {
         "empCode": config["empCode"],
         "deviceId": config["deviceId"],
-        "deviceToken": config["deviceToken"],
     }
+    headers = {"x-device-token": config.get("deviceToken", "")}
     try:
-        resp = http_client.http.get(url, params=params, timeout=15)
+        resp = http_client.http.get(url, params=params, headers=headers, timeout=15)
         if resp.status_code == 200:
             raw = resp.json()
             data = raw.get("data") or raw
