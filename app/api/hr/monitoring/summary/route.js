@@ -2,6 +2,7 @@ import { connectDB } from '../../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 import Device from '../../../../../models/Device';
 import SuspiciousLog from '../../../../../models/SuspiciousLog';
+import { getBusinessDate } from '../../../../../lib/date/businessDate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,9 +10,8 @@ export const dynamic = 'force-dynamic';
 const LIVE_OFFLINE_MS = 120 * 1000; // 2 min — reduces false offline when heartbeat delayed
 
 function getTodayStart(tz = '+05:00') {
-  const now = new Date();
-  const ymd = new Date(now.toISOString().slice(0, 10) + `T00:00:00${tz}`);
-  return ymd;
+  const businessDate = getBusinessDate(tz);
+  return new Date(`${businessDate}T06:00:00${tz}`);
 }
 
 export async function GET(req) {

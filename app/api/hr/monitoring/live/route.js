@@ -8,21 +8,12 @@ import BreakLog from '../../../../../models/BreakLog';
 import SuspiciousLog from '../../../../../models/SuspiciousLog';
 import { resolveShiftWindow } from '../../../../../lib/shift/resolveShiftWindow';
 import { getEffectiveBreakCategory } from '../../../../../lib/agent/common';
+import { getBusinessDate } from '../../../../../lib/date/businessDate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const LIVE_OFFLINE_MS = 120 * 1000; // 2 min — reduces false "offline" when heartbeat delayed
-
-function toDateStrInOffset(offset = '+05:00') {
-  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(offset).trim());
-  if (!m) return new Date().toISOString().slice(0, 10);
-  const sign = m[1] === '-' ? -1 : 1;
-  const hh = Number(m[2] || 0);
-  const mm = Number(m[3] || 0);
-  const totalMin = sign * (hh * 60 + mm);
-  return new Date(Date.now() + totalMin * 60 * 1000).toISOString().slice(0, 10);
-}
 
 function round(v, n = 1) {
   return Number(Number(v || 0).toFixed(n));
@@ -38,7 +29,8 @@ export async function GET(req) {
   try {
     await connectDB();
     const { searchParams } = new URL(req.url);
-    const date = String(searchParams.get('date') || toDateStrInOffset(process.env.TIMEZONE_OFFSET || '+05:00')).slice(0, 10);
+    const tzOffset = process.env.TIMEZONE_OFFSET || '+05:00';
+    const date = String(searchParams.get('date') || getBusinessDate(tzOffset)).slice(0, 10);
     const now = new Date();
 
     const [devices, employees, shifts, attendanceRows, breakRows, suspiciousRows] = await Promise.all([
@@ -107,7 +99,6 @@ export async function GET(req) {
 
       const effectiveCheckOut = att.checkOut || (att.checkIn ? now : null);
       const checkIn = att.checkIn ? new Date(att.checkIn) : null;
-      const tzOffset = process.env.TIMEZONE_OFFSET || '+05:00';
       const shiftCode = String(att.shift || emp.shift || '').toUpperCase();
       const shiftObj = shiftCode ? shiftByCode.get(shiftCode) : null;
       const window = shiftObj ? resolveShiftWindow({ date, shift: shiftObj, timezoneOffset: tzOffset }) : null;

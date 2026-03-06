@@ -7,6 +7,7 @@ import ShiftAttendance from '../../../../models/ShiftAttendance';
 import BreakLog from '../../../../models/BreakLog';
 import SuspiciousLog from '../../../../models/SuspiciousLog';
 import { getEffectiveBreakCategory } from '../../../../lib/agent/common';
+import { getBusinessDate } from '../../../../lib/date/businessDate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,8 @@ export async function GET(req) {
     const session = await getServerSession(authOptions);
     const { searchParams } = new URL(req.url);
     const empCode = String(searchParams.get('empCode') || '').trim();
-    const date = String(searchParams.get('date') || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const tzOffset = process.env.TIMEZONE_OFFSET || '+05:00';
+    const date = String(searchParams.get('date') || getBusinessDate(tzOffset)).slice(0, 10);
     if (!empCode) throw new Error('empCode is required');
 
     // Require auth; employees can only fetch their own data; HR can fetch any
@@ -64,7 +66,7 @@ export async function GET(req) {
         .maxTimeMS(3000)
     ]);
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getBusinessDate(tzOffset);
     const now = new Date();
 
     let shiftDurationHrs = 0;

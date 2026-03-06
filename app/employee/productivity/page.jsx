@@ -3,11 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { getBusinessDate } from '@/lib/date/businessDate';
 
-function getLocalDateInputValue() {
-  const now = new Date();
-  const tzOffsetMs = now.getTimezoneOffset() * 60 * 1000;
-  return new Date(now.getTime() - tzOffsetMs).toISOString().slice(0, 10);
+function getDefaultDate() {
+  return getBusinessDate('+05:00');
 }
 
 function formatTime(iso) {
@@ -27,7 +26,7 @@ export default function EmployeeProductivityPage() {
   const { data: session, status } = useSession();
   const empCode = session?.user?.empCode;
 
-  const [date, setDate] = useState(() => getLocalDateInputValue());
+  const [date, setDate] = useState(() => getDefaultDate());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

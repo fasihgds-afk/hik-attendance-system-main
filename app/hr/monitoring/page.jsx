@@ -1,18 +1,17 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { getBusinessDate } from '@/lib/date/businessDate';
 
-function getLocalDateInputValue() {
-  const now = new Date();
-  const tzOffsetMs = now.getTimezoneOffset() * 60 * 1000;
-  return new Date(now.getTime() - tzOffsetMs).toISOString().slice(0, 10);
+function getDefaultDate() {
+  return getBusinessDate('+05:00');
 }
 
 export default function MonitoringPage() {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({ total: 0, active: 0, idle: 0, offline: 0, suspicious: 0 });
   const [loading, setLoading] = useState(true);
-  const [date, setDate] = useState(() => getLocalDateInputValue());
+  const [date, setDate] = useState(() => getDefaultDate());
   const [expandedEmpCode, setExpandedEmpCode] = useState('');
   const [statusFilter, setStatusFilter] = useState(null); // null = all, 'ACTIVE' | 'IDLE' | 'OFFLINE' | 'SUSPICIOUS'
 
