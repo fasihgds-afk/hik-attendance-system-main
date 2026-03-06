@@ -6,6 +6,7 @@ import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../
 import ShiftAttendance from '../../../../models/ShiftAttendance';
 import BreakLog from '../../../../models/BreakLog';
 import SuspiciousLog from '../../../../models/SuspiciousLog';
+import { getEffectiveBreakCategory } from '../../../../lib/agent/common';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,10 +102,10 @@ export async function GET(req) {
       if (totalWorkedHrs > 0 && shiftDurationHrs === 0) shiftDurationHrs = totalWorkedHrs;
     }
     const generalMin = breakLogs
-      .filter((b) => String(b.category || '').trim().toLowerCase() === 'general')
+      .filter((b) => getEffectiveBreakCategory(b) === 'General')
       .reduce((acc, b) => acc + toNum(b.durationMin), 0);
     const namazMin = breakLogs
-      .filter((b) => String(b.category || '').trim().toLowerCase() === 'namaz')
+      .filter((b) => getEffectiveBreakCategory(b) === 'Namaz')
       .reduce((acc, b) => acc + toNum(b.durationMin), 0);
     const allowedBreakMin = breakLogs.reduce((acc, b) => acc + toNum(b.allowedDurationMin), 0);
     const deductedBreakMin = breakLogs.reduce((acc, b) => acc + toNum(b.exceededDurationMin), 0);
@@ -113,7 +114,7 @@ export async function GET(req) {
     const deductibleBreakMin = Math.max(0, generalMin - 60) + Math.max(0, namazMin - 25);
 
     const breakDown = categories.map((cat) => {
-      const rows = breakLogs.filter((b) => b.category === cat);
+      const rows = breakLogs.filter((b) => getEffectiveBreakCategory(b) === cat);
       return {
         category: cat,
         totalMin: rows.reduce((a, r) => a + toNum(r.durationMin), 0),
@@ -162,7 +163,7 @@ export async function GET(req) {
         breakDown,
         history: breakLogs.map((b) => ({
           _id: String(b._id),
-          category: b.category,
+          category: getEffectiveBreakCategory(b) || b.category,
           reason: b.reason,
           breakStartAt: b.breakStartAt,
           breakEndAt: b.breakEndAt,

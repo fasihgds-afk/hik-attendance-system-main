@@ -7,6 +7,7 @@ import ShiftAttendance from '../../../../../models/ShiftAttendance';
 import BreakLog from '../../../../../models/BreakLog';
 import SuspiciousLog from '../../../../../models/SuspiciousLog';
 import { resolveShiftWindow } from '../../../../../lib/shift/resolveShiftWindow';
+import { getEffectiveBreakCategory } from '../../../../../lib/agent/common';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -122,10 +123,7 @@ export async function GET(req) {
         }
         return Number(b.durationMin || 0);
       };
-      const catKey = (b) => {
-        const raw = String(b.category || '').trim().toLowerCase();
-        return raw === 'official' ? 'Official' : raw === 'general' ? 'General' : raw === 'namaz' ? 'Namaz' : null;
-      };
+      const catKey = (b) => getEffectiveBreakCategory(b) || null;
       const totalBreakMin = validBreaks.reduce((acc, b) => acc + getBreakMin(b), 0);
       const allowedBreakMin = validBreaks.reduce((acc, b) => acc + Number(b.allowedDurationMin || 0), 0);
       const deductedBreakMin = validBreaks.reduce((acc, b) => acc + Number(b.exceededDurationMin || 0), 0);
@@ -194,6 +192,7 @@ export async function GET(req) {
         breakHistory: validBreaks
           .sort((a, b) => new Date(a.breakStartAt).getTime() - new Date(b.breakStartAt).getTime())
           .slice(-8)
+          .map((b) => ({ ...b, displayCategory: getEffectiveBreakCategory(b) || b.category }))
       };
     });
 

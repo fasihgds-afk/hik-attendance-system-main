@@ -288,7 +288,7 @@ export default function MonitoringPage() {
                                   return !(reason === 'pending' || reason.includes('waiting for employee')) || duration > 0;
                                 })
                                 .map((b, idx) => {
-                                  const cat = String(b.category || '').trim();
+                                  const cat = String(b.displayCategory || b.category || '').trim();
                                   const isOfficial = cat.toLowerCase() === 'official';
                                   const isGeneral = cat.toLowerCase() === 'general';
                                   const isNamaz = cat.toLowerCase() === 'namaz';
