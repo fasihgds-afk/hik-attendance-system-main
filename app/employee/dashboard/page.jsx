@@ -1907,6 +1907,7 @@ export default function EmployeeDashboardPage() {
                     borderRadius: 10,
                     background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
                     border: `1px solid ${colors.border.default}`,
+                    borderLeft: `3px solid ${colors.success}`,
                   }}
                 >
                   <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 0.8, color: colors.text.tertiary, marginBottom: 4 }}>
@@ -1978,6 +1979,7 @@ export default function EmployeeDashboardPage() {
               padding: "12px 14px",
               background: colors.gradient.card,
               border: `1px solid ${colors.border.default}`,
+              borderLeft: `3px solid ${colors.success}`,
               boxShadow: theme === 'dark' ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.06)',
               display: "flex",
               flexDirection: "column",
@@ -1998,6 +2000,7 @@ export default function EmployeeDashboardPage() {
                 borderRadius: 10,
                 background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
                 border: `1px solid ${colors.border.default}`,
+                borderLeft: `3px solid ${colors.success}`,
               }}
             >
               <div style={{ fontSize: 11, color: colors.text.secondary }}>Gross</div>
@@ -2015,6 +2018,7 @@ export default function EmployeeDashboardPage() {
                 borderRadius: 10,
                 backgroundColor: colors.background.secondary,
                 border: `1px solid ${colors.border.default}`,
+                borderLeft: `3px solid ${colors.primary[500]}`,
                 marginBottom: 0,
               }}
             >
