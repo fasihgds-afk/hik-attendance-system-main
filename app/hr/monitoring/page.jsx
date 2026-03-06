@@ -223,7 +223,7 @@ export default function MonitoringPage() {
                     <td className="px-3 py-2">{r.shiftHrs}h</td>
                     <td className="px-3 py-2">{r.workedHrs}h</td>
                     <td className="px-3 py-2 text-yellow-300">{r.breaksHrs}h</td>
-                    <td className="px-3 py-2 text-green-300">{r.allowedBreakHrs}h</td>
+                    <td className="px-3 py-2 text-green-300">{typeof r.allowedBreakHrs === 'string' ? r.allowedBreakHrs : `${r.allowedBreakHrs}h`}</td>
                     <td className="px-3 py-2 text-red-300">{r.deductedBreakHrs}h</td>
                     <td className="px-3 py-2 text-green-400 font-semibold">{r.productiveHrs}h</td>
                     <td className="px-3 py-2">

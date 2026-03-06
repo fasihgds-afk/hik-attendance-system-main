@@ -7,7 +7,7 @@ import SuspiciousLog from '../../../../models/SuspiciousLog';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-const LIVE_OFFLINE_MS = 60 * 1000;
+const LIVE_OFFLINE_MS = 120 * 1000; // 2 min — reduces false offline when heartbeat delayed
 
 const bodySchema = z.object({
   empCode: z.string().min(1),

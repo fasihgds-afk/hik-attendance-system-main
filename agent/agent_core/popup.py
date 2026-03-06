@@ -70,7 +70,7 @@ class IdlePopup:
         top = tk.Toplevel(self._root)
         self._toplevel = top
         top.title("Break Reason")
-        top.configure(bg=THEME["bg_darkest"])
+        top.configure(bg="#000000")
 
         top.attributes("-fullscreen", True)
         top.attributes("-topmost", True)
@@ -91,100 +91,94 @@ class IdlePopup:
         top.grid_rowconfigure(0, weight=1)
         top.grid_columnconfigure(0, weight=1)
 
-        # Professional card: clean, centered, subtle border
         top.grid_rowconfigure(0, weight=1)
         top.grid_columnconfigure(0, weight=1)
-        outer = tk.Frame(top, bg="#1e3a5f", padx=1, pady=1)
+        outer = tk.Frame(top, bg="#22c55e", padx=2, pady=2)
         outer.grid(row=0, column=0)
-        card = tk.Frame(outer, bg="#ffffff", width=520)
+        card = tk.Frame(outer, bg="#0a0a0a", padx=2, pady=2)
         card.pack(padx=1, pady=1)
 
-        # Header: corporate navy
-        header = tk.Frame(card, bg="#0f172a", height=88)
+        header = tk.Frame(card, bg="#020617", height=88)
         header.pack(fill="x")
         header.pack_propagate(False)
-        hc = tk.Frame(header, bg="#0f172a")
+        hc = tk.Frame(header, bg="#020617")
         hc.pack(expand=True, padx=28, pady=18)
         try:
             logo_path = resource_path("gds.png")
             logo_img = tk.PhotoImage(file=logo_path)
             logo_img = logo_img.subsample(max(1, logo_img.width() // 72), max(1, logo_img.width() // 72))
             top._logo = logo_img
-            tk.Label(hc, image=logo_img, bg="#0f172a").pack(side="left", padx=(0, 20))
+            tk.Label(hc, image=logo_img, bg="#020617").pack(side="left", padx=(0, 20))
         except Exception:
             pass
-        tb = tk.Frame(hc, bg="#0f172a")
+        tb = tk.Frame(hc, bg="#020617")
         tb.pack(side="left")
         tk.Label(tb, text="Global Digital Solutions", font=("Segoe UI", 16, "bold"),
-                 fg="white", bg="#0f172a").pack(anchor="w")
+                 fg="white", bg="#020617").pack(anchor="w")
         tk.Label(tb, text="Break Reason Required", font=("Segoe UI", 10),
-                 fg="#94a3b8", bg="#0f172a").pack(anchor="w", pady=(2, 0))
+                 fg="#22c55e", bg="#020617").pack(anchor="w", pady=(2, 0))
 
-        # Notice bar: soft amber
-        notice = tk.Frame(card, bg="#fef3c7", height=40)
+        notice = tk.Frame(card, bg="#14532d", height=44)
         notice.pack(fill="x")
         notice.pack_propagate(False)
         tk.Label(notice, text="You have been idle. Please select a break category and provide a reason.",
-                 font=("Segoe UI", 11), fg="#92400e", bg="#fef3c7").pack(expand=True)
+                 font=("Segoe UI", 11), fg="#86efac", bg="#14532d").pack(expand=True)
 
-        # Body: white, clean
-        body = tk.Frame(card, bg="#ffffff", padx=32, pady=28)
+        body = tk.Frame(card, bg="#0a0a0a", padx=32, pady=28)
         body.pack(fill="both")
 
         tk.Label(body, text="Break category", font=("Segoe UI", 11, "bold"),
-                 bg="#ffffff", fg="#334155").pack(anchor="w", pady=(0, 8))
+                 bg="#0a0a0a", fg="#e2e8f0").pack(anchor="w", pady=(0, 8))
         self._reason_var = tk.StringVar(value="")
         self._custom_var = tk.StringVar(value="")
-        radio_frame = tk.Frame(body, bg="#f8fafc", highlightbackground="#e2e8f0",
-                               highlightthickness=1)
+        radio_frame = tk.Frame(body, bg="#1e293b", highlightbackground="#22c55e", highlightthickness=2)
         radio_frame.pack(fill="x", pady=(0, 20))
         for i, reason in enumerate(BREAK_REASONS):
             rb = tk.Radiobutton(
                 radio_frame, text=reason, variable=self._reason_var, value=reason,
-                font=("Segoe UI", 12), bg="#f8fafc", fg="#1e293b",
-                activebackground="#f1f5f9", activeforeground="#1e293b",
-                selectcolor="#3b82f6", anchor="w", padx=20, pady=12,
+                font=("Segoe UI", 12), bg="#1e293b", fg="#f1f5f9",
+                activebackground="#334155", activeforeground="#f1f5f9",
+                selectcolor="#22c55e", anchor="w", padx=20, pady=12,
                 command=lambda: self._safe_widget_config(self._submit_btn, state="normal"),
             )
             rb.pack(fill="x")
             if i < len(BREAK_REASONS) - 1:
-                tk.Frame(radio_frame, bg="#e2e8f0", height=1).pack(fill="x")
+                tk.Frame(radio_frame, bg="#334155", height=1).pack(fill="x")
 
         tk.Label(body, text="Reason details (required)", font=("Segoe UI", 11, "bold"),
-                 bg="#ffffff", fg="#334155").pack(anchor="w", pady=(0, 8))
+                 bg="#0a0a0a", fg="#e2e8f0").pack(anchor="w", pady=(0, 8))
         tk.Label(body, text="e.g. Meeting with manager, Lunch, Prayer break",
-                 font=("Segoe UI", 9), bg="#ffffff", fg="#64748b").pack(anchor="w", pady=(0, 6))
-        entry_frame = tk.Frame(body, bg="#e2e8f0", highlightbackground="#cbd5e1",
-                               highlightthickness=1)
+                 font=("Segoe UI", 9), bg="#0a0a0a", fg="#64748b").pack(anchor="w", pady=(0, 6))
+        entry_frame = tk.Frame(body, bg="#22c55e", padx=2, pady=2)
         entry_frame.pack(fill="x")
         self._reason_entry = tk.Entry(
             entry_frame, textvariable=self._custom_var,
             font=("Segoe UI", 12), width=50,
-            bg="#ffffff", fg="#1e293b", insertbackground="#1e293b",
+            bg="#1e293b", fg="#f1f5f9", insertbackground="#22c55e",
             relief="flat", borderwidth=0,
         )
         self._reason_entry.pack(fill="x", ipady=12, padx=14, pady=4)
 
-        self._status_label = tk.Label(body, text="", font=("Segoe UI", 10), bg="#ffffff")
+        self._status_label = tk.Label(body, text="", font=("Segoe UI", 10), bg="#0a0a0a")
         self._status_label.pack(pady=(16, 0))
 
         self._submit_btn = tk.Button(
             body, text="Submit",
             font=("Segoe UI", 12, "bold"),
-            bg="#2563eb", fg="white",
-            activebackground="#1d4ed8", activeforeground="white",
+            bg="#22c55e", fg="#020617",
+            activebackground="#16a34a", activeforeground="#020617",
             relief="flat", padx=28, pady=12, state="disabled", cursor="hand2",
             command=self._on_submit, highlightthickness=0, bd=0,
         )
         self._submit_btn.pack(pady=(16, 0), fill="x")
-        self._submit_btn.bind("<Enter>", lambda e: self._safe_widget_config(self._submit_btn, bg="#1d4ed8"))
-        self._submit_btn.bind("<Leave>", lambda e: self._safe_widget_config(self._submit_btn, bg="#2563eb"))
+        self._submit_btn.bind("<Enter>", lambda e: self._safe_widget_config(self._submit_btn, bg="#16a34a"))
+        self._submit_btn.bind("<Leave>", lambda e: self._safe_widget_config(self._submit_btn, bg="#22c55e"))
 
-        footer = tk.Frame(card, bg="#f8fafc", height=40)
+        footer = tk.Frame(card, bg="#0f172a", height=40)
         footer.pack(fill="x")
         footer.pack_propagate(False)
         tk.Label(footer, text="This information is required for attendance tracking.",
-                 font=("Segoe UI", 9), bg="#f8fafc", fg="#64748b").pack(expand=True)
+                 font=("Segoe UI", 9), bg="#0f172a", fg="#64748b").pack(expand=True)
 
         log.info("Popup shown (main thread)")
 

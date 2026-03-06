@@ -156,7 +156,7 @@ class AgentApp:
             elif kind == "key":
                 self._tracker.on_key_event()
 
-        if had_input:
+        if had_input and self._is_within_shift():
             self.state.record_activity()
 
             if self.state.awaiting_first_activity:
@@ -378,7 +378,7 @@ class AgentApp:
             found = detect_autoclicker_processes(AUTOCLICKER_PROCESSES)
             if found and not self._autoclicker_detected:
                 log.warning("AUTO-CLICKER DETECTED: %s", ", ".join(found))
-                if not self._autoclicker_warned:
+                if not self._autoclicker_warned and self._is_within_shift():
                     self._show_cheat_warning()
                     self._autoclicker_warned = True
             elif not found and self._autoclicker_detected:
@@ -398,7 +398,7 @@ class AgentApp:
             top = tk.Toplevel(self._root)
             self._cheat_warning_top = top
             top.title("Suspicious Activity Detected")
-            top.configure(bg="#e2e8f0")
+            top.configure(bg="#000000")
             top.attributes("-topmost", True)
             top.resizable(False, False)
 
@@ -411,27 +411,25 @@ class AgentApp:
 
             top.grid_rowconfigure(0, weight=1)
             top.grid_columnconfigure(0, weight=1)
-            outer = tk.Frame(top, bg="#dc2626", padx=1, pady=1)
+            outer = tk.Frame(top, bg="#ef4444", padx=2, pady=2)
             outer.grid(row=0, column=0, sticky="nsew")
-            card = tk.Frame(outer, bg="#ffffff", padx=1, pady=1)
+            card = tk.Frame(outer, bg="#0a0a0a", padx=2, pady=2)
             card.pack(fill="both", expand=True)
 
-            # Header: professional red
-            header = tk.Frame(card, bg="#b91c1c", height=72)
+            header = tk.Frame(card, bg="#7f1d1d", height=72)
             header.pack(fill="x")
             header.pack_propagate(False)
-            hc = tk.Frame(header, bg="#b91c1c")
+            hc = tk.Frame(header, bg="#7f1d1d")
             hc.pack(expand=True, padx=24, pady=16)
-            tk.Label(hc, text="\u26a0", font=("Segoe UI", 24), fg="white", bg="#b91c1c").pack(side="left", padx=(0, 14))
-            tb = tk.Frame(hc, bg="#b91c1c")
+            tk.Label(hc, text="\u26a0", font=("Segoe UI", 24), fg="#fca5a5", bg="#7f1d1d").pack(side="left", padx=(0, 14))
+            tb = tk.Frame(hc, bg="#7f1d1d")
             tb.pack(side="left")
             tk.Label(tb, text="Suspicious Activity Detected", font=("Segoe UI", 14, "bold"),
-                     fg="white", bg="#b91c1c").pack(anchor="w")
+                     fg="white", bg="#7f1d1d").pack(anchor="w")
             tk.Label(tb, text="Automated software detected", font=("Segoe UI", 10),
-                     fg="#fecaca", bg="#b91c1c").pack(anchor="w")
+                     fg="#fca5a5", bg="#7f1d1d").pack(anchor="w")
 
-            # Body: white, professional
-            body = tk.Frame(card, bg="#ffffff", padx=28, pady=24)
+            body = tk.Frame(card, bg="#0a0a0a", padx=28, pady=24)
             body.pack(fill="both", expand=True)
 
             msg = (
@@ -441,19 +439,19 @@ class AgentApp:
                 "Please close the software immediately to resume normal tracking."
             )
             tk.Label(body, text=msg, font=("Segoe UI", 11),
-                     fg="#475569", bg="#ffffff", wraplength=360, justify="left").pack(anchor="w", pady=(0, 20))
+                     fg="#cbd5e1", bg="#0a0a0a", wraplength=360, justify="left").pack(anchor="w", pady=(0, 20))
 
             btn = tk.Button(
                 body, text="I Understand",
                 font=("Segoe UI", 12, "bold"),
-                bg="#dc2626", fg="white",
-                activebackground="#b91c1c", activeforeground="white",
+                bg="#22c55e", fg="#020617",
+                activebackground="#16a34a", activeforeground="#020617",
                 relief="flat", padx=28, pady=12, cursor="hand2",
                 command=self._dismiss_cheat_warning, highlightthickness=0, bd=0,
             )
             btn.pack()
-            btn.bind("<Enter>", lambda e: btn.config(bg="#b91c1c"))
-            btn.bind("<Leave>", lambda e: btn.config(bg="#dc2626"))
+            btn.bind("<Enter>", lambda e: btn.config(bg="#16a34a"))
+            btn.bind("<Leave>", lambda e: btn.config(bg="#22c55e"))
 
             top.protocol("WM_DELETE_WINDOW", self._dismiss_cheat_warning)
             log.info("Auto-clicker warning popup shown")

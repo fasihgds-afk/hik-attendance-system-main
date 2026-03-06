@@ -11,7 +11,7 @@ import { resolveShiftWindow } from '../../../../../lib/shift/resolveShiftWindow'
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const LIVE_OFFLINE_MS = 60 * 1000;
+const LIVE_OFFLINE_MS = 120 * 1000; // 2 min — reduces false "offline" when heartbeat delayed
 
 function toDateStrInOffset(offset = '+05:00') {
   const m = /^([+-])(\d{2}):?(\d{2})$/.exec(String(offset).trim());
@@ -155,6 +155,9 @@ export async function GET(req) {
         byCategory[key].allowedMin += Number(b.allowedDurationMin || 0);
       }
 
+      const allowedHrs = allowedBreakMin / 60;
+      const allowedBreakDisplay = allowedHrs > 24 ? 'Unlimited' : round(allowedBreakMin / 60, 1);
+
       return {
         empCode,
         name: emp.name || empCode,
@@ -167,7 +170,7 @@ export async function GET(req) {
         shiftHrs: round(workedHrs || 8, 1),
         workedHrs: round(workedHrs, 1),
         breaksHrs: round(totalBreakMin / 60, 1),
-        allowedBreakHrs: round(allowedBreakMin / 60, 1),
+        allowedBreakHrs: allowedBreakDisplay,
         deductedBreakHrs: round(deductedBreakMin / 60, 1),
         productiveHrs: round(productiveHrs, 1),
         productivityPct: workedHrs > 0 ? Math.round((productiveHrs / workedHrs) * 100) : 0,
