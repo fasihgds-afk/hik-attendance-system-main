@@ -170,7 +170,7 @@ export default function EmployeeProductivityPage() {
               ))}
             </div>
             <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-400">
-              <span>Allowed: {data.allowedBreakHrs}h</span>
+              <span>Allowed: {typeof data.allowedBreakHrs === 'string' ? data.allowedBreakHrs : `${data.allowedBreakHrs}h`}</span>
               <span>Deducted: {data.deductedBreakHrs}h</span>
               {data.suspiciousHrs > 0 && (
                 <span className="text-amber-400">Suspicious: {data.suspiciousHrs}h</span>

@@ -48,8 +48,8 @@ export async function GET(req) {
     await connectDB();
     const { start: dayStart, end: dayEnd } = getDayBounds(date, process.env.TIMEZONE_OFFSET || '+05:00');
 
-    const [attendance, breakLogs, suspiciousLogs] = await Promise.all([
-      ShiftAttendance.findOne({ empCode, date }).lean().maxTimeMS(3000),
+    const [attendanceRows, breakLogs, suspiciousLogs] = await Promise.all([
+      ShiftAttendance.find({ empCode, date }).sort({ checkIn: 1 }).lean().maxTimeMS(3000),
       BreakLog.find({ empCode, shiftDate: date, status: 'CLOSED' })
         .sort({ breakStartAt: 1 })
         .lean()
@@ -63,15 +63,43 @@ export async function GET(req) {
         .maxTimeMS(3000)
     ]);
 
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+
     let shiftDurationHrs = 0;
     let totalWorkedHrs = 0;
-    if (attendance?.checkIn && attendance?.checkOut) {
-      const ms = new Date(attendance.checkOut).getTime() - new Date(attendance.checkIn).getTime();
-      totalWorkedHrs = Math.max(0, ms / 36e5);
-      shiftDurationHrs = totalWorkedHrs;
+    let checkIn = null;
+    let checkOut = null;
+
+    const attendance = attendanceRows.find((a) => a.checkIn || a.checkOut) || attendanceRows[0];
+    if (attendance) {
+      checkIn = attendance.checkIn ? new Date(attendance.checkIn) : null;
+      checkOut = attendance.checkOut ? new Date(attendance.checkOut) : null;
+      if (checkIn && checkOut) {
+        const ms = checkOut.getTime() - checkIn.getTime();
+        totalWorkedHrs = Math.max(0, ms / 36e5);
+        shiftDurationHrs = totalWorkedHrs;
+      } else if (checkIn && !checkOut) {
+        const effectiveCheckOut = date === todayStr ? now : new Date(`${date}T23:59:59${process.env.TIMEZONE_OFFSET || '+05:00'}`);
+        const ms = effectiveCheckOut.getTime() - checkIn.getTime();
+        totalWorkedHrs = Math.max(0, ms / 36e5);
+        shiftDurationHrs = totalWorkedHrs;
+      }
     }
 
     const totalBreakMin = breakLogs.reduce((acc, b) => acc + toNum(b.durationMin), 0);
+
+    if (totalWorkedHrs === 0 && breakLogs.length > 0) {
+      const firstBreakStart = breakLogs[0].breakStartAt ? new Date(breakLogs[0].breakStartAt) : null;
+      const lastBreak = breakLogs[breakLogs.length - 1];
+      const lastBreakEnd = lastBreak.breakEndAt ? new Date(lastBreak.breakEndAt) : null;
+      const spanEnd = lastBreakEnd || (date === todayStr ? now : null);
+      if (firstBreakStart && spanEnd) {
+        const spanHrs = Math.max(0, (spanEnd.getTime() - firstBreakStart.getTime()) / 36e5);
+        totalWorkedHrs = Math.max(0, spanHrs - totalBreakMin / 60);
+      }
+      if (totalWorkedHrs > 0 && shiftDurationHrs === 0) shiftDurationHrs = totalWorkedHrs;
+    }
     const generalMin = breakLogs
       .filter((b) => String(b.category || '').trim().toLowerCase() === 'general')
       .reduce((acc, b) => acc + toNum(b.durationMin), 0);
@@ -94,7 +122,6 @@ export async function GET(req) {
       };
     });
 
-    const now = new Date();
     const suspiciousClosedMin = suspiciousLogs.reduce((acc, s) => {
       const endAt = s.endedAt ? new Date(s.endedAt) : now;
       const minutes = overlapMinutes(s.startedAt, endAt, dayStart, dayEnd);
@@ -113,6 +140,9 @@ export async function GET(req) {
     const productivityPct =
       shiftDurationHrs > 0 ? Number(((netProductiveHrs / shiftDurationHrs) * 100).toFixed(2)) : 0;
 
+    const allowedHrs = allowedBreakMin / 60;
+    const allowedBreakDisplay = allowedHrs > 24 ? 'Unlimited' : Number((allowedBreakMin / 60).toFixed(2));
+
     return successResponse(
       {
         empCode,
@@ -120,7 +150,7 @@ export async function GET(req) {
         shiftDurationHrs: Number(shiftDurationHrs.toFixed(2)),
         totalWorkedHrs: Number(totalWorkedHrs.toFixed(2)),
         totalBreakHrs: Number((totalBreakMin / 60).toFixed(2)),
-        allowedBreakHrs: Number((allowedBreakMin / 60).toFixed(2)),
+        allowedBreakHrs: allowedBreakDisplay,
         deductedBreakHrs: Number((deductedBreakMin / 60).toFixed(2)),
         productiveHrs: Number(productiveHrs.toFixed(2)),
         suspiciousHrs: Number(suspiciousHrs.toFixed(2)),
