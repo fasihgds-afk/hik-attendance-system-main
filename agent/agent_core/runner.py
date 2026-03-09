@@ -14,6 +14,7 @@ from . import network
 from .enrollment import gui_enroll
 from .platform_win import ensure_single_instance, setup_autostart, is_autostart_enabled
 from .app import AgentApp, recover_downtime
+from .headless import run_headless
 
 
 def main():
@@ -21,9 +22,13 @@ def main():
     safe_print("Windows System Health Monitor v" + AGENT_VERSION)
     safe_print()
 
+    # Allow one retry after 8s (handles race after crash restart)
     if not ensure_single_instance():
-        safe_print("Already running. Exiting.")
-        sys.exit(0)
+        log.info("Another instance detected — waiting 8s before retry...")
+        time.sleep(8)
+        if not ensure_single_instance():
+            safe_print("Already running. Exiting.")
+            sys.exit(0)
 
     config = load_config()
 
@@ -38,37 +43,61 @@ def main():
         if not is_autostart_enabled():
             setup_autostart()
 
-    # ── Fetch shift info from server (graceful fallback to always-on) ──
+    # ── Quick connectivity check (don't block startup when offline) ──
+    server_url = config.get("serverUrl", "")
+    online_at_start = bool(server_url) and network.is_online(server_url)
+    if not online_at_start:
+        log.info("Offline at startup — will use cached shift, buffer recovery, sync when online")
+
+    # ── Fetch shift info from server (skip when offline, use always-on) ──
     shift_info = None
-    try:
-        shift_info = network.fetch_shift_info(config)
-    except Exception as e:
-        log.warning("Shift info fetch failed: %s — using always-on mode", e)
+    if online_at_start:
+        try:
+            shift_info = network.fetch_shift_info(config)
+        except Exception as e:
+            log.warning("Shift info fetch failed: %s — using always-on mode", e)
+    else:
+        shift_info = network.load_cached_shift(config)
 
-    # ── Recover from power-off / restart gap ──
-    try:
-        recover_downtime(config, shift_info=shift_info)
-    except Exception as e:
-        log.warning("Downtime recovery failed: %s", e)
+    # ── Recover from power-off / restart gap (run in thread when offline to avoid blocking) ──
+    if online_at_start:
+        try:
+            recover_downtime(config, shift_info=shift_info)
+        except Exception as e:
+            log.warning("Downtime recovery failed: %s", e)
+    else:
+        import threading
+        def _recover_async():
+            try:
+                recover_downtime(config, shift_info=shift_info)
+            except Exception as e:
+                log.warning("Downtime recovery failed (offline): %s", e)
+        threading.Thread(target=_recover_async, daemon=True).start()
 
-    # ── Flush any offline-buffered requests ──
-    if network.has_buffered_requests():
+    # ── Flush any offline-buffered requests (skip when offline — will flush on reconnect) ──
+    if online_at_start and network.has_buffered_requests():
         log.info("Flushing offline buffer from previous session...")
         try:
             network.flush_buffer()
         except Exception as e:
             log.warning("Buffer flush failed: %s", e)
 
-    # ── Start the agent ──
-    app = AgentApp(config)
-
-    if shift_info:
-        app.state.shift_start = shift_info.get("shiftStart")
-        app.state.shift_end = shift_info.get("shiftEnd")
-        app.state.shift_grace_min = shift_info.get("gracePeriod", 20)
-        app.state.shift_crosses_midnight = shift_info.get("crossesMidnight", False)
-
-    app.run()
+    # ── Start the agent (Tk) or headless if Tcl/Tk fails ──
+    try:
+        app = AgentApp(config)
+        if shift_info:
+            app.state.shift_start = shift_info.get("shiftStart")
+            app.state.shift_end = shift_info.get("shiftEnd")
+            app.state.shift_grace_min = shift_info.get("gracePeriod", 20)
+            app.state.shift_crosses_midnight = shift_info.get("crossesMidnight", False)
+        app.run()
+    except Exception as e:
+        err_str = str(e)
+        if "Tcl" in err_str or "init.tcl" in err_str or "tkinter" in err_str.lower():
+            log.warning("Tkinter unavailable (%s) — running in headless mode (no popup)", e)
+            run_headless(config, shift_info)
+        else:
+            raise
 
 
 def run_with_auto_restart():

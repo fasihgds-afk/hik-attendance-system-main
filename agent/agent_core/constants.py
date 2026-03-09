@@ -2,11 +2,11 @@
 Constants, thresholds, theme colors, and break reason categories.
 """
 
-AGENT_VERSION = "2.1.1"
+AGENT_VERSION = "2.2.0"
 
 # ─── Thresholds ──────────────────────────────────────────────────
 IDLE_THRESHOLD_SEC = 180       # No activity for 180s (3 min) → IDLE
-HEARTBEAT_INTERVAL_SEC = 180   # Send heartbeat every 3 minutes
+HEARTBEAT_INTERVAL_SEC = 10    # Send heartbeat every 10s for real-time Active/Idle/Offline on frontend
 MOVE_THROTTLE_SEC = 0.5        # Only record mouse move every 500ms (saves CPU)
 PATTERN_BUFFER_SIZE = 30       # Keep last 30 events for analysis (low RAM)
 

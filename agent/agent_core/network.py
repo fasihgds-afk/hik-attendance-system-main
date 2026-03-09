@@ -14,7 +14,7 @@ import json
 import time
 import socket
 
-from .config import log, OFFLINE_BUFFER_FILE, LAST_ALIVE_FILE
+from .config import log, OFFLINE_BUFFER_FILE, LAST_ALIVE_FILE, BASE_DIR
 from . import http_client
 
 
@@ -152,6 +152,47 @@ def get_last_alive_ts(emp_code):
     return None
 
 
+# ─── Cached shift (for offline startup) ───────────────────────────
+
+SHIFT_CACHE_FILE = BASE_DIR / "shift_cache.json"
+
+
+def save_cached_shift(config, shift_info):
+    """Save shift info to disk for offline startup."""
+    if not shift_info:
+        return
+    try:
+        data = {
+            "empCode": config.get("empCode"),
+            "deviceId": config.get("deviceId"),
+            "shiftStart": shift_info.get("shiftStart"),
+            "shiftEnd": shift_info.get("shiftEnd"),
+            "gracePeriod": shift_info.get("gracePeriod", 20),
+            "crossesMidnight": shift_info.get("crossesMidnight", False),
+        }
+        SHIFT_CACHE_FILE.write_text(json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def load_cached_shift(config):
+    """Load shift info from cache when offline. Returns None if no cache."""
+    try:
+        if not SHIFT_CACHE_FILE.exists():
+            return None
+        data = json.loads(SHIFT_CACHE_FILE.read_text(encoding="utf-8"))
+        if data.get("empCode") == config.get("empCode"):
+            return {
+                "shiftStart": data.get("shiftStart"),
+                "shiftEnd": data.get("shiftEnd"),
+                "gracePeriod": data.get("gracePeriod", 20),
+                "crossesMidnight": data.get("crossesMidnight", False),
+            }
+    except Exception:
+        pass
+    return None
+
+
 # ─── Shift info fetch ────────────────────────────────────────────
 
 def fetch_shift_info(config):
@@ -178,12 +219,14 @@ def fetch_shift_info(config):
                     data.get("shiftEnd", "?"),
                     data.get("gracePeriod", 20),
                 )
-                return {
+                info = {
                     "shiftStart": data.get("shiftStart"),
                     "shiftEnd": data.get("shiftEnd"),
                     "gracePeriod": data.get("gracePeriod", 20),
                     "crossesMidnight": data.get("crossesMidnight", False),
                 }
+                save_cached_shift(config, info)
+                return info
         if resp.status_code == 404:
             log.info("Shift info endpoint not available — operating in always-on mode")
         else:

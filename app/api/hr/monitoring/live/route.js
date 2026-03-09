@@ -6,7 +6,7 @@ import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../../models/Shift';
 import ShiftAttendance from '../../../../../models/ShiftAttendance';
 import BreakLog from '../../../../../models/BreakLog';
 import SuspiciousLog from '../../../../../models/SuspiciousLog';
-import { resolveShiftWindow } from '../../../../../lib/shift/resolveShiftWindow';
+import { resolveShiftWindow, clipIntervalToShiftWindow } from '../../../../../lib/shift/resolveShiftWindow';
 import { getEffectiveBreakCategory } from '../../../../../lib/agent/common';
 import { getBusinessDate } from '../../../../../lib/date/businessDate';
 
@@ -14,6 +14,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const LIVE_OFFLINE_MS = 120 * 1000; // 2 min — reduces false "offline" when heartbeat delayed
+const MAX_OPEN_BREAK_MIN = 8 * 60; // Cap OPEN break duration at 8h when no shift window
 
 function round(v, n = 1) {
   return Number(Number(v || 0).toFixed(n));
@@ -48,7 +49,7 @@ export async function GET(req) {
         .lean()
         .maxTimeMS(4000),
       BreakLog.find({ shiftDate: date })
-        .select('empCode category reason status durationMin allowedDurationMin exceededDurationMin breakStartAt breakEndAt')
+        .select('empCode category reason status durationMin allowedDurationMin exceededDurationMin breakStartAt breakEndAt shiftStartAt shiftEndAt')
         .lean()
         .maxTimeMS(4000),
       SuspiciousLog.find({
@@ -108,9 +109,19 @@ export async function GET(req) {
         ? window.shiftStart
         : checkIn;
       const workedHrs = toHoursFromDates(productivityStart, effectiveCheckOut);
+      /** Compute break duration. For OPEN breaks: clip to shift window to avoid inflating beyond shift end. */
       const getBreakMin = (b) => {
         if (String(b.status || '').toUpperCase() === 'OPEN' && b.breakStartAt) {
-          return Math.max(0, Math.floor((now.getTime() - new Date(b.breakStartAt).getTime()) / 60000));
+          const startAt = new Date(b.breakStartAt);
+          const breakWindow = (b.shiftStartAt && b.shiftEndAt)
+            ? { shiftStart: new Date(b.shiftStartAt), shiftEnd: new Date(b.shiftEndAt) }
+            : window;
+          if (breakWindow?.shiftStart && breakWindow?.shiftEnd) {
+            const clipped = clipIntervalToShiftWindow(startAt, now, breakWindow);
+            return clipped.durationMin;
+          }
+          const rawMin = Math.max(0, Math.floor((now.getTime() - startAt.getTime()) / 60000));
+          return Math.min(rawMin, MAX_OPEN_BREAK_MIN);
         }
         return Number(b.durationMin || 0);
       };
@@ -150,13 +161,7 @@ export async function GET(req) {
       for (const b of validBreaks) {
         const key = catKey(b);
         if (!key) continue;
-
-        const runningDurationMin =
-          String(b.status || '').toUpperCase() === 'OPEN' && b.breakStartAt
-            ? Math.max(0, Math.floor((now.getTime() - new Date(b.breakStartAt).getTime()) / 60000))
-            : Number(b.durationMin || 0);
-
-        byCategory[key].totalMin += runningDurationMin;
+        byCategory[key].totalMin += getBreakMin(b);
         byCategory[key].allowedMin += Number(b.allowedDurationMin || 0);
       }
 
@@ -183,7 +188,11 @@ export async function GET(req) {
         breakHistory: validBreaks
           .sort((a, b) => new Date(a.breakStartAt).getTime() - new Date(b.breakStartAt).getTime())
           .slice(-8)
-          .map((b) => ({ ...b, displayCategory: getEffectiveBreakCategory(b) || b.category }))
+          .map((b) => ({
+            ...b,
+            displayCategory: getEffectiveBreakCategory(b) || b.category,
+            displayDurationMin: getBreakMin(b)
+          }))
       };
     });
 

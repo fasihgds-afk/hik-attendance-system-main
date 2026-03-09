@@ -81,6 +81,7 @@ def _create_scheduled_task(exe_path):
     except Exception:
         pass
 
+    # /DELAY 0000:30 = 30s after logon (gives network/DNS time to be ready)
     cmd = [
         "schtasks", "/Create",
         "/TN", _TASK_NAME,
@@ -88,7 +89,7 @@ def _create_scheduled_task(exe_path):
         "/SC", "ONLOGON",
         "/RL", "LIMITED",
         "/F",
-        "/DELAY", "0000:15",
+        "/DELAY", "0000:30",
     ]
 
     try:
