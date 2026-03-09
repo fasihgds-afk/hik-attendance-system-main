@@ -38,24 +38,42 @@ def is_online(server_url):
 
 # ─── Offline buffer (local persistence) ──────────────────────────
 
+def _is_break_log_post(url, method):
+    return method.upper() == "POST" and "/break-log" in url
+
+
 def buffer_request(method, url, payload):
     """Save a failed API call to disk for later replay."""
     entry = {"method": method, "url": url, "payload": payload, "ts": time.time()}
     try:
-        # Avoid back-to-back duplicate entries for the same request payload.
+        lines = []
         if OFFLINE_BUFFER_FILE.exists():
             try:
                 lines = OFFLINE_BUFFER_FILE.read_text(encoding="utf-8").strip().split("\n")
-                if lines and lines[-1].strip():
-                    last = json.loads(lines[-1])
-                    if (
-                        last.get("method") == method
-                        and last.get("url") == url
-                        and last.get("payload") == payload
-                    ):
-                        return
+                lines = [l for l in lines if l.strip()]
             except Exception:
                 pass
+
+        # Avoid exact duplicate.
+        if lines and lines[-1].strip():
+            last = json.loads(lines[-1])
+            if (
+                last.get("method") == method
+                and last.get("url") == url
+                and last.get("payload") == payload
+            ):
+                return
+
+        # Dedupe break starts: only one POST break-log allowed to avoid orphaned OPEN breaks.
+        if _is_break_log_post(url, method):
+            for line in lines:
+                try:
+                    prev = json.loads(line)
+                    if _is_break_log_post(prev.get("url", ""), prev.get("method", "")):
+                        return  # Already have a break start buffered
+                except Exception:
+                    pass
+
         with open(OFFLINE_BUFFER_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
         log.info("Buffered offline request: %s %s", method, url.split("/")[-1])

@@ -325,16 +325,21 @@ class AgentApp:
         ).start()
 
     def _on_reconnect(self):
-        """Handle internet reconnection: end offline break, flush buffer."""
+        """Handle internet reconnection: flush buffer first, then close any remaining open break."""
         log.info("Network ONLINE — reconnected")
         had_offline_break = self.state.offline_break_started
 
         self.state.mark_online()
 
-        if had_offline_break:
-            log.info("Ending offline disconnect break + updating reason")
-
-            def end_offline_break():
+        def reconnect_flow():
+            time.sleep(2)  # Brief delay to let the connection stabilize
+            # 1. Flush buffered requests first (user's break start/reason/end)
+            if network.has_buffered_requests():
+                network.flush_buffer()
+            # 2. Then close any remaining open break from offline (safety net)
+            if had_offline_break:
+                time.sleep(1)  # Let flush settle
+                log.info("Ending offline disconnect break + updating reason (if still open)")
                 send_break_reason(
                     self._config,
                     "General",
@@ -342,14 +347,7 @@ class AgentApp:
                 )
                 send_break_end(self._config)
 
-            threading.Thread(target=end_offline_break, daemon=True).start()
-
-        # Flush any buffered offline requests
-        if network.has_buffered_requests():
-            def flush():
-                time.sleep(2)  # Brief delay to let the connection stabilize
-                network.flush_buffer()
-            threading.Thread(target=flush, daemon=True).start()
+        threading.Thread(target=reconnect_flow, daemon=True).start()
 
     # ─── Dynamic shift refresh (every 10 min) ───────────────────
 
@@ -487,14 +485,17 @@ class AgentApp:
         self.state.on_popup_shown(break_start_time=start_time)
         self._popup.show()
 
-        start_time = self.state.break_start_time
-        threading.Thread(
-            target=send_break_start,
-            args=(self._config, start_time),
-            daemon=True,
-        ).start()
-
-        log.info("Idle popup shown, break_start sent (episode)")
+        # When offline_break_started, we already have a break start buffered — don't send another
+        if not self.state.offline_break_started:
+            start_time = self.state.break_start_time
+            threading.Thread(
+                target=send_break_start,
+                args=(self._config, start_time),
+                daemon=True,
+            ).start()
+            log.info("Idle popup shown, break_start sent (episode)")
+        else:
+            log.info("Idle popup shown (offline break already buffered — reason form only)")
 
     def _on_popup_submitted(self, reason, custom_reason):
         """Callback from IdlePopup after successful submit. Main thread."""
