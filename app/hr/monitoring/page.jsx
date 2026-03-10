@@ -186,6 +186,7 @@ export default function MonitoringPage() {
                 <th className="px-3 py-2">Breaks</th>
                 <th className="px-3 py-2">Allowed</th>
                 <th className="px-3 py-2">Deducted</th>
+                <th className="px-3 py-2">Suspicious</th>
                 <th className="px-3 py-2">Productive</th>
                 <th className="px-3 py-2">%</th>
               </tr>
@@ -224,6 +225,7 @@ export default function MonitoringPage() {
                     <td className="px-3 py-2 text-yellow-300">{r.breaksHrs}h</td>
                     <td className="px-3 py-2 text-green-300">{typeof r.allowedBreakHrs === 'string' ? r.allowedBreakHrs : `${r.allowedBreakHrs}h`}</td>
                     <td className="px-3 py-2 text-red-300">{r.deductedBreakHrs}h</td>
+                    <td className="px-3 py-2 text-orange-300">{r.suspiciousHrs ?? 0}h</td>
                     <td className="px-3 py-2 text-green-400 font-semibold">{r.productiveHrs}h</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -236,7 +238,7 @@ export default function MonitoringPage() {
                   </tr>
                   {expandedEmpCode === r.empCode ? (
                     <tr key={`${r.empCode}-details`} className="border-t border-[#1f2a44] bg-[#0a1324]">
-                      <td colSpan={13} className="px-3 py-3">
+                      <td colSpan={14} className="px-3 py-3">
                         <div className="grid gap-4 md:grid-cols-3">
                             {[
                             { key: 'Official', label: 'Official', allowedMin: null, bg: 'bg-blue-500/15 border-blue-500/40', text: 'text-blue-300', desc: 'Company-related, unlimited' },
@@ -336,7 +338,7 @@ export default function MonitoringPage() {
               ))}
               {sortedRows.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-gray-400" colSpan={13}>
+                  <td className="px-3 py-3 text-gray-400" colSpan={14}>
                     No rows to display.
                   </td>
                 </tr>

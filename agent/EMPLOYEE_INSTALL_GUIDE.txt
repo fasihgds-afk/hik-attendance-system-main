@@ -1,0 +1,55 @@
+================================================================================
+  HOW TO INSTALL ON EMPLOYEE LAPTOPS — One-Click Setup
+================================================================================
+
+WHAT YOU NEED (4 files in one folder)
+-------------------------------------
+  1. whealthsvc.exe
+  2. watchdog.bat
+  3. run_watchdog.vbs
+  4. Install_WinSystemHealth.bat    <-- THE ONE THING TO RUN
+
+STEP 1: Create a deployment folder
+-----------------------------------
+  Copy these 4 files into one folder, e.g.:
+    C:\Deploy\WinSystemHealth\
+      - whealthsvc.exe
+      - watchdog.bat
+      - run_watchdog.vbs
+      - Install_WinSystemHealth.bat
+
+  You can use a USB drive, network share, or zip and send to employees.
+
+STEP 2: On each employee laptop
+-------------------------------
+  1. Copy the folder to the laptop (or extract the zip)
+  2. Right-click Install_WinSystemHealth.bat
+  3. Click "Run as administrator"
+  4. Click Yes when Windows asks for permission
+  5. Done!
+
+  The installer will:
+    - Copy files to C:\ProgramData\WinSystemHealth\
+    - Set up auto-start on every logon
+    - Set up watchdog (restarts agent if it closes)
+    - Start the agent immediately
+
+STEP 3: First-time enrollment (if needed)
+----------------------------------------
+  If the employee hasn't enrolled yet:
+  - The agent will show an enrollment screen, OR
+  - Send them your enrollment URL (e.g. https://ams.yourcompany.com/agent/enroll)
+  - They enter their employee code and complete enrollment
+
+AFTER INSTALL
+-------------
+  - Agent runs in background (no window)
+  - On every logon: agent starts automatically (30s delay)
+  - Watchdog runs hidden: if agent closes, it restarts within 30 seconds
+  - Employee does nothing — it just works
+
+VERIFY
+------
+  Open Task Manager (Ctrl+Shift+Esc) — you should see whealthsvc.exe running.
+
+================================================================================

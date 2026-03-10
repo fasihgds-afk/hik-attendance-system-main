@@ -14,12 +14,30 @@ from pathlib import Path
 # One config/state per employee per machine.
 _FOLDER_NAME = "WinSystemHealth"
 
-if sys.platform == "win32":
-    BASE_DIR = Path(os.environ.get("PROGRAMDATA", "C:\\ProgramData")) / _FOLDER_NAME
-else:
-    BASE_DIR = Path(__file__).parent.parent
 
-BASE_DIR.mkdir(parents=True, exist_ok=True)
+def _get_writable_base_dir():
+    """Return a writable base dir. Prefer ProgramData; fall back to LocalAppData if no write access."""
+    if sys.platform != "win32":
+        return Path(__file__).parent.parent
+    candidates = [
+        Path(os.environ.get("PROGRAMDATA", "C:\\ProgramData")) / _FOLDER_NAME,
+        Path(os.environ.get("LOCALAPPDATA", "")) / _FOLDER_NAME if os.environ.get("LOCALAPPDATA") else None,
+    ]
+    for base in candidates:
+        if base is None:
+            continue
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            test = base / ".write_test"
+            test.write_text("")
+            test.unlink()
+            return base
+        except (PermissionError, OSError):
+            continue
+    return candidates[0]  # Fallback to ProgramData (may fail, but we tried)
+
+
+BASE_DIR = _get_writable_base_dir()
 
 CONFIG_FILE = BASE_DIR / "config.json"
 LOG_FILE = BASE_DIR / "svc.log"

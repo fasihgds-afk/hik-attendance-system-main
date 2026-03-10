@@ -184,6 +184,7 @@ export async function GET(req) {
         deductedBreakHrs: round(deductedBreakMin / 60, 1),
         productiveHrs: round(productiveHrs, 1),
         productivityPct: workedHrs > 0 ? Math.round((productiveHrs / workedHrs) * 100) : 0,
+        suspiciousHrs: round(suspiciousMin / 60, 1),
         breakDown: byCategory,
         breakHistory: validBreaks
           .sort((a, b) => new Date(a.breakStartAt).getTime() - new Date(b.breakStartAt).getTime())
