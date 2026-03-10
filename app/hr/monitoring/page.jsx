@@ -278,14 +278,14 @@ export default function MonitoringPage() {
                           <div className="mb-3 text-sm font-bold text-gray-200">Break History</div>
                           {Array.isArray(r.breakHistory) && r.breakHistory.filter((b) => {
                             const reason = String(b.reason || '').toLowerCase();
-                            const duration = Number(b.displayDurationMin ?? b.durationMin || 0);
+                            const duration = Number((b.displayDurationMin ?? b.durationMin) || 0);
                             return !(reason === 'pending' || reason.includes('waiting for employee')) || duration > 0;
                           }).length > 0 ? (
                             <div className="space-y-2">
                               {r.breakHistory
                                 .filter((b) => {
                                   const reason = String(b.reason || '').toLowerCase();
-                                  const duration = Number(b.displayDurationMin ?? b.durationMin || 0);
+                                  const duration = Number((b.displayDurationMin ?? b.durationMin) || 0);
                                   return !(reason === 'pending' || reason.includes('waiting for employee')) || duration > 0;
                                 })
                                 .map((b, idx) => {
@@ -293,7 +293,7 @@ export default function MonitoringPage() {
                                   const isOfficial = cat.toLowerCase() === 'official';
                                   const isGeneral = cat.toLowerCase() === 'general';
                                   const isNamaz = cat.toLowerCase() === 'namaz';
-                                  const duration = Number(b.displayDurationMin ?? b.durationMin || 0);
+                                  const duration = Number((b.displayDurationMin ?? b.durationMin) || 0);
                                   const exceeded = Number(b.exceededDurationMin || 0) > 0;
                                   const isPending = String(b.reason || '').toLowerCase() === 'pending' || String(b.reason || '').includes('Waiting for employee');
                                   const catBg = isOfficial ? 'bg-blue-500/20 text-blue-300 border-blue-500/40' : isGeneral ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : isNamaz ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-500/20 text-gray-300 border-gray-500/40';
