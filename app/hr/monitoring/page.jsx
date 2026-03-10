@@ -7,16 +7,32 @@ function getDefaultDate() {
   return getBusinessDate('+05:00');
 }
 
+const BREAK_CATEGORIES = ['Official', 'General', 'Namaz'];
+
 export default function MonitoringPage() {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({ total: 0, active: 0, idle: 0, offline: 0, suspicious: 0 });
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(() => getDefaultDate());
   const [expandedEmpCode, setExpandedEmpCode] = useState('');
-  const [statusFilter, setStatusFilter] = useState(null); // null = all, 'ACTIVE' | 'IDLE' | 'OFFLINE' | 'SUSPICIOUS'
+  const [statusFilter, setStatusFilter] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
 
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Break CRUD modals
+  const [editBreak, setEditBreak] = useState(null); // { row, break: b }
+  const [addBreakRow, setAddBreakRow] = useState(null); // row for which we're adding
+  const [breakCategory, setBreakCategory] = useState('General');
+  const [breakReason, setBreakReason] = useState('');
+  const [breakDuration, setBreakDuration] = useState('');
+  const [breakStartTime, setBreakStartTime] = useState('');
+  const [breakEndTime, setBreakEndTime] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -64,6 +80,11 @@ export default function MonitoringPage() {
     };
   }, [date]);
 
+  const departments = useMemo(() => {
+    const depts = new Set(rows.map((r) => r.department).filter(Boolean));
+    return [...depts].sort();
+  }, [rows]);
+
   const sortedRows = useMemo(() => {
     let list = [...rows].sort((a, b) => String(a.name).localeCompare(String(b.name)));
     if (statusFilter) {
@@ -77,8 +98,141 @@ export default function MonitoringPage() {
         list = list.filter((r) => r.status === 'OFFLINE');
       }
     }
+    if (departmentFilter) {
+      list = list.filter((r) => r.department === departmentFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (r) =>
+          String(r.name || '').toLowerCase().includes(q) ||
+          String(r.empCode || '').toLowerCase().includes(q) ||
+          String(r.department || '').toLowerCase().includes(q)
+      );
+    }
     return list;
-  }, [rows, statusFilter]);
+  }, [rows, statusFilter, departmentFilter, searchQuery]);
+
+  const openEditBreak = (row, b, e) => {
+    e?.stopPropagation?.();
+    setEditBreak({ row, break: b });
+    setBreakCategory(b.displayCategory || b.category || 'General');
+    setBreakReason(b.reason || '');
+    setBreakDuration(String(b.displayDurationMin ?? b.durationMin ?? 0));
+    setSaveError('');
+    setSaveSuccess(false);
+  };
+
+  const openAddBreak = (row, e) => {
+    e?.stopPropagation?.();
+    setAddBreakRow(row);
+    setBreakCategory('General');
+    setBreakReason('');
+    setBreakStartTime('');
+    setBreakEndTime('');
+    setSaveError('');
+    setSaveSuccess(false);
+  };
+
+  const closeBreakModals = () => {
+    setEditBreak(null);
+    setAddBreakRow(null);
+    setBreakCategory('General');
+    setBreakReason('');
+    setBreakDuration('');
+    setBreakStartTime('');
+    setBreakEndTime('');
+    setSaveError('');
+    setSaveSuccess(false);
+  };
+
+  const handleSaveEditBreak = async () => {
+    if (!editBreak) return;
+    const { row, break: b } = editBreak;
+    const d = Number(breakDuration);
+    if (isNaN(d) || d < 0) {
+      setSaveError('Invalid duration');
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      const res = await fetch('/api/hr/break-log', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          breakId: b._id,
+          empCode: row.empCode,
+          category: breakCategory,
+          reason: breakReason.trim(),
+          durationMin: d,
+        }),
+      });
+      const json = await res.json();
+      if (!json?.success) {
+        setSaveError(json?.message || json?.error || 'Failed to save');
+        return;
+      }
+      setSaveSuccess(true);
+      refresh();
+      setTimeout(closeBreakModals, 800);
+    } catch (err) {
+      setSaveError(err?.message || 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddBreak = async () => {
+    if (!addBreakRow) return;
+    if (!breakReason.trim()) {
+      setSaveError('Reason is required');
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      const res = await fetch('/api/hr/break-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empCode: addBreakRow.empCode,
+          date,
+          category: breakCategory,
+          reason: breakReason.trim(),
+          breakStartTime: breakStartTime || undefined,
+          breakEndTime: breakEndTime || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!json?.success) {
+        setSaveError(json?.message || json?.error || 'Failed to add');
+        return;
+      }
+      setSaveSuccess(true);
+      refresh();
+      setTimeout(closeBreakModals, 800);
+    } catch (err) {
+      setSaveError(err?.message || 'Failed to add');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteBreak = async (row, b, e) => {
+    e?.stopPropagation?.();
+    if (!confirm(`Delete this break record for ${row.name}?`)) return;
+    try {
+      const res = await fetch(`/api/hr/break-log?breakId=${b._id}&empCode=${row.empCode}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json?.success) refresh();
+      else alert(json?.message || 'Failed to delete');
+    } catch {
+      alert('Failed to delete');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#020818] p-6 text-white">
@@ -111,6 +265,35 @@ export default function MonitoringPage() {
           onChange={(e) => setDate(e.target.value)}
           className="rounded bg-[#0b1f3a] px-3 py-1 text-sm text-white outline-none border border-[#1f2a44]"
         />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          placeholder="Search by name, emp code, or department..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white placeholder-gray-500 outline-none border border-[#1f2a44] w-72"
+        />
+        <select
+          value={departmentFilter}
+          onChange={(e) => setDepartmentFilter(e.target.value)}
+          className="rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white outline-none border border-[#1f2a44]"
+        >
+          <option value="">All departments</option>
+          {departments.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+        {(searchQuery || departmentFilter) && (
+          <button
+            type="button"
+            onClick={() => { setSearchQuery(''); setDepartmentFilter(''); }}
+            className="rounded bg-[#1e2b44] px-2 py-1 text-xs text-gray-300 hover:bg-[#2b3347]"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="mt-6 grid grid-cols-5 gap-3">
@@ -275,7 +458,16 @@ export default function MonitoringPage() {
                           })}
                         </div>
                         <div className="mt-4">
-                          <div className="mb-3 text-sm font-bold text-gray-200">Break History</div>
+                          <div className="mb-3 flex items-center justify-between">
+                            <span className="text-sm font-bold text-gray-200">Break History</span>
+                            <button
+                              type="button"
+                              onClick={(ev) => openAddBreak(r, ev)}
+                              className="rounded bg-[#1e3a5f] px-2 py-1 text-[10px] font-medium text-blue-300 hover:bg-[#2b4a7f]"
+                            >
+                              + Add Break
+                            </button>
+                          </div>
                           {Array.isArray(r.breakHistory) && r.breakHistory.filter((b) => {
                             const reason = String(b.reason || '').toLowerCase();
                             const duration = Number((b.displayDurationMin ?? b.durationMin) || 0);
@@ -299,7 +491,7 @@ export default function MonitoringPage() {
                                   const catBg = isOfficial ? 'bg-blue-500/20 text-blue-300 border-blue-500/40' : isGeneral ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : isNamaz ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-gray-500/20 text-gray-300 border-gray-500/40';
                                   return (
                                     <div
-                                      key={`${r.empCode}-bh-${idx}`}
+                                      key={b._id || `${r.empCode}-bh-${idx}`}
                                       className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${exceeded ? 'border-red-500/50 bg-red-950/20 ring-1 ring-red-500/30' : isPending ? 'border-gray-600/50 bg-gray-800/30 opacity-75' : 'border-[#25314b] bg-[#0f1a2f]/80'}`}
                                     >
                                       <span className={`shrink-0 rounded-lg px-3 py-1 text-xs font-bold border ${catBg}`}>
@@ -320,6 +512,20 @@ export default function MonitoringPage() {
                                         <span className={`rounded-full px-3 py-1 text-sm font-bold ${exceeded ? 'bg-red-500/25 text-red-300' : duration > 0 ? 'bg-green-500/25 text-green-300' : 'bg-gray-600/40 text-gray-400'}`}>
                                           {duration}m
                                         </span>
+                                        <button
+                                          type="button"
+                                          onClick={(ev) => openEditBreak(r, b, ev)}
+                                          className="rounded bg-[#1e2b44] px-2 py-0.5 text-[10px] text-gray-300 hover:bg-[#2b3347]"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(ev) => handleDeleteBreak(r, b, ev)}
+                                          className="rounded bg-red-900/40 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-900/60"
+                                        >
+                                          Delete
+                                        </button>
                                       </div>
                                     </div>
                                   );
@@ -327,7 +533,14 @@ export default function MonitoringPage() {
                             </div>
                           ) : (
                             <div className="rounded-lg border border-dashed border-[#25314b] bg-[#0a1324]/50 px-4 py-6 text-center text-sm text-gray-400">
-                              No break history for this date.
+                              <p className="mb-3">No break history for this date.</p>
+                              <button
+                                type="button"
+                                onClick={(ev) => openAddBreak(r, ev)}
+                                className="rounded bg-[#1e3a5f] px-3 py-1.5 text-xs font-medium text-blue-300 hover:bg-[#2b4a7f]"
+                              >
+                                + Add Break
+                              </button>
                             </div>
                           )}
                         </div>
@@ -347,6 +560,133 @@ export default function MonitoringPage() {
           </table>
         )}
       </div>
+
+      {/* Edit Break Modal */}
+      {editBreak && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={closeBreakModals}
+        >
+          <div
+            className="rounded-xl border border-[#1f2a44] bg-[#0b1324] p-6 shadow-xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white mb-1">Edit Break</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              {editBreak.row.name} ({editBreak.row.empCode}) — {date}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
+                <select
+                  value={breakCategory}
+                  onChange={(e) => setBreakCategory(e.target.value)}
+                  className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white border border-[#1f2a44] outline-none"
+                >
+                  {BREAK_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Reason</label>
+                <input
+                  type="text"
+                  value={breakReason}
+                  onChange={(e) => setBreakReason(e.target.value)}
+                  placeholder="Break reason..."
+                  className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white placeholder-gray-500 border border-[#1f2a44] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={breakDuration}
+                  onChange={(e) => setBreakDuration(e.target.value)}
+                  className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white border border-[#1f2a44] outline-none"
+                />
+              </div>
+            </div>
+            {saveError && <p className="mt-3 text-sm text-red-400">{saveError}</p>}
+            {saveSuccess && <p className="mt-3 text-sm text-green-400">Saved!</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={closeBreakModals} className="rounded bg-[#1e2b44] px-4 py-2 text-sm text-gray-300 hover:bg-[#2b3347]">Cancel</button>
+              <button type="button" onClick={handleSaveEditBreak} disabled={saving} className="rounded bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-blue-300 hover:bg-[#2b4a7f] disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Break Modal */}
+      {addBreakRow && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={closeBreakModals}
+        >
+          <div
+            className="rounded-xl border border-[#1f2a44] bg-[#0b1324] p-6 shadow-xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-white mb-1">Add Break</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              {addBreakRow.name} ({addBreakRow.empCode}) — {date}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
+                <select
+                  value={breakCategory}
+                  onChange={(e) => setBreakCategory(e.target.value)}
+                  className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white border border-[#1f2a44] outline-none"
+                >
+                  {BREAK_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Reason *</label>
+                <input
+                  type="text"
+                  value={breakReason}
+                  onChange={(e) => setBreakReason(e.target.value)}
+                  placeholder="Break reason..."
+                  className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white placeholder-gray-500 border border-[#1f2a44] outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Start (optional)</label>
+                  <input
+                    type="time"
+                    value={breakStartTime}
+                    onChange={(e) => setBreakStartTime(e.target.value)}
+                    className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white border border-[#1f2a44] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">End (optional)</label>
+                  <input
+                    type="time"
+                    value={breakEndTime}
+                    onChange={(e) => setBreakEndTime(e.target.value)}
+                    className="w-full rounded bg-[#0b1f3a] px-3 py-2 text-sm text-white border border-[#1f2a44] outline-none"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-500">Leave times empty to use shift start + 15 min</p>
+            </div>
+            {saveError && <p className="mt-3 text-sm text-red-400">{saveError}</p>}
+            {saveSuccess && <p className="mt-3 text-sm text-green-400">Added!</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={closeBreakModals} className="rounded bg-[#1e2b44] px-4 py-2 text-sm text-gray-300 hover:bg-[#2b3347]">Cancel</button>
+              <button type="button" onClick={handleAddBreak} disabled={saving} className="rounded bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-blue-300 hover:bg-[#2b4a7f] disabled:opacity-50">{saving ? 'Adding...' : 'Add'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

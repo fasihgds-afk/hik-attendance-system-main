@@ -45,7 +45,7 @@ export async function GET(req) {
         .maxTimeMS(4000),
       Shift.find({ isActive: true }).select('code startTime endTime crossesMidnight gracePeriod').lean().maxTimeMS(4000),
       ShiftAttendance.find({ date })
-        .select('empCode checkIn checkOut shift')
+        .select('empCode checkIn checkOut shift attendanceStatus reason')
         .lean()
         .maxTimeMS(4000),
       BreakLog.find({ shiftDate: date })
@@ -174,6 +174,9 @@ export async function GET(req) {
         department: emp.department || '-',
         shift: att.shift || emp.shift || '-',
         status,
+        attendanceStatus: att.attendanceStatus || null,
+        reason: att.reason || '',
+        checkOut: att.checkOut || null,
         suspiciousLive: online && !!d.suspiciousActive,
         score,
         checkIn: att.checkIn || null,
