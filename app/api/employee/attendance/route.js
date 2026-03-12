@@ -36,7 +36,7 @@ export async function GET(req) {
     const events = await AttendanceEvent.find({
       empCode,
       eventTime: { $gte: start, $lt: end },
-      minor: 38,
+      minor: { $in: [38, 39] },
     })
       .select('eventTime empCode') // Only select required fields
       .sort({ eventTime: 1 })

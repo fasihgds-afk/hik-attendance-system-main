@@ -31,7 +31,7 @@ export async function GET(req) {
     const events = await AttendanceEvent.find({
       empCode,
       eventTime: { $gte: start, $lt: end },
-      minor: 38, // successful access events
+      minor: { $in: [38, 39] }, // check-in (38) + check-out (39)
     })
       .sort({ eventTime: 1 })
       .lean();

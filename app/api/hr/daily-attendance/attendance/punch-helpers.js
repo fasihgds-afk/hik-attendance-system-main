@@ -28,7 +28,7 @@ export async function getFirstAndLastPunchPerEmployee(AttendanceEvent, startLoca
     {
       $match: {
         eventTime: { $gte: startLocal, $lte: endLocal },
-        minor: 38,
+        minor: { $in: [38, 39] },
       },
     },
     { $sort: { eventTime: 1 } },
