@@ -31,10 +31,30 @@ export async function getFirstAndLastPunchPerEmployee(AttendanceEvent, startLoca
         minor: { $in: [38, 39] },
       },
     },
+    {
+      $addFields: {
+        _empCodeKey: { $trim: { input: { $toString: '$empCode' } } },
+        _eventSecond: {
+          $dateToString: { format: '%Y-%m-%dT%H:%M:%S', date: '$eventTime', timezone: 'UTC' },
+        },
+      },
+    },
+    {
+      $match: {
+        _empCodeKey: { $nin: ['', 'null', 'undefined'] },
+      },
+    },
+    // Collapse repeated device records of the same employee in the same second.
+    {
+      $group: {
+        _id: { empCode: '$_empCodeKey', sec: '$_eventSecond' },
+        eventTime: { $min: '$eventTime' },
+      },
+    },
     { $sort: { eventTime: 1 } },
     {
       $group: {
-        _id: '$empCode',
+        _id: '$_id.empCode',
         firstPunch: { $first: '$eventTime' },
         lastPunch: { $last: '$eventTime' },
         count: { $sum: 1 },
