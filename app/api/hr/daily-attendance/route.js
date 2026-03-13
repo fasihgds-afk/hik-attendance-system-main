@@ -146,10 +146,16 @@ export async function POST(req) {
       let checkOut = null;
       let totalPunches = 0;
 
-      // HR manually edited on Monthly page: preserve checkIn/checkOut, never overwrite with punch data
+      // HR manually edited on Monthly page: preserve status/reason fields.
+      // But if manual record is missing checkOut, auto-fill from punches so daily page
+      // does not keep showing "-" when a valid OUT punch exists.
       if (existingRecord?.manuallyEdited) {
         if (existingRecord.checkIn) checkIn = new Date(existingRecord.checkIn);
         if (existingRecord.checkOut) checkOut = new Date(existingRecord.checkOut);
+        if (!checkIn && punches?.firstPunch) checkIn = punches.firstPunch;
+        if (!checkOut && punches?.count > 1) {
+          checkOut = ensureCheckInBeforeCheckOut(checkIn, punches.lastPunch) || null;
+        }
         totalPunches = checkIn && checkOut ? 2 : checkIn ? 1 : 0;
       } else if (punches) {
         checkIn = punches.firstPunch || null;
@@ -218,10 +224,13 @@ export async function POST(req) {
       };
 
       if (preserveManuallyEdited) {
-        // HR edited on Monthly page: preserve all manual fields, never overwrite
-        update.checkIn = existing.checkIn;
-        update.checkOut = existing.checkOut ?? null;
-        update.totalPunches = existing.totalPunches ?? (existing.checkIn && existing.checkOut ? 2 : existing.checkIn ? 1 : 0);
+        // Preserve manual status/reason fields. For attendance punches, only auto-fill
+        // missing values from freshly fetched punches.
+        const existingCheckIn = existing.checkIn ?? null;
+        const existingCheckOut = existing.checkOut ?? null;
+        update.checkIn = existingCheckIn || item.checkIn || null;
+        update.checkOut = existingCheckOut || item.checkOut || null;
+        update.totalPunches = update.checkIn && update.checkOut ? 2 : update.checkIn ? 1 : 0;
         update.attendanceStatus = existing.attendanceStatus;
         update.reason = existing.reason ?? '';
         update.leaveType = existing.leaveType ?? null;
