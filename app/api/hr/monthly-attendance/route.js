@@ -40,7 +40,7 @@ import LeaveRecord from '../../../../models/LeaveRecord';
 import Department from '../../../../models/Department';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
-import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturdayIndexInMonth } from '../../../../lib/calculations';
+import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturdayIndexInMonth, EXTRAORDINARY_LEAVE_STATUSES } from '../../../../lib/calculations';
 import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
 import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
@@ -955,6 +955,7 @@ export async function GET(req) {
           status !== 'Un Paid Leave' && 
           status !== 'Sick Leave' && 
           status !== 'Work From Home' &&
+          !EXTRAORDINARY_LEAVE_STATUSES.includes(status) &&
           checkIn && 
           checkOut;
 
@@ -1017,6 +1018,7 @@ export async function GET(req) {
         
         // Determine if this is an absent day (missing punch OR no punch at all)
         // Exclude Leave Without Inform from absent calculation (handled separately)
+        // Exclude extraordinary leaves (paid, no deduction)
         const isAbsentDay = (partialPunch || bothMissing) && 
           status !== 'Holiday' && 
           status !== 'Paid Leave' && 
@@ -1024,11 +1026,12 @@ export async function GET(req) {
           status !== 'Sick Leave' && 
           status !== 'Work From Home' &&
           status !== 'Leave Without Inform' &&
+          !EXTRAORDINARY_LEAVE_STATUSES.includes(status) &&
           !excusedForMissing;
         
         // Apply absent deduction using database rules
-        // IMPORTANT: Don't count if it's already a leave (Unpaid Leave, Sick Leave, or Leave Without Inform)
-        if (isAbsentDay && !isWeekendOff && status !== 'Un Paid Leave' && status !== 'Sick Leave' && status !== 'Leave Without Inform') {
+        // IMPORTANT: Don't count if it's already a leave (Unpaid Leave, Sick Leave, Leave Without Inform, or extraordinary)
+        if (isAbsentDay && !isWeekendOff && status !== 'Un Paid Leave' && status !== 'Sick Leave' && status !== 'Leave Without Inform' && !EXTRAORDINARY_LEAVE_STATUSES.includes(status)) {
           const missingPunchDays = getMissingPunchDeductionDays(bothMissing, partialPunch, violationRules.absentConfig);
           absentDays += missingPunchDays;
         }
@@ -1484,7 +1487,11 @@ export async function POST(req) {
       lateExcused: finalLateExcused,
       earlyExcused: finalEarlyExcused,
       // Quarter-based: store leaveType 'paid' only (no casual/annual)
-      ...(attendanceStatus === 'Paid Leave' && { leaveType: 'paid' }),
+      // Extraordinary leaves: store sub-type (marriage, death, etc.) for reporting
+      leaveType: attendanceStatus === 'Paid Leave' ? 'paid'
+        : EXTRAORDINARY_LEAVE_STATUSES.includes(attendanceStatus)
+          ? { 'Marriage Leave': 'marriage', 'Death Leave': 'death', 'Maternity Leave': 'maternity', 'Paternity Leave': 'paternity', 'Hajj Leave': 'hajj', 'Umrah Leave': 'umrah' }[attendanceStatus]
+          : null,
       manuallyEdited: true,
       updatedAt: new Date(),
     };
@@ -1547,7 +1554,7 @@ export async function POST(req) {
             }
             await LeaveRecord.findOneAndDelete({ empCode, date }, { session });
           }
-          delete update.leaveType;
+          update.leaveType = null;
         } else if (wasPaidLeave && isPaidLeave && !leaveType) {
           update.leaveType = 'paid';
           if (!existingLeave) {

@@ -57,6 +57,12 @@ const MANUAL_OR_LEAVE_STATUSES = new Set([
   'Leave Without Inform',
   'Work From Home',
   'Holiday',
+  'Marriage Leave',
+  'Death Leave',
+  'Maternity Leave',
+  'Paternity Leave',
+  'Hajj Leave',
+  'Umrah Leave',
 ]);
 
 export async function POST(req) {

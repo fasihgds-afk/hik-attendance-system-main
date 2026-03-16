@@ -673,7 +673,13 @@ function classifyDayForRow(day, colors, theme = 'dark') {
   const isLeaveType =
     day.status === "Paid Leave" ||
     day.status === "Un Paid Leave" ||
-    day.status === "Sick Leave";
+    day.status === "Sick Leave" ||
+    day.status === "Marriage Leave" ||
+    day.status === "Death Leave" ||
+    day.status === "Maternity Leave" ||
+    day.status === "Paternity Leave" ||
+    day.status === "Hajj Leave" ||
+    day.status === "Umrah Leave";
 
   // WFH
   if (day.status === "Work From Home") {
@@ -1204,6 +1210,14 @@ export default function EmployeeDashboardPage() {
           summary.sickLeave += 1;
           break;
         case "Paid Leave":
+          summary.paidLeave += 1;
+          break;
+        case "Marriage Leave":
+        case "Death Leave":
+        case "Maternity Leave":
+        case "Paternity Leave":
+        case "Hajj Leave":
+        case "Umrah Leave":
           summary.paidLeave += 1;
           break;
         case "Un Paid Leave":
@@ -2394,7 +2408,13 @@ export default function EmployeeDashboardPage() {
                           else if (
                             d.status === "Paid Leave" ||
                             d.status === "Un Paid Leave" ||
-                            d.status === "Sick Leave"
+                            d.status === "Sick Leave" ||
+                            d.status === "Marriage Leave" ||
+                            d.status === "Death Leave" ||
+                            d.status === "Maternity Leave" ||
+                            d.status === "Paternity Leave" ||
+                            d.status === "Hajj Leave" ||
+                            d.status === "Umrah Leave"
                           )
                             inOutLabel = d.status;
                           else if (d.status === "Absent")

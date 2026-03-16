@@ -49,6 +49,18 @@ function statusShortCode(status) {
       return 'WFH';
     case 'Half Day':
       return 'Half';
+    case 'Marriage Leave':
+      return 'ML';
+    case 'Death Leave':
+      return 'DL';
+    case 'Maternity Leave':
+      return 'MatL';
+    case 'Paternity Leave':
+      return 'PatL';
+    case 'Hajj Leave':
+      return 'Hajj';
+    case 'Umrah Leave':
+      return 'Umrah';
     default:
       return s;
   }
@@ -78,7 +90,13 @@ function getCellStyle(day, colors, baseCell, theme) {
   const isLeaveType =
     day.status === 'Paid Leave' ||
     day.status === 'Un Paid Leave' ||
-    day.status === 'Sick Leave';
+    day.status === 'Sick Leave' ||
+    day.status === 'Marriage Leave' ||
+    day.status === 'Death Leave' ||
+    day.status === 'Maternity Leave' ||
+    day.status === 'Paternity Leave' ||
+    day.status === 'Hajj Leave' ||
+    day.status === 'Umrah Leave';
 
   // Work From Home special color (using logo blue)
   if (day.status === 'Work From Home') {
@@ -882,12 +900,18 @@ export default function MonthlyHrPage() {
             let punchText = '';
             if (inT && outT) {
               punchText = `${inT} / ${outT}`;
-            } else if (!day.checkIn && !day.checkOut) {
+            } else             if (!day.checkIn && !day.checkOut) {
               if (st === 'Holiday') punchText = 'Holiday';
               else if (
                 st === 'Paid Leave' ||
                 st === 'Un Paid Leave' ||
-                st === 'Sick Leave'
+                st === 'Sick Leave' ||
+                st === 'Marriage Leave' ||
+                st === 'Death Leave' ||
+                st === 'Maternity Leave' ||
+                st === 'Paternity Leave' ||
+                st === 'Hajj Leave' ||
+                st === 'Umrah Leave'
               ) {
                 punchText = st;
               } else if (st === 'Absent') {
@@ -2155,7 +2179,13 @@ export default function MonthlyHrPage() {
                             else if (
                               day.status === 'Paid Leave' ||
                               day.status === 'Un Paid Leave' ||
-                              day.status === 'Sick Leave'
+                              day.status === 'Sick Leave' ||
+                              day.status === 'Marriage Leave' ||
+                              day.status === 'Death Leave' ||
+                              day.status === 'Maternity Leave' ||
+                              day.status === 'Paternity Leave' ||
+                              day.status === 'Hajj Leave' ||
+                              day.status === 'Umrah Leave'
                             ) {
                               punchLabel = day.status;
                             } else if (day.status === 'Absent') {
@@ -2379,6 +2409,12 @@ export default function MonthlyHrPage() {
                       <option value="Paid Leave">Paid Leave (PL)</option>
                       <option value="Un Paid Leave">Un Paid Leave (UPL)</option>
                       <option value="Leave Without Inform">Leave Without Inform (LWI)</option>
+                      <option value="Marriage Leave">Marriage Leave (ML)</option>
+                      <option value="Death Leave">Death Leave (DL)</option>
+                      <option value="Maternity Leave">Maternity Leave (MatL)</option>
+                      <option value="Paternity Leave">Paternity Leave (PatL)</option>
+                      <option value="Hajj Leave">Hajj Leave</option>
+                      <option value="Umrah Leave">Umrah Leave</option>
                       <option value="Work From Home">
                         Work From Home (WFH)
                       </option>
