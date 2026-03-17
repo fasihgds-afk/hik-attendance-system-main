@@ -4,7 +4,7 @@
 // MONTHLY ATTENDANCE API - VIOLATION FORMULA QUICK REFERENCE
 // =============================================================================
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requireHR, requireAuth } from '../../../../lib/auth/requireAuth';
 
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 //
@@ -385,7 +385,7 @@ function _normalizeStatus_DEPRECATED(rawStatus, { isWeekendOff } = {}) {
 
 export async function GET(req) {
   try {
-    await requireHR();
+    const { user } = await requireAuth();
     const { searchParams } = new URL(req.url);
     let month = searchParams.get('month');
 
@@ -1263,11 +1263,17 @@ export async function GET(req) {
       });
     });
 
-    // Return data directly - no caching
+    // Employees can only see their own data; HR/ADMIN see all
+    let filteredEmployees = employeesOut;
+    if (user.role === 'EMPLOYEE') {
+      const myEmpCode = String(user.empCode || '').trim();
+      filteredEmployees = employeesOut.filter((e) => String(e.empCode || '').trim() === myEmpCode);
+    }
+
     const result = {
       month: monthPrefix,
       daysInMonth,
-      employees: employeesOut,
+      employees: filteredEmployees,
     };
 
     // Direct response - NO edge caching for authenticated routes
@@ -1280,7 +1286,7 @@ export async function GET(req) {
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     return response;
   } catch (err) {
-    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
+    if (err?.code === 'UNAUTHORIZED_HR' || err?.code === 'UNAUTHORIZED') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
