@@ -943,6 +943,7 @@ export default function EmployeeDashboardPage() {
         const res = await fetch(`/api/employee/leaves?empCode=${encodeURIComponent(empCode)}`, {
           method: "GET",
           cache: "no-store",
+          credentials: "include",
         });
         if (res.ok) {
           const response = await res.json();
@@ -971,6 +972,7 @@ export default function EmployeeDashboardPage() {
           {
             method: "GET",
             cache: "no-store",
+            credentials: "include",
           }
         );
         if (!res.ok) return;
@@ -1029,6 +1031,7 @@ export default function EmployeeDashboardPage() {
         const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
           method: "GET",
           cache: "no-store",
+          credentials: "include",
         });
         if (!res.ok) {
           const text = await res.text();
@@ -1079,6 +1082,7 @@ export default function EmployeeDashboardPage() {
       const res = await fetch('/api/employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           empCode: empCode,
           name: formData.name,
@@ -1104,7 +1108,7 @@ export default function EmployeeDashboardPage() {
       // Reload employee profile to get updated data
       const profileRes = await fetch(
         `/api/employee?empCode=${encodeURIComponent(empCode)}`,
-        { method: 'GET', cache: 'no-store' }
+        { method: 'GET', cache: 'no-store', credentials: 'include' }
       );
       if (profileRes.ok) {
         const profileData = await profileRes.json();
@@ -1328,6 +1332,7 @@ export default function EmployeeDashboardPage() {
           const res = await fetch(`/api/hr/monthly-attendance?month=${salarySlipMonth}`, {
             method: "GET",
             cache: "no-store",
+            credentials: "include",
           });
           if (res.ok) {
             const json = await res.json();

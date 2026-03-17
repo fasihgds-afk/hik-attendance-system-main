@@ -241,10 +241,13 @@ export async function GET(req) {
   }
 }
 
-// POST /api/employee  -> create / update (upsert) - HR/ADMIN only
+// Fields employees can update on their own profile (not HR-controlled)
+const EMPLOYEE_SELF_UPDATE_FIELDS = ['name', 'email', 'phoneNumber', 'bankDetails', 'profileImageBase64', 'profileImageUrl'];
+
+// POST /api/employee  -> create/update (HR) or self profile update (Employee)
 export async function POST(req) {
   try {
-    await requireHR();
+    const { user } = await requireAuth();
     await connectDB();
 
     const body = await req.json();
@@ -261,6 +264,21 @@ export async function POST(req) {
 
     if (!empCode) {
       throw new ValidationError('empCode is required');
+    }
+
+    // Employees can only update their own profile, and only safe fields
+    if (user.role === 'EMPLOYEE') {
+      if (String(empCode) !== String(user.empCode || '')) {
+        return errorResponse('Unauthorized', 401);
+      }
+      // Restrict to self-update fields only - remove HR-controlled fields
+      Object.keys(validatedData).forEach((key) => {
+        if (key !== 'empCode' && !EMPLOYEE_SELF_UPDATE_FIELDS.includes(key)) {
+          delete validatedData[key];
+        }
+      });
+    } else if (user.role !== 'HR' && user.role !== 'ADMIN') {
+      return errorResponse('Unauthorized', 401);
     }
 
     // Build update object
@@ -322,12 +340,17 @@ export async function POST(req) {
       }
     }
 
-    // Execute update directly
+    // Execute update: employees can only update existing record; HR can create/update
+    const upsertAllowed = user.role === 'HR' || user.role === 'ADMIN';
     const employee = await Employee.findOneAndUpdate(
       { empCode },
       { $set: update },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: upsertAllowed, setDefaultsOnInsert: upsertAllowed }
     ).lean();
+
+    if (!employee && !upsertAllowed) {
+      throw new NotFoundError(`Employee ${empCode} not found`);
+    }
 
     employee.bankDetails = decryptBankDetails(employee.bankDetails);
 
@@ -339,7 +362,7 @@ export async function POST(req) {
       isNew ? HTTP_STATUS.CREATED : HTTP_STATUS.OK
     );
   } catch (err) {
-    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
+    if (err?.code === 'UNAUTHORIZED_HR' || err?.code === 'UNAUTHORIZED') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
