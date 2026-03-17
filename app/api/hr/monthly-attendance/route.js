@@ -1270,19 +1270,14 @@ export async function GET(req) {
       employees: employeesOut,
     };
 
-    // Direct response - no caching
-    // OPTIMIZATION: Add cache headers for monthly attendance (30s for past months)
+    // Direct response - NO edge caching for authenticated routes
+    // (public cache would serve HR data to unauthenticated users - security risk)
     const response = successResponse(
       result,
       'Monthly attendance retrieved successfully',
       HTTP_STATUS.OK
     );
-    
-    // Cache past months for 30 seconds (data doesn't change)
-    if (monthRelation === -1) {
-      response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
-    }
-    
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     return response;
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
