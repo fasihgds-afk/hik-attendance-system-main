@@ -3,7 +3,8 @@
 import { connectDB } from '../../../../lib/db';
 import LeavePolicy from '../../../../models/LeavePolicy';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,7 @@ const DEFAULT_POLICY = { leavesPerQuarter: 6, allowCarryForward: false, carryFor
 // GET /api/hr/leave-policy – Return current policy
 export async function GET() {
   try {
+    await requireHR();
     const policy = await getLeavePolicy();
     return successResponse({ policy }, 'Leave policy retrieved', HTTP_STATUS.OK);
   } catch (err) {
@@ -24,6 +26,7 @@ export async function GET() {
 // PUT /api/hr/leave-policy – Update policy (leavesPerQuarter, allowCarryForward, carryForwardMax)
 export async function PUT(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -60,6 +63,7 @@ export async function PUT(req) {
 
     return successResponse({ policy }, 'Leave policy updated', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

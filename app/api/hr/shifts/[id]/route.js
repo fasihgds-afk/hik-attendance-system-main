@@ -1,6 +1,7 @@
 // app/api/hr/shifts/[id]/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 import Shift from '../../../../../models/Shift';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 import { NotFoundError, ValidationError } from '../../../../../lib/errors/errorHandler';
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/hr/shifts/[id] - Get a specific shift
 export async function GET(req, { params }) {
   try {
+    await requireHR();
     await connectDB();
 
     // Handle both Next.js 14 and 15 (params might be a promise in Next.js 15)
@@ -29,6 +31,7 @@ export async function GET(req, { params }) {
 
     return NextResponse.json({ shift });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('GET /api/hr/shifts/[id] error:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error' },
@@ -40,6 +43,7 @@ export async function GET(req, { params }) {
 // PUT /api/hr/shifts/[id] - Update a shift
 export async function PUT(req, { params }) {
   try {
+    await requireHR();
     await connectDB();
 
     // Handle both Next.js 14 and 15 (params might be a promise in Next.js 15)
@@ -131,6 +135,7 @@ export async function PUT(req, { params }) {
 
     return NextResponse.json({ shift });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('PUT /api/hr/shifts/[id] error:', err);
     if (err.name === 'CastError' || err.message?.includes('Cast to ObjectId')) {
       return NextResponse.json(
@@ -157,6 +162,7 @@ export async function PUT(req, { params }) {
 // Query param: ?permanent=true for permanent deletion, otherwise soft delete (deactivate)
 export async function DELETE(req, { params }) {
   try {
+    await requireHR();
     await connectDB();
 
     // Handle both Next.js 14 and 15 (params might be a promise in Next.js 15)
@@ -199,6 +205,7 @@ export async function DELETE(req, { params }) {
       );
     }
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return errorResponseFromException(err, req);
   }
 }

@@ -2,12 +2,14 @@
 // Migration script to create default shifts from hardcoded values
 import { connectDB } from '../../../../../lib/db';
 import Shift from '../../../../../models/Shift';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const defaultShifts = [
@@ -88,6 +90,7 @@ export async function POST(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

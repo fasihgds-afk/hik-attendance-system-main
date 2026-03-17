@@ -1,7 +1,8 @@
 // next-app/app/api/hr/employees/route.js
 import { connectDB } from "../../../../lib/db";
 import Employee from "../../../../models/Employee";
-import { successResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
+import { requireHR } from "../../../../lib/auth/requireAuth";
 
 // OPTIMIZATION: Node.js runtime for better MongoDB connection pooling
 export const runtime = 'nodejs';
@@ -17,6 +18,7 @@ export async function GET(req) {
   const startTime = Date.now();
   
   try {
+    await requireHR();
     // OPTIMIZATION: Connect DB (cached singleton, no reconnection per request)
     await connectDB();
 
@@ -77,6 +79,7 @@ export async function GET(req) {
 
     return response;
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     const responseTime = Date.now() - startTime;
     console.error(`[employees] Error after ${responseTime}ms:`, err.message);
     return errorResponseFromException(err, req);

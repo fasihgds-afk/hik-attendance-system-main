@@ -6,7 +6,8 @@ import bcrypt from 'bcryptjs';
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 import { rateLimiters } from '../../../../lib/middleware/rateLimit';
 import { z } from 'zod';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 
 // Validation schema for user registration
 const registerSchema = z.object({
@@ -91,6 +92,7 @@ export async function POST(req) {
       HTTP_STATUS.CREATED
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

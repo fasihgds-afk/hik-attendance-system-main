@@ -3,7 +3,8 @@
 // Preserves paid leave and manual attendance edits.
 
 import { connectDB } from '../../../../lib/db';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 import AttendanceEvent from '../../../../models/AttendanceEvent';
 import Employee from '../../../../models/Employee';
@@ -67,6 +68,7 @@ const MANUAL_OR_LEAVE_STATUSES = new Set([
 
 export async function POST(req) {
   try {
+    await requireHR();
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date');
 
@@ -284,6 +286,7 @@ export async function POST(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

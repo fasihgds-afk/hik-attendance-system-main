@@ -1,12 +1,14 @@
-// Test endpoint to check if employee query works without filters
+// Test endpoint to check if employee query works without filters - HR only
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db';
 import Employee from '@/models/Employee';
+import { requireHR } from '@/lib/auth/requireAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    await requireHR();
     await connectDB();
     
     // Simple query - no filters, no projection, just get all employees
@@ -28,6 +30,7 @@ export async function GET() {
         : 'No employees found in database',
     });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('[Employee Test API] Error:', err);
     return NextResponse.json(
       {

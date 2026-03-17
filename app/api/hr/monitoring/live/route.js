@@ -1,5 +1,6 @@
 import { connectDB } from '../../../../../lib/db';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 import Device from '../../../../../models/Device';
 import Employee from '../../../../../models/Employee';
 import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../../models/Shift';
@@ -28,6 +29,7 @@ function toHoursFromDates(a, b) {
 
 export async function GET(req) {
   try {
+    await requireHR();
     await connectDB();
     const { searchParams } = new URL(req.url);
     const tzOffset = process.env.TIMEZONE_OFFSET || '+05:00';
@@ -210,6 +212,7 @@ export async function GET(req) {
 
     return successResponse({ date, summary, rows }, 'Live monitoring data', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

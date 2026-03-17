@@ -4,7 +4,8 @@ import { connectDB } from '../../../../lib/db';
 import LeaveRecord from '../../../../models/LeaveRecord';
 import { getQuarterFromDate, getQuarterRange, getCurrentQuarter, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireEmployee } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -32,16 +33,18 @@ function getQuarterAllocationsWithCarry(leavesPerQuarter, q1Taken, q2Taken, q3Ta
 // GET /api/employee/leaves?empCode=XXX&year=YYYY - Balance by quarter (current quarter + full year optional)
 export async function GET(req) {
   try {
+    const { user } = await requireEmployee();
     await connectDB();
 
     const { searchParams } = new URL(req.url);
-    const empCode = searchParams.get('empCode');
+    const empCode = (searchParams.get('empCode') || user.empCode || '').trim();
+    if (String(empCode) !== String(user.empCode || '')) {
+      return errorResponse('Unauthorized', 401);
+    }
     const yearParam = searchParams.get('year');
     const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
 
-    if (!empCode) {
-      throw new ValidationError('empCode is required');
-    }
+    if (!empCode) throw new ValidationError('empCode is required');
 
     const policy = await getLeavePolicy();
     const leavesPerQuarter = policy.leavesPerQuarter;
@@ -119,6 +122,7 @@ export async function GET(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_EMPLOYEE') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

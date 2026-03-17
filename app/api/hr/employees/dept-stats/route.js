@@ -1,7 +1,8 @@
 // next-app/app/api/hr/employees/dept-stats/route.js
 import { connectDB } from '../../../../../lib/db';
 import Employee from '../../../../../models/Employee';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 
 export const runtime = 'nodejs';
 export const revalidate = 60;
@@ -32,6 +33,7 @@ export async function GET(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     console.error('[dept-stats] Error:', err.message);
     return errorResponseFromException(err, req);
   }

@@ -4,7 +4,8 @@
  */
 
 import { connectDB } from '../../../../lib/db';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 import Employee from '../../../../models/Employee';
 import Shift from '../../../../models/Shift';
@@ -28,6 +29,7 @@ function normalizeCategory(val) {
 /** POST — Create break (HR adds manual break) */
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
     const body = await req.json();
     const { empCode, category, reason, breakStartTime, breakEndTime } = body;
@@ -96,6 +98,7 @@ export async function POST(req) {
       HTTP_STATUS.CREATED
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -103,6 +106,7 @@ export async function POST(req) {
 /** PATCH — Update break (category, reason, duration) */
 export async function PATCH(req) {
   try {
+    await requireHR();
     await connectDB();
     const body = await req.json();
     const { breakId, empCode, category, reason, durationMin } = body;
@@ -134,6 +138,7 @@ export async function PATCH(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -141,6 +146,7 @@ export async function PATCH(req) {
 /** DELETE — Remove break record */
 export async function DELETE(req) {
   try {
+    await requireHR();
     await connectDB();
     const { searchParams } = new URL(req.url);
     const breakId = searchParams.get('breakId');
@@ -155,6 +161,7 @@ export async function DELETE(req) {
 
     return successResponse(null, 'Break deleted', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

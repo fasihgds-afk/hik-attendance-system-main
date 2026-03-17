@@ -2,7 +2,8 @@ import { createWriteStream } from 'fs';
 import { mkdir, stat } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { successResponse, errorResponseFromException } from '../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException } from '../../../lib/api/response';
+import { requireAuth } from '../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../lib/errors/errorHandler';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ async function ensureDir(dirPath) {
 
 export async function POST(req) {
   try {
+    await requireAuth(); // HR or Employee can upload (profile photos)
     const formData = await req.formData();
     const file = formData.get('file');
 
@@ -47,6 +49,7 @@ export async function POST(req) {
 
     return successResponse({ url: publicPath }, 'File uploaded successfully', 201);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

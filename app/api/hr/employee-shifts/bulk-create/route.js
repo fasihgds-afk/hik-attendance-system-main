@@ -2,6 +2,7 @@
 // Helper endpoint to create shift history records for employees
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 import Employee from '../../../../../models/Employee';
 import Shift from '../../../../../models/Shift';
 import EmployeeShiftHistory from '../../../../../models/EmployeeShiftHistory';
@@ -12,6 +13,7 @@ export const dynamic = 'force-dynamic';
 // Body: { empCode, shifts: [{ shiftCode, startDate, endDate }] }
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -105,6 +107,7 @@ export async function POST(req) {
       results,
     });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('POST /api/hr/employee-shifts/bulk-create error:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error' },

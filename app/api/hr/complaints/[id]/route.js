@@ -2,7 +2,8 @@
 // Get one complaint (HR sees all including internalNote), PATCH to respond/update status
 import { connectDB } from '../../../../../lib/db';
 import Complaint from '../../../../../models/Complaint';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -13,6 +14,7 @@ const VALID_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
 // GET /api/hr/complaints/[id]
 export async function GET(req, { params }) {
   try {
+    await requireHR();
     await connectDB();
     const { id } = await params;
     if (!id) throw new ValidationError('Complaint ID is required');
@@ -22,6 +24,7 @@ export async function GET(req, { params }) {
 
     return successResponse({ complaint: doc }, 'Complaint retrieved', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -29,6 +32,7 @@ export async function GET(req, { params }) {
 // PATCH /api/hr/complaints/[id] – update status, hrResponse, internalNote
 export async function PATCH(req, { params }) {
   try {
+    await requireHR();
     await connectDB();
     const { id } = await params;
     if (!id) throw new ValidationError('Complaint ID is required');
@@ -57,6 +61,7 @@ export async function PATCH(req, { params }) {
 
     return successResponse({ complaint: doc }, 'Complaint updated', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

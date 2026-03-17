@@ -1,7 +1,9 @@
 // app/api/hr/shifts/route.js
+import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
 import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
@@ -13,6 +15,7 @@ export const revalidate = 60;
 // GET /api/hr/shifts - Get all shifts
 export async function GET(req) {
   try {
+    await requireHR();
     await connectDB();
     
     const { searchParams } = new URL(req.url);
@@ -33,6 +36,7 @@ export async function GET(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -40,6 +44,7 @@ export async function GET(req) {
 // PATCH /api/hr/shifts - Bulk update shifts (e.g., activate all)
 export async function PATCH(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -63,6 +68,7 @@ export async function PATCH(req) {
       { status: 400 }
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('PATCH /api/hr/shifts error:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error' },
@@ -74,6 +80,7 @@ export async function PATCH(req) {
 // POST /api/hr/shifts - Create a new shift
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -107,6 +114,7 @@ export async function POST(req) {
       HTTP_STATUS.CREATED
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

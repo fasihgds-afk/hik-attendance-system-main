@@ -1,6 +1,7 @@
 // app/api/hr/employee-shifts/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import Employee from '../../../../models/Employee';
 import Shift from '../../../../models/Shift';
 import EmployeeShiftHistory from '../../../../models/EmployeeShiftHistory';
@@ -11,6 +12,7 @@ export const dynamic = 'force-dynamic';
 // Get shift for an employee on a specific date (considering history)
 export async function GET(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -95,6 +97,7 @@ export async function GET(req) {
       shiftCode: currentShift?.code || employee.shift,
     });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('GET /api/hr/employee-shifts error:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error' },
@@ -106,6 +109,7 @@ export async function GET(req) {
 // POST /api/hr/employee-shifts - Assign or change employee shift
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -241,6 +245,7 @@ export async function POST(req) {
       { status: 201 }
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('POST /api/hr/employee-shifts error:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error' },

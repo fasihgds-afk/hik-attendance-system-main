@@ -1,6 +1,7 @@
 // next-app/app/api/employee/attendance/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
+import { requireEmployee } from '../../../../lib/auth/requireAuth';
 import AttendanceEvent from '../../../../models/AttendanceEvent';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
@@ -10,10 +11,15 @@ export const dynamic = 'force-dynamic';
 // GET /api/employee/attendance?empCode=EMP001&month=2025-11
 export async function GET(req) {
   try {
+    const { user } = await requireEmployee();
     const { searchParams } = new URL(req.url);
-    const empCode = searchParams.get('empCode');
+    const empCode = searchParams.get('empCode') || user.empCode;
     const month = searchParams.get('month'); // "YYYY-MM"
 
+    // Employees can only fetch their own attendance
+    if (String(empCode || '') !== String(user.empCode || '')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     if (!empCode || !month) {
       return NextResponse.json(
         { error: 'empCode and month=YYYY-MM are required' },
@@ -71,6 +77,7 @@ export async function GET(req) {
 
     return NextResponse.json({ empCode, month, items });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_EMPLOYEE') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('Employee attendance API error:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error' },

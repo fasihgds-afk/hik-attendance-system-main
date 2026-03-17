@@ -1,5 +1,6 @@
 import { connectDB } from '../../../../../lib/db';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
+import { requireHR } from '../../../../../lib/auth/requireAuth';
 import Device from '../../../../../models/Device';
 import SuspiciousLog from '../../../../../models/SuspiciousLog';
 import { getBusinessDate } from '../../../../../lib/date/businessDate';
@@ -16,6 +17,7 @@ function getTodayStart(tz = '+05:00') {
 
 export async function GET(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const now = new Date();
@@ -64,6 +66,7 @@ export async function GET(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

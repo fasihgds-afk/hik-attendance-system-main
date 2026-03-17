@@ -2,7 +2,8 @@
 // List all complaints with optional filters (status, category, search)
 import { connectDB } from '../../../../lib/db';
 import Complaint from '../../../../models/Complaint';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -20,6 +21,7 @@ function escapeRegex(value) {
 // period: all = all time, week = last 7 days, month = last 30 days. Results sorted latest first.
 export async function GET(req) {
   try {
+    await requireHR();
     await connectDB();
     const { searchParams } = new URL(req.url);
     const status = (searchParams.get('status') || '').trim();
@@ -60,6 +62,7 @@ export async function GET(req) {
 
     return successResponse({ complaints: list }, 'Complaints retrieved', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

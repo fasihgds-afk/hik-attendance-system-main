@@ -7,7 +7,8 @@ import ShiftAttendance from '../../../../models/ShiftAttendance';
 import Employee from '../../../../models/Employee';
 import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -121,6 +122,7 @@ export async function GET(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -128,6 +130,7 @@ export async function GET(req) {
 // POST /api/hr/leaves - Mark paid leave (quarter-based; limit from LeavePolicy)
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const policy = await getLeavePolicy();
@@ -208,6 +211,7 @@ export async function POST(req) {
       HTTP_STATUS.CREATED
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -215,6 +219,7 @@ export async function POST(req) {
 // DELETE /api/hr/leaves?empCode=XXX&date=YYYY-MM-DD - Remove paid leave
 export async function DELETE(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -247,6 +252,7 @@ export async function DELETE(req) {
 
     return successResponse({ leaveRecord }, 'Leave removed successfully', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

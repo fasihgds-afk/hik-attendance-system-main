@@ -4,7 +4,8 @@ import Employee from '../../../models/Employee';
 import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/queryOptimizer';
 import { NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
 import { validateEmployee } from '../../../lib/validations/employee';
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
+import { requireHR, requireAuth } from '../../../lib/auth/requireAuth';
 import {
   decryptBankDetails,
   encryptBankDetails,
@@ -46,6 +47,7 @@ async function normalizeShiftField(shiftValue) {
 // - /api/employee                  -> list { items: [...] }
 export async function GET(req) {
   try {
+    const { user } = await requireAuth();
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -55,6 +57,10 @@ export async function GET(req) {
 
     // If empCode is provided → return single employee (used by employee dashboard)
     if (empCode) {
+      // Employees can only fetch their own profile; HR/ADMIN can fetch any
+      if (user.role === 'EMPLOYEE' && String(empCode) !== String(user.empCode || '')) {
+        return errorResponse('Unauthorized', 401);
+      }
       // OPTIMIZATION: Use Mongoose with .select() and .lean(), add timeout
       // OPTIMIZATION: Skip shift normalization for faster response - shift is already normalized in most cases
       const projection = getEmployeeProjection(true);
@@ -99,7 +105,10 @@ export async function GET(req) {
       );
     }
 
-    // Otherwise → return list with pagination (used by admin/HR UI)
+    // Otherwise → return list with pagination (used by admin/HR UI) - HR/ADMIN only
+    if (user.role !== 'HR' && user.role !== 'ADMIN') {
+      return errorResponse('Unauthorized', 401);
+    }
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const search = (searchParams.get('search') || '').trim();
@@ -227,13 +236,15 @@ export async function GET(req) {
       }
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED' || err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
 
-// POST /api/employee  -> create / update (upsert)
+// POST /api/employee  -> create / update (upsert) - HR/ADMIN only
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -328,13 +339,15 @@ export async function POST(req) {
       isNew ? HTTP_STATUS.CREATED : HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
 
-// DELETE /api/employee?empCode=XXXXX
+// DELETE /api/employee?empCode=XXXXX - HR/ADMIN only
 export async function DELETE(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -359,6 +372,7 @@ export async function DELETE(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

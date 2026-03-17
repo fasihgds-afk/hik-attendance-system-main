@@ -3,7 +3,8 @@
 // =============================================================================
 // MONTHLY ATTENDANCE API - VIOLATION FORMULA QUICK REFERENCE
 // =============================================================================
-import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requireHR } from '../../../../lib/auth/requireAuth';
 
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 //
@@ -384,6 +385,7 @@ function _normalizeStatus_DEPRECATED(rawStatus, { isWeekendOff } = {}) {
 
 export async function GET(req) {
   try {
+    await requireHR();
     const { searchParams } = new URL(req.url);
     let month = searchParams.get('month');
 
@@ -1283,6 +1285,7 @@ export async function GET(req) {
     
     return response;
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
@@ -1297,6 +1300,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -1603,6 +1607,7 @@ export async function POST(req) {
       HTTP_STATUS.OK
     );
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }
