@@ -949,12 +949,14 @@ export async function GET(req) {
         }
 
         // Working day check for violation deduction (not leave/holiday, has punches)
+        // Half Day: no late/early violation deduction (only 0.5 day leave deduction applies)
         const isWorkingDayWithPunches = 
           status !== 'Holiday' && 
           status !== 'Paid Leave' && 
           status !== 'Un Paid Leave' && 
           status !== 'Sick Leave' && 
           status !== 'Work From Home' &&
+          status !== 'Half Day' &&
           !EXTRAORDINARY_LEAVE_STATUSES.includes(status) &&
           checkIn && 
           checkOut;
