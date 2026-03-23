@@ -890,7 +890,7 @@ export async function GET(req) {
         const sameTimePunch = checkIn && checkOut && 
           Math.abs(checkIn.getTime() - checkOut.getTime()) < 60000; // Less than 1 minute difference
         
-        if (checkIn && checkOut && status !== 'Holiday' && !sameTimePunch) {
+        if (checkIn && checkOut && status !== 'Holiday' && status !== 'Eid Holiday' && !sameTimePunch) {
           // Use shiftObj if available, otherwise look up shift by code from allShiftsMap
           // Normalize shiftCode in case it's a formatted string
           const normalizedShiftCode = shiftCode ? extractShiftCode(shiftCode) : null;
@@ -954,6 +954,7 @@ export async function GET(req) {
         // Half Day: no late/early violation deduction (only 0.5 day leave deduction applies)
         const isWorkingDayWithPunches = 
           status !== 'Holiday' && 
+          status !== 'Eid Holiday' && 
           status !== 'Paid Leave' && 
           status !== 'Un Paid Leave' && 
           status !== 'Sick Leave' && 
@@ -1025,6 +1026,7 @@ export async function GET(req) {
         // Exclude extraordinary leaves (paid, no deduction)
         const isAbsentDay = (partialPunch || bothMissing) && 
           status !== 'Holiday' && 
+          status !== 'Eid Holiday' && 
           status !== 'Paid Leave' && 
           status !== 'Un Paid Leave' && 
           status !== 'Sick Leave' && 

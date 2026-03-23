@@ -693,11 +693,11 @@ function classifyDayForRow(day, colors, theme = 'dark') {
 
   // No punches at all
   if (!day.checkIn && !day.checkOut) {
-    if (day.status === "Holiday") {
+    if (day.status === "Holiday" || day.status === "Eid Holiday") {
       return { 
         bg: colors.background.tertiary, 
         fg: colors.text.tertiary, 
-        badge: "Holiday", 
+        badge: day.status === "Eid Holiday" ? "Eid Holiday" : "Holiday", 
         tone: "muted" 
       };
     }
@@ -1208,6 +1208,7 @@ export default function EmployeeDashboardPage() {
           summary.wfh += 1;
           break;
         case "Holiday":
+        case "Eid Holiday":
           summary.holiday += 1;
           break;
         case "Sick Leave":
@@ -2409,7 +2410,7 @@ export default function EmployeeDashboardPage() {
 
                         // match monthly rules for in/out text
                         if (!d.checkIn && !d.checkOut) {
-                          if (d.status === "Holiday") inOutLabel = "- / -";
+                          if (d.status === "Holiday" || d.status === "Eid Holiday") inOutLabel = "- / -";
                           else if (
                             d.status === "Paid Leave" ||
                             d.status === "Un Paid Leave" ||

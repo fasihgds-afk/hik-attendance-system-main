@@ -58,6 +58,7 @@ const MANUAL_OR_LEAVE_STATUSES = new Set([
   'Leave Without Inform',
   'Work From Home',
   'Holiday',
+  'Eid Holiday',
   'Marriage Leave',
   'Death Leave',
   'Maternity Leave',

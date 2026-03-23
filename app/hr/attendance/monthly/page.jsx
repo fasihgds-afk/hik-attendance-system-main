@@ -35,6 +35,8 @@ function statusShortCode(status) {
       return 'P';
     case 'Holiday':
       return 'H';
+    case 'Eid Holiday':
+      return 'Eid';
     case 'Absent':
       return 'A';
     case 'Sick Leave':
@@ -110,8 +112,8 @@ function getCellStyle(day, colors, baseCell, theme) {
 
   // No punches at all
   if (!day.checkIn && !day.checkOut) {
-    // Holiday (weekend / official off)
-    if (day.status === 'Holiday') {
+    // Holiday (weekend / official off) or Eid Holiday
+    if (day.status === 'Holiday' || day.status === 'Eid Holiday') {
       return {
         ...baseCell,
         backgroundColor: colors.background.tertiary,
@@ -901,7 +903,7 @@ export default function MonthlyHrPage() {
             if (inT && outT) {
               punchText = `${inT} / ${outT}`;
             } else             if (!day.checkIn && !day.checkOut) {
-              if (st === 'Holiday') punchText = 'Holiday';
+              if (st === 'Holiday' || st === 'Eid Holiday') punchText = st;
               else if (
                 st === 'Paid Leave' ||
                 st === 'Un Paid Leave' ||
@@ -2175,7 +2177,7 @@ export default function MonthlyHrPage() {
                               day.checkIn
                             )} / ${formatTimeShort(day.checkOut)}`;
                           } else if (!day.checkIn && !day.checkOut) {
-                            if (day.status === 'Holiday') punchLabel = '';
+                            if (day.status === 'Holiday' || day.status === 'Eid Holiday') punchLabel = '';
                             else if (
                               day.status === 'Paid Leave' ||
                               day.status === 'Un Paid Leave' ||
@@ -2404,6 +2406,7 @@ export default function MonthlyHrPage() {
                     >
                       <option value="Present">Present (P)</option>
                       <option value="Holiday">Holiday (H)</option>
+                      <option value="Eid Holiday">Eid Holiday (Eid)</option>
                       <option value="Absent">Absent (A)</option>
                       <option value="Sick Leave">Sick Leave (SL)</option>
                       <option value="Paid Leave">Paid Leave (PL)</option>
