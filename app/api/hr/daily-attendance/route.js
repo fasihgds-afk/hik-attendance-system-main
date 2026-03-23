@@ -82,13 +82,14 @@ export async function POST(req) {
     const TZ = process.env.TIMEZONE_OFFSET || '+05:00';
     const nextDateStr = getNextDateStr(date);
 
-    const allShifts = await Shift.find({ isActive: true })
+    // Load ALL shifts (active + inactive) so historical attendance (R1, R2) resolves when shifts are deactivated
+    const allShifts = await Shift.find({})
       .select('_id name code startTime endTime crossesMidnight gracePeriod')
       .lean()
       .maxTimeMS(2000);
 
     if (allShifts.length === 0) {
-      throw new ValidationError('No active shifts found. Please create shifts first.');
+      throw new ValidationError('No shifts found. Please create shifts first.');
     }
 
     const startLocal = new Date(`${date}T09:00:00${TZ}`);

@@ -506,7 +506,8 @@ export async function GET(req) {
     const allShiftsMap = new Map();
     if (useDynamicShifts) {
       // OPTIMIZATION: Fetch shifts with minimal fields, fast timeout
-      const allShifts = await Shift.find({ isActive: true })
+      // Load ALL shifts (active + inactive) so historical codes (R1, R2) resolve correctly when deactivated
+      const allShifts = await Shift.find({})
         .select('_id name code startTime endTime crossesMidnight gracePeriod')
         .sort({ code: 1 }) // Consistent ordering
         .lean()
@@ -1328,7 +1329,7 @@ export async function POST(req) {
 
     // OPTIMIZATION: Run queries in parallel for faster response
     const [allShifts, emp, departmentDocs] = await Promise.all([
-      Shift.find({ isActive: true })
+      Shift.find({})
         .select('_id name code startTime endTime crossesMidnight gracePeriod')
         .lean()
         .maxTimeMS(1500),
