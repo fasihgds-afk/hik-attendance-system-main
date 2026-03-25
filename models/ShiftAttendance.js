@@ -34,6 +34,9 @@ const ShiftAttendanceSchema = new mongoose.Schema(
 
     manuallyEdited: { type: Boolean, default: false },
 
+    /** Punches created from employee portal self-service (not device sync). */
+    webSelfService: { type: Boolean, default: false },
+
     updatedAt: { type: Date, default: Date.now },
   },
   {

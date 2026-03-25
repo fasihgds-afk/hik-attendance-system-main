@@ -86,7 +86,7 @@ export const authOptions = {
             // empCode is indexed, so this should be fast
             // Remove optional User query to speed up login - we can get user later if needed
             const employee = await Employee.findOne({ empCode })
-              .select('_id name email department designation shift')
+              .select('_id name email department designation shift allowWebClockIn')
               .lean()
               .maxTimeMS(2000); // Reduced to 2 seconds
               
@@ -110,6 +110,7 @@ export const authOptions = {
               department: employee.department || "",
               designation: employee.designation || "",
               shift: employee.shift || "",
+              allowWebClockIn: !!employee.allowWebClockIn,
             };
           } catch (err) {
             console.error('[NextAuth] Employee login error:', err);
@@ -137,6 +138,7 @@ export const authOptions = {
         token.department = user.department ?? token.department;
         token.designation = user.designation ?? token.designation;
         token.shift = user.shift ?? token.shift;
+        token.allowWebClockIn = user.allowWebClockIn ?? token.allowWebClockIn;
       }
       return token;
     },
@@ -148,6 +150,7 @@ export const authOptions = {
         session.user.department = token.department;
         session.user.designation = token.designation;
         session.user.shift = token.shift;
+        session.user.allowWebClockIn = !!token.allowWebClockIn;
       }
       return session;
     },

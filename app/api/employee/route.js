@@ -74,7 +74,8 @@ export async function GET(req) {
       }
 
       employee.bankDetails = decryptBankDetails(employee.bankDetails);
-      
+      employee.allowWebClockIn = !!employee.allowWebClockIn;
+
       // OPTIMIZATION: Only normalize shift if it's an ObjectId (skip if already a code)
       if (employee.shift) {
         const shiftString = String(employee.shift).trim();
@@ -144,6 +145,7 @@ export async function GET(req) {
       department: 1,
       designation: 1,
       saturdayGroup: 1,
+      allowWebClockIn: 1,
       // Excluded: profileImageUrl, cnic, phoneNumber, createdAt, updatedAt
     };
     

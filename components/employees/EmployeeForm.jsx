@@ -38,6 +38,7 @@ export default function EmployeeForm({
     },
     profileImageBase64: employee?.profileImageBase64 || '',
     profileImageUrl: employee?.profileImageUrl || '',
+    allowWebClockIn: !!employee?.allowWebClockIn,
   });
 
   const [imagePreview, setImagePreview] = useState(employee?.profileImageUrl || '');
@@ -109,6 +110,7 @@ export default function EmployeeForm({
         },
         profileImageBase64: employee.profileImageBase64 || '',
         profileImageUrl: employee.profileImageUrl || '',
+        allowWebClockIn: !!employee.allowWebClockIn,
       });
       setImagePreview(employee.profileImageUrl || '');
     } else {
@@ -132,6 +134,7 @@ export default function EmployeeForm({
         },
         profileImageBase64: '',
         profileImageUrl: '',
+        allowWebClockIn: false,
       });
       setImagePreview('');
     }
@@ -420,6 +423,30 @@ export default function EmployeeForm({
                 placeholder="e.g. 45000"
                 style={inputStyle}
               />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label
+                style={{
+                  ...labelStyle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!formData.allowWebClockIn}
+                  onChange={(e) => handleChange('allowWebClockIn', e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                Allow web Clock In / Out (remote office, no biometric)
+              </label>
+              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, marginBottom: 0 }}>
+                Employee sees Clock In and Clock Out on their portal; punches save like attendance for today.
+              </p>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 // app/employee/dashboard/page.jsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
@@ -1327,6 +1327,127 @@ export default function EmployeeDashboardPage() {
   /** Gross / Net hidden by default; eye toggles visibility */
   const [showSalaryAmounts, setShowSalaryAmounts] = useState(false);
 
+  /** Web clock in/out (employees with allowWebClockIn) */
+  const [webClock, setWebClock] = useState(null);
+  const [webClockLoading, setWebClockLoading] = useState(false);
+  const [webClockPosting, setWebClockPosting] = useState(false);
+
+  const dayRowForWebClockDate = useMemo(() => {
+    if (!myRecord?.days || !webClock?.date) return null;
+    const ymd = String(webClock.date).slice(0, 10);
+    return (
+      myRecord.days.find((d) => String(d.date || "").slice(0, 10) === ymd) ?? null
+    );
+  }, [myRecord, webClock?.date]);
+
+  const suppressLegacyTodayStatus = useMemo(() => {
+    if (session?.user?.role !== "EMPLOYEE") return false;
+    const webEnabled =
+      webClock?.allowWebClockIn ||
+      !!session?.user?.allowWebClockIn ||
+      !!employee?.allowWebClockIn;
+    if (!webEnabled) return false;
+    if (!webClock || webClockLoading) return false;
+    if (webClock.allowWebClockIn === false) return false;
+    return !!webClock.shift;
+  }, [
+    session?.user?.role,
+    session?.user?.allowWebClockIn,
+    webClock,
+    webClockLoading,
+    employee?.allowWebClockIn,
+  ]);
+
+  const refreshMonthlyAttendance = useCallback(async () => {
+    if (!empCode || !attendanceDataLoaded || !month) return;
+    try {
+      setLoadingAttendance(true);
+      const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const response = await res.json();
+      let attendanceData = null;
+      if (response.success !== undefined) {
+        if (!response.success) return;
+        attendanceData = response.data || {};
+      } else {
+        attendanceData = response;
+      }
+      setAttendanceData(attendanceData);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingAttendance(false);
+    }
+  }, [empCode, attendanceDataLoaded, month]);
+
+  // Always load from DB (authoritative). Do not gate on /api/employee profile — that payload can omit allowWebClockIn.
+  useEffect(() => {
+    if (status !== "authenticated" || !empCode || session?.user?.role !== "EMPLOYEE") {
+      setWebClock(null);
+      setWebClockLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setWebClockLoading(true);
+      try {
+        const res = await fetch("/api/employee/web-clock", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const response = await res.json();
+        const payload = response.data ?? response;
+        if (!cancelled && res.ok) {
+          setWebClock(payload);
+        } else if (!cancelled) {
+          setWebClock(null);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setWebClock(null);
+      } finally {
+        if (!cancelled) setWebClockLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [empCode, status, session?.user?.role]);
+
+  async function handleWebClock(action) {
+    setWebClockPosting(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/employee/web-clock", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const response = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = response.error || response.message || `Request failed (${res.status})`;
+        throw new Error(msg);
+      }
+      const gr = await fetch("/api/employee/web-clock", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const gj = await gr.json();
+      const payload = gj.data ?? gj;
+      if (gr.ok) setWebClock(payload);
+      await refreshMonthlyAttendance();
+    } catch (err) {
+      setErrorMsg(err.message || "Clock action failed");
+    } finally {
+      setWebClockPosting(false);
+    }
+  }
+
   useEffect(() => {
     if (showSalarySlip && salarySlipMonth && empCode) {
       async function loadSalarySlipData() {
@@ -1921,7 +2042,9 @@ export default function EmployeeDashboardPage() {
                 <div style={{ color: colors.text.secondary }}>Designation</div>
                 <div style={{ color: colors.text.primary, fontWeight: 600 }}>{displayDesignation}</div>
               </div>
-              {!loading && (todayDayObj || todayDateLabel !== '-') && (
+              {!loading &&
+                !suppressLegacyTodayStatus &&
+                (todayDayObj || todayDateLabel !== "-") && (
                 <div
                   style={{
                     marginTop: 6,
@@ -1945,6 +2068,334 @@ export default function EmployeeDashboardPage() {
                     <div style={{ color: colors.text.secondary }}>Status</div>
                     <div style={{ color: todayDayObj?.status ? colors.success : colors.text.tertiary, fontWeight: 600 }}>{todayDayObj?.status || '-'}</div>
                   </div>
+                </div>
+              )}
+              {session?.user?.role === "EMPLOYEE" &&
+                (webClock?.allowWebClockIn ||
+                  !!session?.user?.allowWebClockIn ||
+                  !!employee?.allowWebClockIn) && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    padding: "7px 9px",
+                    borderRadius: 8,
+                    background:
+                      theme === "dark"
+                        ? "rgba(59, 130, 246, 0.08)"
+                        : "rgba(59, 130, 246, 0.05)",
+                    border: `1px solid ${colors.primary[400]}40`,
+                    borderLeft: `3px solid ${
+                      webClock?.checkIn && webClock?.checkOut
+                        ? colors.success
+                        : colors.primary[500]
+                    }`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 6,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 0.35,
+                        color: colors.text.primary,
+                        textTransform: "uppercase",
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      Clock in / out{" "}
+                      <span
+                        style={{
+                          fontWeight: 500,
+                          textTransform: "none",
+                          color: colors.text.tertiary,
+                          letterSpacing: 0,
+                        }}
+                      >
+                        · web
+                      </span>
+                    </div>
+                    {webClock?.checkIn && webClock?.checkOut && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: colors.success,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Done
+                      </span>
+                    )}
+                  </div>
+                  {webClockLoading ? (
+                    <div style={{ fontSize: 11, color: colors.text.secondary }}>
+                      Loading…
+                    </div>
+                  ) : webClock == null ? (
+                    <div style={{ fontSize: 11, color: colors.warning }}>
+                      Could not load clock status. Try refreshing the page. If it
+                      persists, log out and log back in.
+                    </div>
+                  ) : webClock.allowWebClockIn === false ? (
+                    <div style={{ fontSize: 11, color: colors.text.secondary }}>
+                      Web clock is not enabled for your account. In HR → Manage
+                      Employees, turn on &quot;Allow web Clock In / Out&quot;, save,
+                      then refresh or log in again.
+                    </div>
+                  ) : !webClock.shift ? (
+                    <div style={{ fontSize: 11, color: colors.warning }}>
+                      No shift assigned. Contact HR.
+                    </div>
+                  ) : (
+                    <>
+                      {(() => {
+                        const row = dayRowForWebClockDate;
+                        const inIso = row?.checkIn || webClock.checkIn;
+                        const outIso = row?.checkOut || webClock.checkOut;
+                        const statusText =
+                          row?.status ||
+                          (webClock.checkIn && webClock.checkOut
+                            ? "Present"
+                            : webClock.checkIn
+                              ? "Clocked in"
+                              : "—");
+                        return (
+                          <>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                                gap: "3px 6px",
+                                fontSize: 10,
+                                marginBottom: 6,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  padding: "1px 6px",
+                                  borderRadius: 4,
+                                  background:
+                                    theme === "dark"
+                                      ? "rgba(255,255,255,0.06)"
+                                      : "rgba(15,23,42,0.05)",
+                                  color: colors.text.secondary,
+                                }}
+                              >
+                                {webClock.date}
+                              </span>
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  padding: "1px 6px",
+                                  borderRadius: 4,
+                                  background:
+                                    theme === "dark"
+                                      ? "rgba(59,130,246,0.18)"
+                                      : "rgba(59,130,246,0.1)",
+                                  color: colors.primary[600],
+                                }}
+                              >
+                                {webClock.shift}
+                              </span>
+                              <span style={{ color: colors.text.tertiary }}>
+                                ·
+                              </span>
+                              <span style={{ color: colors.text.secondary }}>
+                                In{" "}
+                                <strong
+                                  style={{
+                                    color: colors.text.primary,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {inIso ? formatTimeShort(inIso) : "—"}
+                                </strong>
+                              </span>
+                              <span style={{ color: colors.text.tertiary }}>
+                                ·
+                              </span>
+                              <span style={{ color: colors.text.secondary }}>
+                                Out{" "}
+                                <strong
+                                  style={{
+                                    color: colors.text.primary,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {outIso ? formatTimeShort(outIso) : "—"}
+                                </strong>
+                              </span>
+                              <span style={{ color: colors.text.tertiary }}>
+                                ·
+                              </span>
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color: row?.status
+                                    ? colors.success
+                                    : colors.text.secondary,
+                                }}
+                              >
+                                {statusText}
+                              </span>
+                            </div>
+                            {row &&
+                              (row.late ||
+                                row.earlyLeave ||
+                                row.lateExcused ||
+                                row.earlyExcused) && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 4,
+                                    marginBottom: 5,
+                                  }}
+                                >
+                                  {(row.lateExcused || row.late) && (
+                                    <span
+                                      style={{
+                                        fontSize: 9,
+                                        fontWeight: 600,
+                                        padding: "1px 6px",
+                                        borderRadius: 4,
+                                        background: row.lateExcused
+                                          ? theme === "dark"
+                                            ? "rgba(34,197,94,0.2)"
+                                            : "rgba(34,197,94,0.12)"
+                                          : theme === "dark"
+                                            ? "rgba(251,191,36,0.2)"
+                                            : "rgba(251,191,36,0.18)",
+                                        color: row.lateExcused
+                                          ? colors.success
+                                          : colors.warning,
+                                      }}
+                                    >
+                                      {row.lateExcused ? "Late excused" : "Late"}
+                                    </span>
+                                  )}
+                                  {(row.earlyExcused || row.earlyLeave) && (
+                                    <span
+                                      style={{
+                                        fontSize: 9,
+                                        fontWeight: 600,
+                                        padding: "1px 6px",
+                                        borderRadius: 4,
+                                        background: row.earlyExcused
+                                          ? theme === "dark"
+                                            ? "rgba(34,197,94,0.2)"
+                                            : "rgba(34,197,94,0.12)"
+                                          : theme === "dark"
+                                            ? "rgba(249,115,22,0.22)"
+                                            : "rgba(249,115,22,0.14)",
+                                        color: row.earlyExcused
+                                          ? colors.success
+                                          : colors.accent.orange,
+                                      }}
+                                    >
+                                      {row.earlyExcused
+                                        ? "Early leave excused"
+                                        : "Early leave"}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                          </>
+                        );
+                      })()}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          disabled={
+                            webClockPosting ||
+                            !!webClock.checkIn ||
+                            !webClock.shift
+                          }
+                          onClick={() => handleWebClock("in")}
+                          style={{
+                            flex: "none",
+                            padding: "5px 12px",
+                            borderRadius: 6,
+                            border: "none",
+                            backgroundColor: colors.primary[500],
+                            color: "#fff",
+                            fontWeight: 600,
+                            fontSize: 11,
+                            cursor:
+                              webClockPosting || webClock.checkIn
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: webClockPosting || webClock.checkIn ? 0.55 : 1,
+                          }}
+                        >
+                          Clock In
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            webClockPosting ||
+                            !webClock.checkIn ||
+                            !!webClock.checkOut
+                          }
+                          onClick={() => handleWebClock("out")}
+                          style={{
+                            flex: "none",
+                            padding: "5px 12px",
+                            borderRadius: 6,
+                            border: `1px solid ${colors.border.default}`,
+                            backgroundColor: colors.background.secondary,
+                            color: colors.text.primary,
+                            fontWeight: 600,
+                            fontSize: 11,
+                            cursor:
+                              webClockPosting ||
+                              !webClock.checkIn ||
+                              webClock.checkOut
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity:
+                              webClockPosting ||
+                              !webClock.checkIn ||
+                              webClock.checkOut
+                                ? 0.55
+                                : 1,
+                          }}
+                        >
+                          Clock Out
+                        </button>
+                      </div>
+                      {webClock.checkIn && webClock.checkOut && (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: colors.text.tertiary,
+                            marginTop: 4,
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          Totals below refresh with the month table.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
               <button

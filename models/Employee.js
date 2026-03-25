@@ -48,6 +48,12 @@ const EmployeeSchema = new mongoose.Schema(
 
     profileImageBase64: String,
     profileImageUrl: String,
+
+    /** When true, employee can Clock In / Out on web dashboard (no biometric at site). */
+    allowWebClockIn: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

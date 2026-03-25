@@ -428,6 +428,7 @@ export default function EmployeeShiftPage() {
         bankDetails: formData.bankDetails || undefined,
         profileImageBase64: formData.profileImageBase64 || undefined,
         profileImageUrl: formData.profileImageUrl || undefined,
+        allowWebClockIn: !!formData.allowWebClockIn,
       };
 
       const res = await fetch('/api/employee', {
