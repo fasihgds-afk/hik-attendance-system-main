@@ -2041,7 +2041,7 @@ export default function EmployeeDashboardPage() {
             gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
             gap: 18,
             marginBottom: 20,
-            alignItems: "start",
+            alignItems: "stretch",
           }}
         >
           {/* PROFILE CARD */}
@@ -2050,6 +2050,9 @@ export default function EmployeeDashboardPage() {
               style={{
                 borderRadius: 16,
                 padding: "16px 18px",
+                height: "100%",
+                minHeight: 0,
+                boxSizing: "border-box",
                 background:
                   theme === "dark"
                     ? "linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%)"
@@ -2062,6 +2065,7 @@ export default function EmployeeDashboardPage() {
                     : "0 6px 24px rgba(15,23,42,0.07)",
                 display: "flex",
                 gap: 14,
+                alignItems: "flex-start",
                 transition: "box-shadow 0.2s ease",
               }}
             >
@@ -2101,7 +2105,16 @@ export default function EmployeeDashboardPage() {
                 ✏️
               </button>
             </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
               <div
                   style={{
                     fontSize: 11,
@@ -2147,9 +2160,12 @@ export default function EmployeeDashboardPage() {
                 <div
                   style={{
                     marginTop: 6,
-                    padding: "6px 10px",
-                    borderRadius: 10,
-                    background: theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background:
+                      theme === "dark"
+                        ? "rgba(255,255,255,0.04)"
+                        : "rgba(0,0,0,0.03)",
                     border: `1px solid ${colors.border.default}`,
                     borderLeft: `3px solid ${colors.success}`,
                   }}
@@ -2517,6 +2533,9 @@ export default function EmployeeDashboardPage() {
             style={{
               borderRadius: 16,
               padding: "16px 18px",
+              height: "100%",
+              minHeight: 0,
+              boxSizing: "border-box",
               background:
                 theme === "dark"
                   ? "linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%)"
@@ -2529,19 +2548,29 @@ export default function EmployeeDashboardPage() {
                   : "0 6px 24px rgba(15,23,42,0.07)",
               display: "flex",
               flexDirection: "column",
-              gap: 12,
+              gap: 8,
               transition: "box-shadow 0.2s ease",
             }}
           >
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: colors.text.tertiary, marginBottom: 2, fontWeight: 700 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+                color: colors.text.tertiary,
+              }}
+            >
               Compensation &amp; bank
             </div>
             <div
               style={{
-                marginBottom: 0,
-                padding: "8px 10px",
-                borderRadius: 10,
-                background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                padding: "10px 12px",
+                borderRadius: 12,
+                background:
+                  theme === "dark"
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(0,0,0,0.02)",
                 border: `1px solid ${colors.border.default}`,
                 borderLeft: `3px solid ${colors.success}`,
               }}
@@ -2549,11 +2578,23 @@ export default function EmployeeDashboardPage() {
               <div
                 style={{
                   display: "flex",
-                  justifyContent: "flex-end",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  marginBottom: 6,
+                  gap: 8,
+                  marginBottom: 8,
                 }}
               >
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.75,
+                    color: colors.text.tertiary,
+                  }}
+                >
+                  Pay summary
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowSalaryAmounts((v) => !v)}
@@ -2566,10 +2607,14 @@ export default function EmployeeDashboardPage() {
                     padding: 4,
                     border: "none",
                     borderRadius: 8,
-                    background: "transparent",
+                    background:
+                      theme === "dark"
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(15,23,42,0.05)",
                     color: colors.text.secondary,
                     cursor: "pointer",
                     lineHeight: 0,
+                    flexShrink: 0,
                   }}
                 >
                   {showSalaryAmounts ? (
@@ -2588,58 +2633,80 @@ export default function EmployeeDashboardPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
-                  gap: "4px 10px",
+                  gap: "3px 10px",
                 }}
               >
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>Gross</div>
-              <div style={{ fontSize: 11, color: colors.success, fontWeight: 600, letterSpacing: showSalaryAmounts ? "normal" : "0.12em" }}>
-                {showSalaryAmounts ? formatCurrencyPKR(displaySalary) : "Rs •••••••"}
-              </div>
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>Net</div>
-              <div style={{ fontSize: 11, color: colors.text.primary, fontWeight: 600, letterSpacing: showSalaryAmounts ? "normal" : "0.12em" }}>
-                {showSalaryAmounts ? (displayNetSalary != null ? formatCurrencyPKR(displayNetSalary) : "-") : "Rs •••••••"}
-              </div>
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>Deduct days</div>
-              <div style={{ fontSize: 11, color: colors.text.primary, fontWeight: 600 }}>{formatSalaryDays(displayDeductDays)}</div>
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>Slip</div>
-              <div style={{ fontSize: 11, color: colors.text.primary, fontWeight: 600 }}>{canViewSalarySlip ? "Available" : "Pending"}</div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Gross</div>
+                <div style={{ fontSize: 12, color: colors.success, fontWeight: 600, letterSpacing: showSalaryAmounts ? "normal" : "0.12em" }}>
+                  {showSalaryAmounts ? formatCurrencyPKR(displaySalary) : "Rs •••••••"}
+                </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Net</div>
+                <div style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600, letterSpacing: showSalaryAmounts ? "normal" : "0.12em" }}>
+                  {showSalaryAmounts ? (displayNetSalary != null ? formatCurrencyPKR(displayNetSalary) : "-") : "Rs •••••••"}
+                </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Deduct days</div>
+                <div style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600 }}>{formatSalaryDays(displayDeductDays)}</div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Slip</div>
+                <div style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600 }}>{canViewSalarySlip ? "Available" : "Pending"}</div>
               </div>
             </div>
             <div
               style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                backgroundColor: colors.background.secondary,
+                padding: "10px 12px",
+                borderRadius: 12,
+                background:
+                  theme === "dark"
+                    ? "rgba(255,255,255,0.04)"
+                    : colors.background.secondary,
                 border: `1px solid ${colors.border.default}`,
                 borderLeft: `3px solid ${colors.primary[500]}`,
-                marginBottom: 0,
               }}
             >
-              <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 0.8, color: colors.text.tertiary, marginBottom: 4 }}>Bank Details</div>
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>
+              <div
+                style={{
+                  fontSize: 9,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.75,
+                  color: colors.text.tertiary,
+                  marginBottom: 6,
+                  fontWeight: 700,
+                }}
+              >
+                Bank details
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 1.45 }}>
                 {displayBankDetails?.bankName || "-"} · {displayBankDetails?.accountTitle || "-"}
               </div>
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>
+              <div style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 1.45 }}>
                 A/C: <strong style={{ color: colors.text.primary }}>{maskAccountNumber(displayBankDetails?.accountNumber)}</strong>
               </div>
-              <div style={{ fontSize: 11, color: colors.text.secondary }}>
+              <div style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 1.45 }}>
                 IBAN: <strong style={{ color: colors.text.primary }}>{maskIban(displayBankDetails?.iban)}</strong>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginTop: "auto",
+                paddingTop: 4,
+                flexShrink: 0,
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setShowEditProfile(true)}
                 style={{
                   flex: 1,
-                  padding: "6px 10px",
-                  borderRadius: 8,
+                  padding: "10px 12px",
+                  borderRadius: 10,
                   border: `1px solid ${colors.primary[500]}`,
                   backgroundColor: colors.primary[500],
                   color: "#ffffff",
-                  fontSize: 11.5,
+                  fontSize: 12,
                   fontWeight: 600,
                   cursor: "pointer",
+                  boxShadow: `0 4px 14px ${colors.primary[500]}35`,
                 }}
               >
                 Update Bank
@@ -2650,12 +2717,12 @@ export default function EmployeeDashboardPage() {
                 onClick={() => canViewSalarySlip && myRecord && setShowSalarySlip(true)}
                 style={{
                   flex: 1,
-                  padding: "6px 10px",
-                  borderRadius: 8,
+                  padding: "10px 12px",
+                  borderRadius: 10,
                   border: `1px solid ${colors.border.default}`,
                   backgroundColor: canViewSalarySlip && myRecord ? colors.background.tertiary : colors.background.secondary,
                   color: colors.text.primary,
-                  fontSize: 11.5,
+                  fontSize: 12,
                   fontWeight: 600,
                   cursor: canViewSalarySlip && myRecord ? "pointer" : "not-allowed",
                   opacity: canViewSalarySlip && myRecord ? 1 : 0.6,
