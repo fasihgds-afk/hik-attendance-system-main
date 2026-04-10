@@ -840,19 +840,26 @@ function renderEmployeeAvatar(emp, size = 88) {
 }
 
 function SummaryItem({ label, value, color, hint }) {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
+  const accent = color || colors.primary[500];
   return (
     <div
       style={{
-        borderRadius: 12,
-        padding: "8px 10px",
-        backgroundColor: colors.background.card,
+        borderRadius: 14,
+        padding: "10px 12px",
+        backgroundColor:
+          theme === "dark" ? "rgba(15, 23, 42, 0.65)" : colors.background.secondary,
         border: `1px solid ${colors.border.default}`,
+        borderLeft: `3px solid ${accent}`,
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
-        gap: 2,
-        minHeight: 62,
+        gap: 4,
+        minHeight: 72,
+        boxShadow:
+          theme === "dark"
+            ? "0 4px 16px rgba(0,0,0,0.2)"
+            : "0 2px 10px rgba(15,23,42,0.06)",
       }}
     >
       <div
@@ -860,16 +867,20 @@ function SummaryItem({ label, value, color, hint }) {
           fontSize: 10,
           color: colors.text.tertiary,
           textTransform: "uppercase",
-          letterSpacing: 0.6,
+          letterSpacing: 0.7,
+          fontWeight: 600,
+          lineHeight: 1.25,
         }}
       >
         {label}
       </div>
       <div
         style={{
-          fontSize: 18,
+          fontSize: 20,
           fontWeight: 800,
           color: color || colors.text.primary,
+          letterSpacing: -0.02,
+          lineHeight: 1.1,
         }}
       >
         {value}
@@ -878,7 +889,8 @@ function SummaryItem({ label, value, color, hint }) {
         <div
           style={{
             fontSize: 9,
-            color: "#6b7280",
+            color: colors.text.tertiary,
+            lineHeight: 1.35,
           }}
         >
           {hint}
@@ -1485,9 +1497,12 @@ export default function EmployeeDashboardPage() {
       className="employee-dashboard-container"
       style={{
         minHeight: "100vh",
-        padding: "26px 30px 36px",
-        background: "#040d28e5", // dark background
-        color: "#0f172a",
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+        padding: "26px 28px 40px",
+        background: colors.gradient.overlay,
+        color: colors.text.primary,
         fontFamily:
           'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
@@ -1499,12 +1514,13 @@ export default function EmployeeDashboardPage() {
           }
           .employee-header {
             flex-direction: column !important;
-            align-items: flex-start !important;
+            align-items: stretch !important;
             gap: 16px !important;
             padding: 16px !important;
           }
           .employee-header-left {
             width: 100% !important;
+            flex: 1 1 auto !important;
           }
           .employee-header-logo {
             width: 60px !important;
@@ -1684,8 +1700,8 @@ export default function EmployeeDashboardPage() {
             font-size: 24px !important;
           }
           .employee-header-logo {
-            width: 100px !important;
-            height: 100px !important;
+            width: 76px !important;
+            height: 76px !important;
           }
           .employee-table {
             font-size: 14px !important;
@@ -1709,35 +1725,64 @@ export default function EmployeeDashboardPage() {
           box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
         }
       `}</style>
-      <div className="container-responsive employee-dashboard-inner" style={{ margin: "0 auto 22px auto", width: '100%' }}>
+      <div className="container-responsive employee-dashboard-inner" style={{ margin: "0 auto 24px auto", width: "100%" }}>
         {/* HEADER */}
         <div
           className="employee-header"
           style={{
+            position: "relative",
+            overflow: "hidden",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "18px 24px",
+            flexWrap: "wrap",
+            gap: 16,
+            padding: "20px 26px",
             borderRadius: 20,
-            background: colors.gradient.primary,
-            color: "#f9fafb",
-            boxShadow: "0 20px 45px rgba(0,0,0,0.25)",
-            border: `1px solid ${colors.border.hover}`,
+            background: colors.gradient.header,
+            color: "#f8fafc",
+            boxShadow:
+              theme === "dark"
+                ? "0 20px 50px rgba(19, 168, 229, 0.22), 0 8px 24px rgba(0,0,0,0.35)"
+                : "0 16px 40px rgba(37, 99, 235, 0.2), 0 4px 16px rgba(0,0,0,0.08)",
+            border: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.35)"}`,
           }}
         >
-          <div className="employee-header-left" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage:
+                "radial-gradient(circle at 18% 40%, rgba(255,255,255,0.12) 0%, transparent 45%)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            className="employee-header-left"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              position: "relative",
+              zIndex: 1,
+              flex: "1 1 280px",
+              minWidth: 0,
+            }}
+          >
             <div
               className="employee-header-logo"
               style={{
-                width: 86,
-                height: 86,
-                borderRadius: "999px",
+                width: 68,
+                height: 68,
+                borderRadius: 16,
                 overflow: "hidden",
-                backgroundColor: "rgba(15,23,42,0.35)",
+                backgroundColor: "rgba(255,255,255,0.12)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 14px 32px rgba(15,23,42,0.8)",
+                flexShrink: 0,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                border: "2px solid rgba(255,255,255,0.2)",
               }}
             >
               <img
@@ -1754,41 +1799,70 @@ export default function EmployeeDashboardPage() {
                 }}
               />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div
                 className="employee-header-title"
                 style={{
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: 800,
-                  letterSpacing: 0.5,
+                  letterSpacing: 0.35,
+                  lineHeight: 1.2,
+                  textShadow: "0 2px 10px rgba(0,0,0,0.15)",
                 }}
               >
-                Global Digital Solutions Attendance Portal
+                Global Digital Solutions
               </div>
               <div
                 className="employee-header-subtitle"
                 style={{
                   fontSize: 13,
-                  opacity: 0.9,
+                  opacity: 0.92,
+                  fontWeight: 500,
+                  marginTop: 2,
                 }}
               >
-                Your profile, shift and monthly attendance overview
+                Employee attendance &amp; profile
               </div>
               <div
                 style={{
-                  marginTop: 6,
-                  fontSize: 11.5,
-                  color: "#e5e7eb",
-                  opacity: 0.95,
+                  marginTop: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.92)",
+                  backgroundColor: "rgba(0,0,0,0.2)",
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  backdropFilter: "blur(8px)",
                 }}
               >
-                {displayName} · Code:{" "}
-                <strong style={{ letterSpacing: 0.5 }}>{empCode}</strong>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.85, flexShrink: 0 }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span style={{ fontWeight: 600 }}>{displayName}</span>
+                <span style={{ opacity: 0.5 }}>·</span>
+                <span>
+                  Code <strong style={{ letterSpacing: 0.4 }}>{empCode}</strong>
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="employee-header-right" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            className="employee-header-right"
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+              position: "relative",
+              zIndex: 1,
+              flexShrink: 0,
+            }}
+          >
             <ThemeToggle />
             <select
               value={month.slice(0, 4)} // Extract year from YYYY-MM
@@ -1799,18 +1873,18 @@ export default function EmployeeDashboardPage() {
               aria-label="Select Year"
               title="Select Year"
               style={{
-                padding: "9px 12px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                backgroundColor: theme === 'dark' ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-                color: theme === 'dark' ? '#f1f5f9' : '#0f172a',
-                minWidth: 100,
-                fontSize: 12.5,
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                backgroundColor: theme === "dark" ? "rgba(15, 23, 42, 0.55)" : "rgba(255, 255, 255, 0.95)",
+                color: theme === "dark" ? "#f1f5f9" : "#0f172a",
+                minWidth: 104,
+                fontSize: 13,
                 outline: "none",
                 cursor: "pointer",
                 backdropFilter: "blur(10px)",
-                fontWeight: 500,
-                height: "36px",
+                fontWeight: 600,
+                height: "42px",
               }}
             >
               {Array.from({ length: 10 }, (_, i) => {
@@ -1827,18 +1901,18 @@ export default function EmployeeDashboardPage() {
               aria-label="Select Month"
               title="Select Month"
               style={{
-                padding: "9px 12px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                backgroundColor: theme === 'dark' ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-                color: theme === 'dark' ? '#f1f5f9' : '#0f172a',
-                minWidth: 120,
-                fontSize: 12.5,
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                backgroundColor: theme === "dark" ? "rgba(15, 23, 42, 0.55)" : "rgba(255, 255, 255, 0.95)",
+                color: theme === "dark" ? "#f1f5f9" : "#0f172a",
+                minWidth: 128,
+                fontSize: 13,
                 outline: "none",
                 cursor: "pointer",
                 backdropFilter: "blur(10px)",
-                fontWeight: 500,
-                height: "36px",
+                fontWeight: 600,
+                height: "42px",
               }}
             >
               {Array.from({ length: 12 }, (_, i) => {
@@ -1849,35 +1923,39 @@ export default function EmployeeDashboardPage() {
             </select>
             <button
               type="button"
-              onClick={() => router.push('/employee/complaints')}
+              onClick={() => router.push("/employee/complaints")}
               style={{
-                padding: "9px 18px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                padding: "10px 16px",
+                borderRadius: 10,
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                backgroundColor: "rgba(255, 255, 255, 0.14)",
                 color: "#ffffff",
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(255, 255, 255, 0.2)",
+                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.15)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "6px",
+                gap: 8,
                 transition: "all 0.2s",
                 whiteSpace: "nowrap",
-                height: "36px",
+                height: "42px",
+                backdropFilter: "blur(8px)",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(255, 255, 255, 0.4)";
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.22)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(255, 255, 255, 0.2)";
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.14)";
               }}
             >
-              📋 Complaints
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Complaints
             </button>
             <button
               type="button"
@@ -1894,26 +1972,26 @@ export default function EmployeeDashboardPage() {
                 }
               }}
               style={{
-                padding: "9px 18px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.25)",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
+                padding: "10px 18px",
+                borderRadius: 10,
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                backgroundColor: "rgba(255, 255, 255, 0.16)",
                 color: "#ffffff",
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.2)",
+                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
                 backdropFilter: "blur(10px)",
                 transition: "all 0.2s",
                 whiteSpace: "nowrap",
-                height: "36px",
+                height: "42px",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.26)";
                 e.currentTarget.style.transform = "translateY(-1px)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.16)";
                 e.currentTarget.style.transform = "translateY(0)";
               }}
             >
@@ -1928,11 +2006,14 @@ export default function EmployeeDashboardPage() {
         className="employee-main-card container-responsive employee-dashboard-inner"
         style={{
           margin: "0 auto",
-          width: '100%',
+          width: "100%",
           borderRadius: 22,
           background: colors.gradient.card,
-          boxShadow: colors.card.shadow,
-          padding: "18px 20px 22px",
+          boxShadow:
+            theme === "dark"
+              ? "0 20px 60px rgba(15,23,42,0.85), 0 0 0 1px rgba(59,130,246,0.06)"
+              : "0 16px 48px rgba(15,23,42,0.08), 0 0 0 1px rgba(15,23,42,0.04)",
+          padding: "22px 24px 28px",
           border: `1px solid ${colors.border.default}`,
         }}
       >
@@ -1958,8 +2039,8 @@ export default function EmployeeDashboardPage() {
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 14,
-            marginBottom: 14,
+            gap: 18,
+            marginBottom: 20,
             alignItems: "start",
           }}
         >
@@ -1967,19 +2048,25 @@ export default function EmployeeDashboardPage() {
           <div
             className="employee-profile-card"
               style={{
-                borderRadius: 14,
-                padding: "12px 14px",
-                background: colors.gradient.card,
+                borderRadius: 16,
+                padding: "16px 18px",
+                background:
+                  theme === "dark"
+                    ? "linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%)"
+                    : colors.background.secondary,
                 border: `1px solid ${colors.border.default}`,
-                borderLeft: `3px solid ${colors.primary[500]}`,
-                boxShadow: theme === 'dark' ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.06)',
+                borderLeft: `4px solid ${colors.primary[500]}`,
+                boxShadow:
+                  theme === "dark"
+                    ? "0 8px 28px rgba(0,0,0,0.35)"
+                    : "0 6px 24px rgba(15,23,42,0.07)",
                 display: "flex",
-                gap: 10,
-                transition: 'box-shadow 0.2s',
+                gap: 14,
+                transition: "box-shadow 0.2s ease",
               }}
             >
             <div className="employee-profile-avatar" style={{ flexShrink: 0, position: 'relative' }}>
-              {renderEmployeeAvatar(avatarSource, 56)}
+              {renderEmployeeAvatar(avatarSource, 64)}
               <button
                 type="button"
                 onClick={() => setShowEditProfile(true)}
@@ -2014,14 +2101,26 @@ export default function EmployeeDashboardPage() {
                 ✏️
               </button>
             </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
               <div
                   style={{
-                    fontSize: 14,
+                    fontSize: 11,
                     fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.8,
+                    color: colors.text.tertiary,
+                  }}
+                >
+                  Your profile
+                </div>
+              <div
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 800,
                     marginBottom: 2,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.2,
                     color: colors.text.primary,
+                    lineHeight: 1.25,
                   }}
                 >
                   {displayName}
@@ -2031,8 +2130,8 @@ export default function EmployeeDashboardPage() {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
-                  gap: "2px 10px",
-                  fontSize: 11,
+                  gap: "4px 12px",
+                  fontSize: 12,
                 }}
               >
                 <div style={{ color: colors.text.secondary }}>Dept</div>
@@ -2401,9 +2500,9 @@ export default function EmployeeDashboardPage() {
               {loadingEmployee && (
                 <div
                   style={{
-                    fontSize: 11,
-                    color: "#cbd5f5",
-                    marginTop: 6,
+                    fontSize: 12,
+                    color: colors.text.secondary,
+                    marginTop: 8,
                   }}
                 >
                   Loading profile…
@@ -2416,20 +2515,26 @@ export default function EmployeeDashboardPage() {
           <div
             className="employee-comp-card"
             style={{
-              borderRadius: 14,
-              padding: "12px 14px",
-              background: colors.gradient.card,
+              borderRadius: 16,
+              padding: "16px 18px",
+              background:
+                theme === "dark"
+                  ? "linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%)"
+                  : colors.background.secondary,
               border: `1px solid ${colors.border.default}`,
-              borderLeft: `3px solid ${colors.success}`,
-              boxShadow: theme === 'dark' ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.06)',
+              borderLeft: `4px solid ${colors.success}`,
+              boxShadow:
+                theme === "dark"
+                  ? "0 8px 28px rgba(0,0,0,0.35)"
+                  : "0 6px 24px rgba(15,23,42,0.07)",
               display: "flex",
               flexDirection: "column",
-              gap: 8,
-              transition: 'box-shadow 0.2s',
+              gap: 12,
+              transition: "box-shadow 0.2s ease",
             }}
           >
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: colors.text.tertiary, marginBottom: 6, fontWeight: 600 }}>
-              Compensation & Bank
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: colors.text.tertiary, marginBottom: 2, fontWeight: 700 }}>
+              Compensation &amp; bank
             </div>
             <div
               style={{
@@ -2569,27 +2674,48 @@ export default function EmployeeDashboardPage() {
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 2.1fr)",
-            gap: 16,
+            gap: 20,
           }}
         >
           {/* SUMMARY */}
           <div
               style={{
                 borderRadius: 18,
-                padding: "12px 14px",
-                background: colors.gradient.card,
+                padding: "18px 18px 16px",
+                background:
+                  theme === "dark"
+                    ? "linear-gradient(160deg, rgba(30,41,59,0.55) 0%, rgba(15,23,42,0.9) 100%)"
+                    : colors.background.secondary,
                 border: `1px solid ${colors.border.default}`,
+                borderTop: `3px solid ${colors.primary[500]}`,
+                boxShadow:
+                  theme === "dark"
+                    ? "0 8px 28px rgba(0,0,0,0.25)"
+                    : "0 4px 20px rgba(15,23,42,0.06)",
               }}
             >
               <div
                 style={{
-                  fontSize: 13.5,
-                  marginBottom: 6,
-                  fontWeight: 600,
-                  color: colors.text.primary,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.75,
+                  textTransform: "uppercase",
+                  color: colors.text.tertiary,
+                  marginBottom: 4,
                 }}
               >
-                Monthly Summary
+                Attendance
+              </div>
+              <div
+                style={{
+                  fontSize: 17,
+                  marginBottom: 14,
+                  fontWeight: 800,
+                  color: colors.text.primary,
+                  letterSpacing: -0.02,
+                }}
+              >
+                Monthly summary
               </div>
               {loading ? (
                 <div style={{ fontSize: 12.5, color: colors.text.tertiary }}>
@@ -2606,7 +2732,7 @@ export default function EmployeeDashboardPage() {
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-                    gap: 6,
+                    gap: 10,
                     fontSize: 12,
                   }}
                 >
@@ -2736,15 +2862,18 @@ export default function EmployeeDashboardPage() {
                 </div>
                 <div
                   style={{
-                    marginTop: 10,
-                    fontSize: 11,
-                    color: "#9ca3af",
+                    marginTop: 14,
+                    paddingTop: 14,
+                    borderTop: `1px solid ${colors.border.default}`,
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    color: colors.text.muted,
                   }}
                 >
-                  Salary deduction & statuses are calculated using the same
-                  rules as the HR monthly screen. Future days are shown as{" "}
-                  <span style={{ color: "#fbbf24", fontWeight: 600 }}>
-                    &quot;Upcoming&quot;
+                  Salary deduction and statuses use the same rules as the HR
+                  monthly view. Future days show as{" "}
+                  <span style={{ color: colors.warning, fontWeight: 700 }}>
+                    Upcoming
                   </span>{" "}
                   and are not counted yet.
                 </div>
@@ -2757,17 +2886,38 @@ export default function EmployeeDashboardPage() {
             <div
                 style={{
                   borderRadius: 18,
-                  padding: "10px 12px",
-                  background: colors.gradient.card,
+                  padding: "18px 18px 14px",
+                  background:
+                    theme === "dark"
+                      ? "linear-gradient(160deg, rgba(30,41,59,0.55) 0%, rgba(15,23,42,0.9) 100%)"
+                      : colors.background.secondary,
                   border: `1px solid ${colors.border.default}`,
+                  borderTop: `3px solid ${colors.secondary[500]}`,
+                  boxShadow:
+                    theme === "dark"
+                      ? "0 8px 28px rgba(0,0,0,0.25)"
+                      : "0 4px 20px rgba(15,23,42,0.06)",
                 }}
               >
                 <div
                   style={{
-                    fontSize: 13.5,
-                    marginBottom: 6,
-                    fontWeight: 600,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: 0.75,
+                    textTransform: "uppercase",
+                    color: colors.text.tertiary,
+                    marginBottom: 4,
+                  }}
+                >
+                  Calendar
+                </div>
+                <div
+                  style={{
+                    fontSize: 17,
+                    marginBottom: 12,
+                    fontWeight: 800,
                     color: colors.text.primary,
+                    letterSpacing: -0.02,
                   }}
                 >
                   Day-by-day attendance
