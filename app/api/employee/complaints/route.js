@@ -27,6 +27,7 @@ export async function GET(req) {
 
     return successResponse({ complaints: list }, 'Complaints retrieved', HTTP_STATUS.OK);
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_EMPLOYEE') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);
   }
 }

@@ -30,7 +30,6 @@
 | `/api/employee/attendance` | GET | ❌ None | Anyone can fetch any employee's punches |
 | `/api/employee/leaves` | GET | ❌ None | Anyone can view any employee's leaves |
 | `/api/employee/complaints` | GET, POST | ❌ None | Anyone can view/post complaints |
-| `/api/monitor/productivity` | GET | ✅ Session + role check | OK |
 | `/api/auth/login` | POST | N/A (login) | Public by design |
 | `/api/auth/register` | POST | ❌ None (rate-limited) | Only HR should register – no role check |
 | `/api/agent/*` | Various | ✅ Device token | Uses separate auth |
@@ -167,9 +166,6 @@ export async function GET(req) {
 | `api/hr/employee-shifts` | requireHR | GET, POST |
 | `api/hr/employee-shifts/auto-detect` | requireHR | POST |
 | `api/hr/employee-shifts/bulk-create` | requireHR | POST |
-| `api/hr/break-log` | requireHR | GET |
-| `api/hr/monitoring/summary` | requireHR | GET |
-| `api/hr/monitoring/live` | requireHR | GET |
 | `api/hr/upload` | requireHR | POST |
 | `api/employee/attendance` | requireEmployee | Validate empCode === session.user.empCode |
 | `api/employee/leaves` | requireEmployee | Validate empCode === session.user.empCode |

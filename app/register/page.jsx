@@ -32,11 +32,9 @@ export default function RegisterPage() {
       // User is not logged in, redirect to login page
       router.push('/login?role=hr');
     } else if (status === 'authenticated') {
-      // Optional: Only allow HR or ADMIN roles to access register page
-      // Uncomment the following lines if you want to restrict to HR/ADMIN only:
-      // if (session?.user?.role !== 'HR' && session?.user?.role !== 'ADMIN') {
-      //   router.push('/login?role=hr');
-      // }
+      if (session?.user?.role !== 'HR' && session?.user?.role !== 'ADMIN') {
+        router.push('/login?role=hr');
+      }
     }
   }, [status, session, router]);
 

@@ -11,15 +11,36 @@ const nextConfig = {
   },
   // Prevent 304/caching on auth routes - fixes auto-logout on Vercel
   async headers() {
+    const noStoreApi = [
+      { key: 'Cache-Control', value: 'private, no-store, no-cache, must-revalidate' },
+      { key: 'Pragma', value: 'no-cache' },
+      { key: 'Expires', value: '0' },
+    ];
     return [
       {
         source: '/api/auth/:path*',
         headers: [
-          { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate, proxy-revalidate' },
-          { key: 'Pragma', value: 'no-cache' },
-          { key: 'Expires', value: '0' },
+          ...noStoreApi,
           { key: 'Surrogate-Control', value: 'no-store' },
         ],
+      },
+      {
+        source: '/api/hr/:path*',
+        headers: [
+          ...noStoreApi,
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+        ],
+      },
+      {
+        source: '/api/employee/:path*',
+        headers: [
+          ...noStoreApi,
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+        ],
+      },
+      {
+        source: '/:path*',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
       },
     ];
   },

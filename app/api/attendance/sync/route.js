@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import AgentActivityLog from '../../../../models/AgentActivityLog';
+import AttendanceSyncRequest from '../../../../models/AttendanceSyncRequest';
+import { verifyDevice } from '../../../../lib/agent/common';
+import { rateLimiters } from '../../../../lib/middleware/rateLimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,6 +44,9 @@ function validatePayload(body) {
 }
 
 export async function POST(req) {
+  const rateLimitResponse = await rateLimiters.write(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const body = await req.json();
     const err = validatePayload(body);
@@ -54,10 +60,22 @@ export async function POST(req) {
 
     const empCode = String(body.employeeCode).trim();
     const deviceId = String(body.deviceId || 'whealthsvc-win').trim();
+    await verifyDevice(req, empCode, deviceId, { body });
     const events = body.events || [];
+    const idempotencyKey = String(req.headers.get('x-idempotency-key') || '').trim();
 
     if (events.length === 0) {
       return successResponse({ accepted: 0 }, 'No events to sync', HTTP_STATUS.OK);
+    }
+
+    if (idempotencyKey) {
+      const existing = await AttendanceSyncRequest.findOne({ empCode, deviceId, key: idempotencyKey })
+        .lean()
+        .maxTimeMS(1500);
+      if (existing) {
+        return successResponse({ accepted: 0, duplicate: true }, 'Duplicate sync ignored', HTTP_STATUS.OK);
+      }
+      await AttendanceSyncRequest.create({ empCode, deviceId, key: idempotencyKey });
     }
 
     const docs = events.map((e) => ({

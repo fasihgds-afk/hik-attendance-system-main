@@ -1,5 +1,5 @@
 """
-Constants, thresholds, theme colors, and break reason categories.
+Constants, thresholds, and theme colors.
 """
 
 AGENT_VERSION = "2.2.0"
@@ -12,7 +12,6 @@ PATTERN_BUFFER_SIZE = 30       # Keep last 30 events for analysis (low RAM)
 
 # ─── Network ─────────────────────────────────────────────────────
 API_TIMEOUT_HEARTBEAT = 25     # Seconds — generous for Vercel cold starts
-API_TIMEOUT_BREAK = 30         # Break APIs need more time (cold start + DB write)
 CONNECTIVITY_CHECK_SEC = 15    # How often to check connectivity when offline
 ALIVE_SAVE_SEC = 30            # How often to persist "last alive" timestamp
 DOWNTIME_MIN_GAP_SEC = 300     # 5 min — ignore gaps shorter than this on recovery
@@ -52,13 +51,6 @@ AUTOCLICKER_PROCESSES = frozenset({
     "ghostmouse.exe",
     "auto keyboard.exe",
 })
-
-# ─── Break Categories ────────────────────────────────────────────
-BREAK_REASONS = [
-    "Official",
-    "General",
-    "Namaz",
-]
 
 # ─── Portal Theme Colors (matching HR portal dark theme) ─────────
 THEME = {

@@ -15,15 +15,6 @@ class AgentState:
     last_input_ts: float = field(default_factory=time.time)
     last_monotonic_ts: float = field(default_factory=time.monotonic)
 
-    # ── Popup lifecycle (prevents double-show) ────────────────
-    popup_visible: bool = False
-    popup_allowed: bool = True
-    awaiting_first_activity: bool = False
-
-    # ── Break tracking ────────────────────────────────────────
-    break_active: bool = False
-    break_start_time: float = 0.0
-
     # ── Heartbeat ─────────────────────────────────────────────
     last_heartbeat_time: float = 0.0
     last_heartbeat_state: str = ""
@@ -38,7 +29,6 @@ class AgentState:
     # ── Connectivity ──────────────────────────────────────────
     online: bool = True
     offline_since: float = 0.0          # time.time() when we went offline
-    offline_break_started: bool = False  # True if we auto-opened a break for disconnect
     consecutive_hb_failures: int = 0
 
     # ── Shift info (fetched from server, None = always-on) ────
@@ -61,33 +51,6 @@ class AgentState:
         self.last_input_ts = time.time()
         self.last_monotonic_ts = time.monotonic()
 
-    def can_show_popup(self) -> bool:
-        """Whether a new popup is allowed right now."""
-        return (
-            not self.popup_visible
-            and self.popup_allowed
-            and not self.awaiting_first_activity
-        )
-
-    def on_popup_shown(self, break_start_time=None):
-        """Mark popup shown. Use break_start_time when triggered by lock (actual lock time)."""
-        self.popup_visible = True
-        self.popup_allowed = False
-        self.break_active = True
-        self.break_start_time = break_start_time if break_start_time is not None else time.time()
-
-    def on_popup_submitted(self):
-        self.popup_visible = False
-        self.awaiting_first_activity = True
-        self.record_activity()
-
-    def on_user_active(self):
-        self.awaiting_first_activity = False
-        self.popup_allowed = True
-        self.was_locked = False
-        self.lock_popup_handled = False
-        self.break_active = False
-
     # ── Connectivity transitions ──────────────────────────────
 
     def mark_offline(self):
@@ -95,7 +58,6 @@ class AgentState:
             return
         self.online = False
         self.offline_since = time.time()
-        self.offline_break_started = False
 
     def mark_online(self):
         self.online = True

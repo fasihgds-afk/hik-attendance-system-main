@@ -3,7 +3,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn, getSession } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
 
 function LoginInner() {
@@ -27,7 +27,6 @@ function LoginInner() {
   const [hrEmail, setHrEmail] = useState("");
   const [hrPassword, setHrPassword] = useState("");
 
-  // EMPLOYEE: ONLY EMP CODE (still here but blocked)
   const [empCode, setEmpCode] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -91,12 +90,13 @@ function LoginInner() {
       const result = await signIn("credentials", {
         redirect: false,
         mode: "EMPLOYEE",
-        empCode,
+        empCode: empCode.trim(),
+        password: "",
         callbackUrl: "/employee/dashboard",
       });
 
       if (!result || result.error) {
-        setErrorMsg("Invalid employee code.");
+        setErrorMsg("Unknown employee code. Check with HR.");
         setLoading(false);
         return;
       }
@@ -644,7 +644,6 @@ function LoginInner() {
                 Please contact HR if you believe this is a mistake.
               </div>
             ) : (
-              // EMPLOYEE FORM – ONLY EMP CODE
               <form
                 onSubmit={handleEmployeeSubmit}
                 style={{
@@ -730,7 +729,7 @@ function LoginInner() {
                     e.currentTarget.style.boxShadow = `0 16px 36px ${colors.secondary[500]}50`;
                   }}
                 >
-                  {loading ? "Checking..." : "Submit"}
+                  {loading ? "Checking..." : "Sign In"}
                 </button>
               </form>
             )}

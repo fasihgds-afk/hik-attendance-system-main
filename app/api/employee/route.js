@@ -1,6 +1,7 @@
 // app/api/employee/route.js
 import { connectDB } from '../../../lib/db';
 import Employee from '../../../models/Employee';
+import User from '../../../models/User';
 import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/queryOptimizer';
 import { NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
 import { validateEmployee } from '../../../lib/validations/employee';
@@ -16,7 +17,6 @@ import {
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const revalidate = 30; // Cache for 30 seconds for faster responses
 
 // Helper function to convert ObjectId shift to shift code
 async function normalizeShiftField(shiftValue) {
@@ -238,7 +238,13 @@ export async function GET(req) {
       }
     );
   } catch (err) {
-    if (err?.code === 'UNAUTHORIZED' || err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
+    if (
+      err?.code === 'UNAUTHORIZED' ||
+      err?.code === 'UNAUTHORIZED_HR' ||
+      err?.code === 'UNAUTHORIZED_EMPLOYEE'
+    ) {
+      return errorResponse('Unauthorized', 401);
+    }
     return errorResponseFromException(err, req);
   }
 }
@@ -390,6 +396,8 @@ export async function DELETE(req) {
     if (!deleted) {
       throw new NotFoundError(`Employee ${empCode}`);
     }
+
+    await User.deleteOne({ role: 'EMPLOYEE', employeeEmpCode: String(empCode).trim() }).catch(() => {});
 
     return successResponse(
       { employee: deleted },

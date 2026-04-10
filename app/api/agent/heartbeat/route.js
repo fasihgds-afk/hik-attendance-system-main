@@ -3,9 +3,7 @@ import { connectDB } from '../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { UnauthorizedError } from '../../../../lib/errors/errorHandler';
 import Device from '../../../../models/Device';
-import BreakLog from '../../../../models/BreakLog';
 import SuspiciousLog from '../../../../models/SuspiciousLog';
-import { clipIntervalToShiftWindow } from '../../../../lib/shift/resolveShiftWindow';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,7 +45,6 @@ export async function POST(req) {
     }
 
     const now = new Date();
-    const STALE_BREAK_HOURS = 12;
 
     await Device.updateOne(
       { empCode: body.empCode, deviceId: body.deviceId },
@@ -69,37 +66,6 @@ export async function POST(req) {
       },
       { upsert: true }
     );
-
-    // Auto-close stale OPEN breaks (safety net for orphaned breaks from network outages)
-    const staleThreshold = new Date(now.getTime() - STALE_BREAK_HOURS * 60 * 60 * 1000);
-    const staleBreaks = await BreakLog.find({
-      empCode: body.empCode,
-      deviceId: body.deviceId,
-      status: 'OPEN',
-      breakStartAt: { $lt: staleThreshold }
-    }).maxTimeMS(2000);
-    for (const doc of staleBreaks) {
-      try {
-        const window = doc.shiftStartAt && doc.shiftEndAt
-          ? { shiftStart: doc.shiftStartAt, shiftEnd: doc.shiftEndAt }
-          : null;
-        const effectiveEnd = window ? new Date(Math.min(now.getTime(), new Date(doc.shiftEndAt).getTime())) : now;
-        const startMs = new Date(doc.breakStartAt).getTime();
-        const endMs = effectiveEnd.getTime();
-        const clipped = window
-          ? clipIntervalToShiftWindow(doc.breakStartAt, effectiveEnd, window)
-          : { durationMin: Math.max(0, Math.floor((endMs - startMs) / 60000)) };
-        doc.breakEndAt = effectiveEnd;
-        doc.status = 'CLOSED';
-        doc.reason = 'Auto-closed: stale break (network recovery)';
-        doc.category = doc.category || 'Official';
-        doc.durationMin = clipped.durationMin ?? Math.max(0, Math.floor((endMs - startMs) / 60000));
-        doc.exceededDurationMin = Math.max(0, doc.durationMin - (doc.allowedDurationMin || 0));
-        await doc.save();
-      } catch (e) {
-        // Non-fatal
-      }
-    }
 
     // Keep live suspicious state and historical suspicious minutes in sync.
     const wasSuspicious = !!existing?.suspiciousActive;

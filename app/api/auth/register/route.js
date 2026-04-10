@@ -8,6 +8,7 @@ import { rateLimiters } from '../../../../lib/middleware/rateLimit';
 import { z } from 'zod';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requireHR } from '../../../../lib/auth/requireAuth';
+import SecurityAuditLog from '../../../../models/SecurityAuditLog';
 
 // Validation schema for user registration
 const registerSchema = z.object({
@@ -25,6 +26,7 @@ export async function POST(req) {
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
+    const { user: actor } = await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -49,6 +51,13 @@ export async function POST(req) {
     }
 
     const { email, password, role, empCode } = validated;
+    const actorRole = String(actor?.role || '').toUpperCase();
+    const actorId = String(actor?.email || actor?.empCode || 'unknown');
+
+    // Privileged role protection: only ADMIN can create ADMIN users.
+    if (role === 'ADMIN' && actorRole !== 'ADMIN') {
+      throw new ValidationError('Only ADMIN can create ADMIN users');
+    }
 
     // Note: Secret key requirement removed - HR can now directly create HR users
 
@@ -83,6 +92,16 @@ export async function POST(req) {
       employeeEmpCode: role === 'EMPLOYEE' ? employeeDoc.empCode : undefined,
     });
 
+    await SecurityAuditLog.create({
+      actorRole,
+      actorId,
+      action: 'USER_REGISTER',
+      target: email,
+      status: 'SUCCESS',
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown',
+      details: { createdRole: role },
+    });
+
     return successResponse(
       {
         userId: newUser._id,
@@ -93,6 +112,17 @@ export async function POST(req) {
     );
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
+    try {
+      await SecurityAuditLog.create({
+        actorRole: 'UNKNOWN',
+        actorId: 'unknown',
+        action: 'USER_REGISTER',
+        target: 'unknown',
+        status: 'FAILED',
+        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown',
+        details: { message: err?.message || 'register_failed' },
+      });
+    } catch {}
     return errorResponseFromException(err, req);
   }
 }

@@ -257,11 +257,6 @@ export default function HrDashboardPage() {
     router.push("/hr/complaints");
   }
 
-  function openLiveMonitoring() {
-    router.push("/hr/monitoring");
-  }
-
-
   function openRegisterModal() {
     setShowRegisterModal(true);
   }
@@ -275,14 +270,434 @@ export default function HrDashboardPage() {
     // You can add a toast notification here if needed
   }
 
+  /** Overview hub cards — same visual language as stats row (kicker, headline, icon, one CTA) */
+  const hub = useMemo(() => {
+    const isDark = theme === "dark";
+    const shD = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
+    const shL = "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)";
+
+    const variants = {
+      employees: {
+        border: `1px solid rgba(59, 130, 246, 0.28)`,
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(59, 130, 246, 0.5)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(59, 130, 246, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(59, 130, 246, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: colors.gradient.card,
+        kickerColor: colors.text.tertiary,
+        headlineColor: colors.text.primary,
+        hintColor: colors.text.muted,
+        descColor: colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.1))",
+          border: "1px solid rgba(59, 130, 246, 0.35)",
+          stroke: "#60a5fa",
+        },
+        btn: { background: colors.primary[600], color: "#ffffff" },
+      },
+      register: {
+        border: "1px solid rgba(251, 146, 60, 0.4)",
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(253, 186, 116, 0.65)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(234, 88, 12, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(234, 88, 12, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? "linear-gradient(135deg, #7c2d12 0%, #9a3412 100%)"
+          : "linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)",
+        kickerColor: isDark ? "#fdba74" : "#c2410c",
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#fdba74" : "#ea580c",
+        descColor: isDark ? "rgba(255, 255, 255, 0.85)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(251, 146, 60, 0.35), rgba(251, 146, 60, 0.12))",
+          border: "1px solid rgba(253, 186, 116, 0.45)",
+          stroke: "#fb923c",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#ea580c",
+          color: isDark ? "#7c2d12" : "#ffffff",
+        },
+      },
+      shift: {
+        border: `1px solid rgba(99, 102, 241, 0.35)`,
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(129, 140, 248, 0.55)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(99, 102, 241, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? `linear-gradient(135deg, ${colors.primary[900]} 0%, ${colors.primary[800]} 100%)`
+          : `linear-gradient(135deg, ${colors.primary[100]} 0%, ${colors.primary[200]} 100%)`,
+        kickerColor: isDark ? colors.primary[300] : colors.primary[700],
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#a5b4fc" : colors.primary[700],
+        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(99, 102, 241, 0.32), rgba(99, 102, 241, 0.14))",
+          border: "1px solid rgba(129, 140, 248, 0.45)",
+          stroke: "#a5b4fc",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : colors.primary[700],
+          color: isDark ? colors.primary[900] : "#ffffff",
+        },
+      },
+      attendance: {
+        border: `1px solid rgba(34, 197, 94, 0.35)`,
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(74, 222, 128, 0.55)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(34, 197, 94, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? `linear-gradient(135deg, ${colors.secondary[900]} 0%, ${colors.secondary[800]} 100%)`
+          : `linear-gradient(135deg, ${colors.secondary[100]} 0%, ${colors.secondary[200]} 100%)`,
+        kickerColor: isDark ? colors.secondary[300] : colors.secondary[700],
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#86efac" : colors.secondary[700],
+        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(34, 197, 94, 0.32), rgba(34, 197, 94, 0.14))",
+          border: "1px solid rgba(74, 222, 128, 0.45)",
+          stroke: "#4ade80",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : colors.secondary[700],
+          color: isDark ? "#14532d" : "#ffffff",
+        },
+      },
+      leave: {
+        border: "1px solid rgba(45, 212, 191, 0.35)",
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(45, 212, 191, 0.55)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(20, 184, 166, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(20, 184, 166, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? "linear-gradient(135deg, #134e4a 0%, #115e59 100%)"
+          : "linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)",
+        kickerColor: isDark ? "#5eead4" : "#0f766e",
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#99f6e4" : "#0d9488",
+        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(20, 184, 166, 0.3), rgba(20, 184, 166, 0.12))",
+          border: "1px solid rgba(45, 212, 191, 0.4)",
+          stroke: "#2dd4bf",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#0f766e",
+          color: isDark ? "#134e4a" : "#ffffff",
+        },
+      },
+      complaints: {
+        border: "1px solid rgba(167, 139, 250, 0.35)",
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(196, 181, 253, 0.55)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? "linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%)"
+          : "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)",
+        kickerColor: isDark ? "#d8b4fe" : "#6d28d9",
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#c4b5fd" : "#5b21b6",
+        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(139, 92, 246, 0.32), rgba(139, 92, 246, 0.14))",
+          border: "1px solid rgba(167, 139, 250, 0.45)",
+          stroke: "#c4b5fd",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#6d28d9",
+          color: isDark ? "#4c1d95" : "#ffffff",
+        },
+      },
+    };
+
+    const card = (key) => {
+      const v = variants[key];
+      return {
+        borderRadius: 14,
+        padding: "16px 18px",
+        background: v.background,
+        border: v.border,
+        boxShadow: v.boxShadow,
+        position: "relative",
+        overflow: "hidden",
+        transition: "transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        height: "100%",
+        boxSizing: "border-box",
+      };
+    };
+
+    const hoverProps = (key) => {
+      const v = variants[key];
+      return {
+        onMouseEnter: (e) => {
+          e.currentTarget.style.transform = "translateY(-4px)";
+          e.currentTarget.style.boxShadow = v.hoverShadow;
+          e.currentTarget.style.border = v.hoverBorder;
+        },
+        onMouseLeave: (e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = v.boxShadow;
+          e.currentTarget.style.border = v.border;
+        },
+      };
+    };
+
+    const topRow = {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 10,
+      gap: 10,
+    };
+    const kicker = (key) => {
+      const v = variants[key];
+      return {
+        fontSize: 10,
+        textTransform: "uppercase",
+        letterSpacing: "0.1em",
+        color: v.kickerColor,
+        marginBottom: 6,
+        fontWeight: 600,
+      };
+    };
+    const headline = (key) => {
+      const v = variants[key];
+      return {
+        fontSize: "clamp(1.05rem, 1.25vw, 1.2rem)",
+        fontWeight: 700,
+        color: v.headlineColor,
+        lineHeight: 1.3,
+        margin: 0,
+        letterSpacing: "-0.01em",
+      };
+    };
+    const hint = (key) => {
+      const v = variants[key];
+      return {
+        fontSize: 11,
+        color: v.hintColor,
+        marginTop: 6,
+        fontWeight: 500,
+      };
+    };
+    const desc = (key) => {
+      const v = variants[key];
+      return {
+        fontSize: 12,
+        lineHeight: 1.5,
+        color: v.descColor,
+        margin: "10px 0 0 0",
+        flex: "1 1 auto",
+        minHeight: "3.75rem",
+      };
+    };
+    const icon48 = (key) => {
+      const ic = variants[key].icon;
+      return {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        background: ic.bg,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: ic.border,
+        flexShrink: 0,
+      };
+    };
+    const iconStroke = (key) => variants[key].icon.stroke;
+
+    const actionsCol = {
+      display: "flex",
+      flexDirection: "column",
+      marginTop: "auto",
+      paddingTop: 12,
+      flexShrink: 0,
+    };
+
+    const btn = (key) => {
+      const b = variants[key].btn;
+      return {
+        width: "100%",
+        minHeight: 40,
+        padding: "8px 14px",
+        borderRadius: 10,
+        border: "none",
+        background: b.background,
+        color: b.color,
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        transition: "filter 0.15s ease, transform 0.15s ease",
+        boxShadow: isDark ? "0 4px 14px rgba(0,0,0,0.2)" : "0 2px 8px rgba(15,23,42,0.08)",
+      };
+    };
+
+    return {
+      card,
+      hoverProps,
+      topRow,
+      kicker,
+      headline,
+      hint,
+      desc,
+      icon48,
+      iconStroke,
+      actionsCol,
+      btn,
+      isDark,
+    };
+  }, [colors, theme]);
+
+  const headerActionBtn = {
+    padding: "8px 14px",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    minHeight: 40,
+    transition: "all 0.2s",
+    whiteSpace: "nowrap",
+  };
+
   return (
     <>
       <style jsx>{`
+          /* Hub: 1 col phone → 2 col tablet → 3 col laptop/desktop; equal row heights */
+          .overview-action-grid {
+            display: grid;
+            gap: clamp(10px, 1.5vw, 14px);
+            align-items: stretch;
+            grid-template-columns: 1fr;
+          }
+          @media (min-width: 560px) {
+            .overview-action-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+          }
+          @media (min-width: 1024px) {
+            .overview-action-grid {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+          }
+          .overview-hub-card-span {
+            grid-column: 1 / -1;
+            max-width: min(100%, 420px);
+            width: 100%;
+            justify-self: center;
+          }
+          .header-text-stack {
+            min-width: 0;
+          }
+          .header-buttons {
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            flex: 0 0 auto;
+            align-self: center;
+            min-width: 0;
+          }
+          .header-buttons > button {
+            flex: 0 0 auto;
+          }
+          .header-buttons button svg {
+            width: 18px !important;
+            height: 18px !important;
+            flex-shrink: 0;
+          }
+          @media (min-width: 1024px) {
+            .header-buttons {
+              gap: 8px !important;
+            }
+            .header-buttons button {
+              padding: 9px 16px !important;
+              font-size: 14px !important;
+              min-height: 44px !important;
+            }
+            .header-buttons button svg {
+              width: 20px !important;
+              height: 20px !important;
+            }
+          }
+          @media (min-width: 1440px) {
+            .header-buttons button {
+              padding: 10px 18px !important;
+              font-size: 15px !important;
+              min-height: 46px !important;
+            }
+            .header-buttons button svg {
+              width: 21px !important;
+              height: 21px !important;
+            }
+          }
+          @media (max-width: 1280px) {
+            .header-container {
+              padding: 16px 20px !important;
+            }
+            .header-brand-row {
+              gap: 12px !important;
+            }
+            .header-buttons {
+              justify-content: flex-end !important;
+              gap: 8px !important;
+            }
+            .stats-grid {
+              grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)) !important;
+            }
+            .dept-section-header {
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              gap: 10px !important;
+            }
+            .main-container {
+              padding: 18px 16px 24px !important;
+            }
+            .tabs-container {
+              flex-wrap: wrap !important;
+            }
+            .tab-button {
+              padding: 10px 16px !important;
+              font-size: 13px !important;
+            }
+          }
+          @media (max-width: 900px) {
+            .overview-action-grid {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+            .overview-hub-card-span {
+              grid-column: auto !important;
+              max-width: none !important;
+              justify-self: stretch !important;
+            }
+          }
         @media (max-width: 768px) {
-          .header-container {
+          .header-brand-row {
             flex-direction: column !important;
-            gap: 16px !important;
-            align-items: flex-start !important;
+            align-items: stretch !important;
+          }
+          .header-buttons {
+            justify-content: flex-start !important;
+            width: 100% !important;
+            align-self: stretch !important;
           }
           .header-logo {
             width: 60px !important;
@@ -294,13 +709,9 @@ export default function HrDashboardPage() {
           .header-subtitle {
             font-size: 11px !important;
           }
-          .header-buttons {
-            flex-direction: column !important;
-            width: 100% !important;
-            gap: 8px !important;
-          }
           .header-buttons button {
-            width: 100% !important;
+            flex: 1 1 calc(50% - 4px) !important;
+            min-width: 120px !important;
             justify-content: center !important;
           }
           .main-container {
@@ -339,22 +750,17 @@ export default function HrDashboardPage() {
             padding: 20px 24px !important;
           }
           .header-container {
-            padding: 16px 22px !important;
+            padding: 16px 20px !important;
           }
           .header-logo {
-            width: 75px !important;
-            height: 75px !important;
+            width: 56px !important;
+            height: 56px !important;
           }
           .header-title {
-            font-size: 20px !important;
+            font-size: 19px !important;
           }
           .header-buttons {
             flex-wrap: wrap !important;
-            gap: 8px !important;
-          }
-          .header-buttons button {
-            padding: 8px 16px !important;
-            font-size: 12px !important;
           }
           .card-content {
             padding: 18px !important;
@@ -381,8 +787,8 @@ export default function HrDashboardPage() {
             font-size: 24px !important;
           }
           .header-logo {
-            width: 100px !important;
-            height: 100px !important;
+            width: 72px !important;
+            height: 72px !important;
           }
         }
       `}</style>
@@ -390,6 +796,11 @@ export default function HrDashboardPage() {
         className="main-container"
         style={{
           minHeight: "100vh",
+          width: "100%",
+          maxWidth: "100%",
+          marginLeft: 0,
+          marginRight: 0,
+          boxSizing: "border-box",
           padding: "24px 28px 32px",
           background: colors.gradient.overlay,
           color: colors.text.primary,
@@ -403,9 +814,9 @@ export default function HrDashboardPage() {
           className="header-container"
             style={{
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "20px 28px",
+            flexDirection: "column",
+            gap: 12,
+            padding: "18px 22px",
             borderRadius: 20,
             background: colors.gradient.header,
             color: theme === 'dark' ? '#ffffff' : colors.text.primary,
@@ -429,21 +840,31 @@ export default function HrDashboardPage() {
               pointerEvents: "none",
             }}
           />
-          {/* Left: logo + title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
+          <div
+            className="header-brand-row"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              width: "100%",
+              position: "relative",
+              zIndex: 1,
+              minWidth: 0,
+            }}
+          >
             <div
               className="header-logo"
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: 16,
+                width: 64,
+                height: 64,
+                borderRadius: 14,
                 overflow: "hidden",
                 backgroundColor: "rgba(255, 255, 255, 0.15)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
-                boxShadow: "0 8px 16px rgba(0, 0, 0, 0.2)",
+                boxShadow: "0 6px 14px rgba(0, 0, 0, 0.2)",
                 border: "2px solid rgba(255, 255, 255, 0.2)",
               }}
             >
@@ -461,26 +882,30 @@ export default function HrDashboardPage() {
                 }}
               />
             </div>
-            <div>
-              <div
-                className="header-title"
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  letterSpacing: 0.5,
-                  marginBottom: 4,
-                  textShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
-                }}
-              >
-                Global Digital Solutions
-              </div>
+            <div
+              className="header-text-stack"
+              style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}
+            >
+                <div
+                  className="header-title"
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 800,
+                    letterSpacing: 0.4,
+                    margin: 0,
+                    lineHeight: 1.2,
+                    textShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+                  }}
+                >
+                  Global Digital Solutions
+                </div>
               <div
                 className="header-subtitle"
                 style={{
                   fontSize: 13,
                   opacity: 0.95,
                   fontWeight: 500,
-                  marginBottom: 6,
+                  margin: 0,
                 }}
               >
                 HR &amp; Attendance Management Dashboard
@@ -509,272 +934,124 @@ export default function HrDashboardPage() {
                 </div>
               )}
             </div>
-          </div>
+            <div
+              className="header-buttons"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                position: "relative",
+                zIndex: 1,
+              }}
+            >
+              <button
+                type="button"
+                onClick={openDepartmentPolicies}
+                style={{
+                  ...headerActionBtn,
+                  border: "1px solid rgba(255, 255, 255, 0.28)",
+                  backgroundColor: "rgba(255, 255, 255, 0.14)",
+                  color: "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.24)";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.14)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                Departments
+              </button>
 
-          {/* Right: quick actions */}
-          <div
-            className="header-buttons"
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              position: "relative",
-              zIndex: 1,
-            }}
-          >
-            <button
-              type="button"
-              onClick={openEmployeesManage}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(255, 255, 255, 0.25)",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              Employees
-            </button>
+              <button
+                type="button"
+                onClick={openViolationRules}
+                style={{
+                  ...headerActionBtn,
+                  border: "1px solid rgba(245, 158, 11, 0.45)",
+                  backgroundColor: "rgba(245, 158, 11, 0.18)",
+                  color: "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  boxShadow: "0 2px 8px rgba(245, 158, 11, 0.2)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.28)";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.18)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Violation Rules
+              </button>
 
-            <button
-              type="button"
-              onClick={openEmployeesDirectory}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(255, 255, 255, 0.25)",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h10M7 12h10M7 17h7M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
-              </svg>
-              Directory
-            </button>
-
-            <button
-              type="button"
-              onClick={openShiftManagement}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(255, 255, 255, 0.25)",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Shifts
-            </button>
-
-            <button
-              type="button"
-              onClick={openDepartmentPolicies}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(255, 255, 255, 0.25)",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              Departments
-            </button>
-
-            <button
-              type="button"
-              onClick={openViolationRules}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(245, 158, 11, 0.4)",
-                backgroundColor: "rgba(245, 158, 11, 0.2)",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 12px rgba(245, 158, 11, 0.3)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.3)";
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(245, 158, 11, 0.4)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.2)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(245, 158, 11, 0.3)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              Violation Rules
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                window.location.reload();
-              }}
-              style={{
-                padding: "10px 20px",
-                borderRadius: 12,
-                border: "none",
-                background: theme === 'dark' 
-                  ? `linear-gradient(135deg, ${colors.background.card} 0%, ${colors.background.secondary} 100%)`
-                  : "linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)",
-                color: theme === 'dark' ? colors.text.primary : colors.primary[700],
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                boxShadow: "0 6px 20px rgba(255, 255, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2)",
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-2px) scale(1.02)";
-                e.currentTarget.style.boxShadow = "0 8px 24px rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0) scale(1)";
-                e.currentTarget.style.boxShadow = "0 6px 20px rgba(255, 255, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh
-            </button>
-            <ThemeToggle />
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-                whiteSpace: "nowrap",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.2)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Logout
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.reload();
+                }}
+                style={{
+                  ...headerActionBtn,
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  background:
+                    theme === "dark"
+                      ? `linear-gradient(135deg, ${colors.background.card} 0%, ${colors.background.secondary} 100%)`
+                      : "linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)",
+                  color: theme === "dark" ? colors.text.primary : colors.primary[700],
+                  fontWeight: 700,
+                  boxShadow: "0 2px 10px rgba(0, 0, 0, 0.15)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                  e.currentTarget.style.filter = "brightness(1.05)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.filter = "";
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+              <ThemeToggle />
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  ...headerActionBtn,
+                  border: "1px solid rgba(255, 255, 255, 0.28)",
+                  backgroundColor: "rgba(255, 255, 255, 0.14)",
+                  color: "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.24)";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.14)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1208,16 +1485,18 @@ export default function HrDashboardPage() {
               }}
             >
               <div
+                className="dept-section-header"
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                   marginBottom: 8,
                   gap: 8,
+                  flexWrap: "wrap",
                 }}
               >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
                     <div
                       style={{
                         width: 40,
@@ -1300,50 +1579,50 @@ export default function HrDashboardPage() {
                   }}
                 >
                   {stats.departmentCounts.map((dept, idx) => {
-                    const colors = [
+                    const deptChipPalette = [
                       { bg: "rgba(59, 130, 246, 0.15)", border: "rgba(59, 130, 246, 0.3)", text: "#3b82f6", badge: "rgba(59, 130, 246, 0.2)" },
                       { bg: "rgba(34, 197, 94, 0.15)", border: "rgba(34, 197, 94, 0.3)", text: "#22c55e", badge: "rgba(34, 197, 94, 0.2)" },
                       { bg: "rgba(251, 191, 36, 0.15)", border: "rgba(251, 191, 36, 0.3)", text: "#fbbf24", badge: "rgba(251, 191, 36, 0.2)" },
                       { bg: "rgba(239, 68, 68, 0.15)", border: "rgba(239, 68, 68, 0.3)", text: "#ef4444", badge: "rgba(239, 68, 68, 0.2)" },
                       { bg: "rgba(168, 85, 247, 0.15)", border: "rgba(168, 85, 247, 0.3)", text: "#a855f7", badge: "rgba(168, 85, 247, 0.2)" },
                     ];
-                    const color = colors[idx % colors.length];
+                    const chip = deptChipPalette[idx % deptChipPalette.length];
                     return (
                       <div
                         key={dept.name}
                         style={{
                           padding: "10px 16px",
                           borderRadius: 12,
-                          border: `1px solid ${color.border}`,
-                          backgroundColor: color.bg,
+                          border: `1px solid ${chip.border}`,
+                          backgroundColor: chip.bg,
                           fontSize: 13,
                           display: "flex",
                           alignItems: "center",
                           gap: 10,
                           fontWeight: 500,
-                          color: "#e2e8f0",
+                          color: colors.text.primary,
                           transition: "all 0.2s",
                           cursor: "default",
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow = `0 4px 12px ${color.badge}`;
+                          e.currentTarget.style.boxShadow = `0 4px 12px ${chip.badge}`;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.transform = "translateY(0)";
                           e.currentTarget.style.boxShadow = "none";
                         }}
                       >
-                        <span style={{ color: color.text, fontWeight: 600 }}>{dept.name}</span>
+                        <span style={{ color: chip.text, fontWeight: 600 }}>{dept.name}</span>
                         <span
                           style={{
                             padding: "4px 10px",
                             borderRadius: 8,
-                            backgroundColor: color.badge,
-                            color: color.text,
+                            backgroundColor: chip.badge,
+                            color: chip.text,
                             fontWeight: 700,
                             fontSize: 12,
-                            border: `1px solid ${color.border}`,
+                            border: `1px solid ${chip.border}`,
                           }}
                         >
                           {dept.count}
@@ -1356,147 +1635,37 @@ export default function HrDashboardPage() {
             </div>
             )}
 
-            {/* ENHANCED ACTION CARDS - Always visible */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-                gap: 16,
-              }}
-            >
-              {/* EMPLOYEES CARD */}
-              <div
-                style={{
-                  borderRadius: 14,
-                  padding: "18px",
-                  background: colors.gradient.card,
-                  border: `1px solid ${colors.border.default}`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  transition: "all 0.3s",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.4)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.2)";
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(59, 130, 246, 0.3)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <svg width="20" height="20" fill="none" stroke="#3b82f6" viewBox="0 0 24 24">
+            {/* Overview hub cards — stats-style tiles, one CTA each */}
+            <div className="overview-action-grid">
+              {/* EMPLOYEES */}
+              <div style={hub.card("employees")} {...hub.hoverProps("employees")}>
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("employees")}>Employees</div>
+                    <h3 style={hub.headline("employees")}>Workforce</h3>
+                    <div style={hub.hint("employees")}>Profiles, salaries &amp; departments</div>
+                  </div>
+                  <div style={hub.icon48("employees")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("employees")} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Employees</h3>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        color: colors.text.muted,
-                        margin: 0,
-                      }}
-                    >
-                      Manage workforce
-                    </p>
-                  </div>
                 </div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: colors.text.muted,
-                    marginBottom: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
+                <p style={hub.desc("employees")}>
                   Add, edit, and manage employee profiles. Update salaries, shifts, departments, and personal information.
                 </p>
-
-                <div style={{ display: "flex", gap: 8, flexDirection: "row", flexWrap: "nowrap", width: "100%" }}>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={openRegisterModal}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 8,
-                        border: "1px solid rgba(251, 146, 60, 0.3)",
-                        background: "linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(251, 146, 60, 0.1))",
-                        color: "#fb923c",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 5,
-                        justifyContent: "center",
-                        flex: "1 1 auto",
-                        whiteSpace: "nowrap",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "rgba(249, 115, 22, 0.3)";
-                        e.currentTarget.style.transform = "translateY(-2px)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "rgba(249, 115, 22, 0.2)";
-                        e.currentTarget.style.transform = "translateY(0)";
-                      }}
-                    >
-                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Register User
-                    </button>
-                  )}
-
+                <div style={hub.actionsCol}>
                   <button
                     type="button"
                     onClick={openEmployeesManage}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: "linear-gradient(135deg, #3b82f6, #2563eb)",
-                      color: "#ffffff",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                      boxShadow: "0 4px 12px rgba(59, 130, 246, 0.3)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      justifyContent: "center",
-                      flex: "1 1 auto",
-                      whiteSpace: "nowrap",
-                    }}
+                    style={hub.btn("employees")}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.boxShadow = "0 6px 16px rgba(59, 130, 246, 0.4)";
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 130, 246, 0.3)";
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
                     }}
                   >
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1504,529 +1673,207 @@ export default function HrDashboardPage() {
                     </svg>
                     Open Manager
                   </button>
+                </div>
+              </div>
 
+              {isAdmin && (
+                <div style={hub.card("register")} {...hub.hoverProps("register")}>
+                  <div style={hub.topRow}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={hub.kicker("register")}>Onboarding</div>
+                      <h3 style={hub.headline("register")}>New user</h3>
+                      <div style={hub.hint("register")}>Register portal account</div>
+                    </div>
+                    <div style={hub.icon48("register")} aria-hidden>
+                      <svg width="20" height="20" fill="none" stroke={hub.iconStroke("register")} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-3-4a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p style={hub.desc("register")}>
+                    Create a new user with email and role. They can sign in after you complete onboarding from the employee manager if needed.
+                  </p>
+                  <div style={hub.actionsCol}>
+                    <button
+                      type="button"
+                      onClick={openRegisterModal}
+                      style={hub.btn("register")}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.filter = "brightness(1.06)";
+                        e.currentTarget.style.transform = "translateY(-1px)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.filter = "";
+                        e.currentTarget.style.transform = "";
+                      }}
+                    >
+                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Register user
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* SHIFT MANAGEMENT */}
+              <div style={hub.card("shift")} {...hub.hoverProps("shift")}>
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("shift")}>Shifts</div>
+                    <h3 style={hub.headline("shift")}>Shift management</h3>
+                    <div style={hub.hint("shift")}>Schedules &amp; grace periods</div>
+                  </div>
+                  <div style={hub.icon48("shift")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("shift")} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <p style={hub.desc("shift")}>
+                  Create and manage shifts, configure shift times, grace periods, and assign shifts to employees with effective dates.
+                </p>
+                <div style={hub.actionsCol}>
                   <button
                     type="button"
-                    onClick={openEmployeesDirectory}
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 8,
-                      border: `1px solid ${colors.border.default}`,
-                      background: colors.background.card,
-                      color: colors.text.primary,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      justifyContent: "center",
-                      flex: "1 1 auto",
-                      whiteSpace: "nowrap",
-                    }}
+                    onClick={openShiftManagement}
+                    style={hub.btn("shift")}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.borderColor = colors.primary[500];
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.borderColor = colors.border.default;
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
                     }}
                   >
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h10" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
-                    View Directory
+                    Open Shift Management
                   </button>
                 </div>
               </div>
 
-              {/* SHIFT MANAGEMENT CARD */}
-              <div
-                style={{
-                  borderRadius: 14,
-                  padding: "18px",
-                  background: colors.gradient.card,
-                  border: `1px solid ${colors.warning}33`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  transition: "all 0.3s",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(251, 191, 36, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(251, 191, 36, 0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(251, 191, 36, 0.3)";
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      background: "linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(251, 191, 36, 0.3)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <svg width="20" height="20" fill="none" stroke="#fbbf24" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
+              {/* ATTENDANCE */}
+              <div style={hub.card("attendance")} {...hub.hoverProps("attendance")}>
+                <div style={hub.topRow}>
                   <div style={{ minWidth: 0 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Shift Management</h3>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        color: colors.text.muted,
-                        margin: 0,
-                      }}
-                    >
-                      Configure work schedules
-                    </p>
+                    <div style={hub.kicker("attendance")}>Attendance</div>
+                    <h3 style={hub.headline("attendance")}>Time &amp; punches</h3>
+                    <div style={hub.hint("attendance")}>Daily &amp; monthly views</div>
                   </div>
-                </div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: colors.text.muted,
-                    marginBottom: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Create and manage shifts, configure shift times, grace periods, and assign shifts to employees with effective dates.
-                </p>
-                <button
-                  type="button"
-                  onClick={openShiftManagement}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
-                    color: theme === 'dark' ? colors.text.primary : colors.warning[900] || '#78350f',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    boxShadow: "0 4px 12px rgba(251, 191, 36, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    width: "100%",
-                    justifyContent: "center",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(251, 191, 36, 0.4)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(251, 191, 36, 0.3)";
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                  Open Shift Management
-                </button>
-              </div>
-
-              {/* ATTENDANCE CARD */}
-              <div
-                style={{
-                  borderRadius: 14,
-                  padding: "18px",
-                  background: colors.gradient.card,
-                  border: `1px solid ${colors.success}33`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  transition: "all 0.3s",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.4)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.2)";
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      background: "linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(34, 197, 94, 0.3)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <svg width="20" height="20" fill="none" stroke="#22c55e" viewBox="0 0 24 24">
+                  <div style={hub.icon48("attendance")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("attendance")} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Attendance</h3>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        color: colors.text.muted,
-                        margin: 0,
-                      }}
-                    >
-                      Track &amp; monitor
-                    </p>
-                  </div>
                 </div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: colors.text.muted,
-                    marginBottom: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
+                <p style={hub.desc("attendance")}>
                   View daily punches and monthly summaries, including late/early flags and comprehensive reports.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setTab("attendance")}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "linear-gradient(135deg, #22c55e, #16a34a)",
-                    color: "#022c22",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    boxShadow: "0 4px 12px rgba(34, 197, 94, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    width: "100%",
-                    justifyContent: "center",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(34, 197, 94, 0.4)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(34, 197, 94, 0.3)";
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                  Go to Attendance Center
-                </button>
-              </div>
-
-              {/* LEAVE MANAGEMENT CARD */}
-              <div
-                style={{
-                  borderRadius: 14,
-                  padding: "18px",
-                  background: colors.gradient.card,
-                  border: `1px solid ${colors.border.default}`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  transition: "all 0.3s",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.4)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.2)";
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      background: "linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(16, 185, 129, 0.3)",
-                      flexShrink: 0,
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={() => setTab("attendance")}
+                    style={hub.btn("attendance")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
                     }}
                   >
-                    <span style={{ fontSize: 20 }}>🏖️</span>
-                  </div>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Go to Attendance Center
+                  </button>
+                </div>
+              </div>
+
+              {/* LEAVE MANAGEMENT */}
+              <div style={hub.card("leave")} {...hub.hoverProps("leave")}>
+                <div style={hub.topRow}>
                   <div style={{ minWidth: 0 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Leave Management</h3>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        color: colors.text.muted,
-                        margin: 0,
-                      }}
-                    >
-                      Track paid leaves
-                    </p>
+                    <div style={hub.kicker("leave")}>Leave</div>
+                    <h3 style={hub.headline("leave")}>Leave management</h3>
+                    <div style={hub.hint("leave")}>Balances &amp; policies</div>
+                  </div>
+                  <div style={hub.icon48("leave")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("leave")} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                   </div>
                 </div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: colors.text.muted,
-                    marginBottom: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  View all employees' paid leave balances, mark casual/annual leaves, and track leave usage statistics.
+                <p style={hub.desc("leave")}>
+                  View all employees&apos; paid leave balances, mark casual/annual leaves, and track leave usage statistics.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => router.push('/hr/leaves')}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "linear-gradient(135deg, #10b981, #059669)",
-                    color: "#ffffff",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    width: "100%",
-                    justifyContent: "center",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(16, 185, 129, 0.4)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.3)";
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  View All Leaves
-                </button>
-              </div>
-
-              {/* COMPLAINTS CARD */}
-              <div
-                style={{
-                  borderRadius: 14,
-                  padding: "18px",
-                  background: colors.gradient.card,
-                  border: `1px solid rgba(139, 92, 246, 0.3)`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  transition: "all 0.3s",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.3)";
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 10,
-                      background: "linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(139, 92, 246, 0.3)",
-                      flexShrink: 0,
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/hr/leaves")}
+                    style={hub.btn("leave")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
                     }}
                   >
-                    <svg width="20" height="20" fill="none" stroke="#8b5cf6" viewBox="0 0 24 24">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    View All Leaves
+                  </button>
+                </div>
+              </div>
+
+              {/* COMPLAINTS — centered span only when 5 tiles (no register card) */}
+              <div
+                className={isAdmin ? undefined : "overview-hub-card-span"}
+                style={hub.card("complaints")}
+                {...hub.hoverProps("complaints")}
+              >
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("complaints")}>Complaints</div>
+                    <h3 style={hub.headline("complaints")}>Employee feedback</h3>
+                    <div style={hub.hint("complaints")}>Respond &amp; track cases</div>
+                  </div>
+                  <div style={hub.icon48("complaints")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("complaints")} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Complaints</h3>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        color: colors.text.muted,
-                        margin: 0,
-                      }}
-                    >
-                      Employee feedback
-                    </p>
-                  </div>
                 </div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: colors.text.muted,
-                    marginBottom: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
+                <p style={hub.desc("complaints")}>
                   View and respond to employee complaints. Update status, add HR response, and manage internal notes.
                 </p>
-                <button
-                  type="button"
-                  onClick={openComplaints}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
-                    color: "#ffffff",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    boxShadow: "0 4px 12px rgba(139, 92, 246, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    width: "100%",
-                    justifyContent: "center",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(139, 92, 246, 0.4)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(139, 92, 246, 0.3)";
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Open Complaints
-                </button>
-              </div>
-
-              <div
-                style={{
-                  borderRadius: 14,
-                  padding: "18px",
-                  background: colors.gradient.card,
-                  border: "1px solid rgba(34, 211, 238, 0.35)",
-                  boxShadow: theme === "dark"
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  transition: "all 0.3s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(34, 211, 238, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(34, 211, 238, 0.55)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(34, 211, 238, 0.35)";
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        background: "linear-gradient(135deg, rgba(34, 211, 238, 0.22), rgba(34, 211, 238, 0.1))",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        border: "1px solid rgba(34, 211, 238, 0.35)",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <svg width="20" height="20" fill="none" stroke="#22d3ee" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-6 2h5a2 2 0 002-2V10a2 2 0 00-2-2H9m-4 8h.01M5 12h.01M5 8h.01" />
-                      </svg>
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: colors.text.primary }}>Live Monitoring</h3>
-                      <p style={{ fontSize: 10, color: colors.text.muted, margin: 0 }}>Real-time employee status</p>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 10, color: "#22d3ee", fontWeight: 700 }}>LIVE</span>
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={openComplaints}
+                    style={hub.btn("complaints")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Open Complaints
+                  </button>
                 </div>
-
-                <p style={{ fontSize: 11, color: colors.text.muted, marginBottom: 12, lineHeight: 1.5 }}>
-                  Open live monitoring to view active, idle, offline, and suspicious activity in one place.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={openLiveMonitoring}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "linear-gradient(135deg, #22d3ee, #06b6d4)",
-                    color: "#ecfeff",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    boxShadow: "0 4px 12px rgba(34, 211, 238, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    width: "100%",
-                    justifyContent: "center",
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-6 2h5a2 2 0 002-2V10a2 2 0 00-2-2H9m-4 8h.01M5 12h.01M5 8h.01" />
-                  </svg>
-                  Open Live Monitor
-                </button>
               </div>
 
             </div>

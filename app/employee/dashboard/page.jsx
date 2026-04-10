@@ -2398,38 +2398,6 @@ export default function EmployeeDashboardPage() {
                   )}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => router.push('/employee/productivity')}
-                style={{
-                  marginTop: 6,
-                  padding: '4px 8px',
-                  borderRadius: 6,
-                  border: `1px solid ${colors.border.default}`,
-                  background: 'transparent',
-                  color: colors.text.secondary,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 10,
-                  fontWeight: 500,
-                  transition: 'all 0.2s',
-                  alignSelf: 'flex-start',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = colors.success;
-                  e.currentTarget.style.borderColor = colors.success;
-                  e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.08)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = colors.text.secondary;
-                  e.currentTarget.style.borderColor = colors.border.default;
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                📊 Productivity
-              </button>
               {loadingEmployee && (
                 <div
                   style={{

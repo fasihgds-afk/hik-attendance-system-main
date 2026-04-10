@@ -38,10 +38,6 @@ def is_online(server_url):
 
 # ─── Offline buffer (local persistence) ──────────────────────────
 
-def _is_break_log_post(url, method):
-    return method.upper() == "POST" and "/break-log" in url
-
-
 def buffer_request(method, url, payload):
     """Save a failed API call to disk for later replay."""
     entry = {"method": method, "url": url, "payload": payload, "ts": time.time()}
@@ -63,16 +59,6 @@ def buffer_request(method, url, payload):
                 and last.get("payload") == payload
             ):
                 return
-
-        # Dedupe break starts: only one POST break-log allowed to avoid orphaned OPEN breaks.
-        if _is_break_log_post(url, method):
-            for line in lines:
-                try:
-                    prev = json.loads(line)
-                    if _is_break_log_post(prev.get("url", ""), prev.get("method", "")):
-                        return  # Already have a break start buffered
-                except Exception:
-                    pass
 
         with open(OFFLINE_BUFFER_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")

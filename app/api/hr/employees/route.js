@@ -4,11 +4,8 @@ import Employee from "../../../../models/Employee";
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
 import { requireHR } from "../../../../lib/auth/requireAuth";
 
-// OPTIMIZATION: Node.js runtime for better MongoDB connection pooling
 export const runtime = 'nodejs';
-
-// OPTIMIZATION: Caching with 60s revalidation for faster responses
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 // OPTIMIZATION: Minimal field selection for list views (excludes heavy fields like profileImageUrl, cnic)
 // Removed: profileImageUrl (large), cnic (not needed for list), phoneNumber (not needed for stats)

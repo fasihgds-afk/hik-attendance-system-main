@@ -57,23 +57,25 @@ export default withAuth(
 
     // -------------- EMPLOYEE AREA --------------
     if (pathname.startsWith('/employee')) {
-      // 1) Not logged in -> employee login
       if (!token) {
         url.pathname = '/login';
         url.searchParams.set('role', 'employee');
         return NextResponse.redirect(url);
       }
 
-      // 2) OPTIONAL strict employee role check
-      // If you ONLY want EMPLOYEE role here, uncomment this block:
-      //
-      // if (token.role && token.role !== 'EMPLOYEE') {
-      //   url.pathname = '/';
-      //   url.searchParams.delete('role');
-      //   return NextResponse.redirect(url);
-      // }
+      // HR/ADMIN must use the HR console, not the employee portal
+      if (token.role === 'HR' || token.role === 'ADMIN') {
+        url.pathname = '/hr/employees';
+        url.searchParams.delete('role');
+        return NextResponse.redirect(url);
+      }
 
-      // user is logged in -> allow
+      if (token.role !== 'EMPLOYEE') {
+        url.pathname = '/login';
+        url.searchParams.set('role', 'employee');
+        return NextResponse.redirect(url);
+      }
+
       return NextResponse.next();
     }
 

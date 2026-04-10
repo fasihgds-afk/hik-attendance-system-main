@@ -450,33 +450,41 @@ export async function GET(req) {
       };
     }
 
-        // OPTIMIZATION: Run queries in parallel for faster response
-        // MongoDB will auto-select best index
-        const [shiftCount, employees, departmentDocs] = await Promise.all([
-          Shift.countDocuments({ isActive: true })
-            .maxTimeMS(1500), // Reduced timeout
-          Employee.find()
-            .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
-            .lean()
-            .maxTimeMS(2500), // Reduced timeout
-          Department.find().select('name saturdayPolicy').lean().maxTimeMS(1500),
-        ]);
-        
-        const useDynamicShifts = shiftCount > 0;
-        const departmentPolicyMap = new Map();
-        (departmentDocs || []).forEach((d) => {
-          if (d.name != null) departmentPolicyMap.set(String(d.name).trim().toLowerCase(), d.saturdayPolicy || 'alternate');
-        });
+    const isEmployeeViewer = user.role === 'EMPLOYEE';
+    const myEmpCode = isEmployeeViewer ? String(user.empCode || '').trim() : '';
+    if (isEmployeeViewer && !myEmpCode) {
+      return errorResponse('Unauthorized', 401);
+    }
 
     const monthStartDate = `${monthPrefix}-01`;
     const monthEndDate = `${monthPrefix}-${String(daysInMonth).padStart(2, '0')}`;
 
-    // OPTIMIZATION: MongoDB will auto-select date index for range query
-    const shiftDocs = await ShiftAttendance.find(
-      {
-        date: { $gte: monthStartDate, $lte: monthEndDate },
-      }
-    )
+    const employeeMongoFilter = isEmployeeViewer ? { empCode: myEmpCode } : {};
+
+    // OPTIMIZATION: Run queries in parallel; employees scoped to one row when viewer is EMPLOYEE
+    const [shiftCount, employees, departmentDocs] = await Promise.all([
+      Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
+      Employee.find(employeeMongoFilter)
+        .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
+        .lean()
+        .maxTimeMS(isEmployeeViewer ? 1500 : 2500),
+      Department.find().select('name saturdayPolicy').lean().maxTimeMS(1500),
+    ]);
+
+    const useDynamicShifts = shiftCount > 0;
+    const departmentPolicyMap = new Map();
+    (departmentDocs || []).forEach((d) => {
+      if (d.name != null) departmentPolicyMap.set(String(d.name).trim().toLowerCase(), d.saturdayPolicy || 'alternate');
+    });
+
+    const shiftAttendanceFilter = {
+      date: { $gte: monthStartDate, $lte: monthEndDate },
+    };
+    if (isEmployeeViewer) {
+      shiftAttendanceFilter.empCode = myEmpCode;
+    }
+
+    const shiftDocs = await ShiftAttendance.find(shiftAttendanceFilter)
       .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited')
       .lean()
       .maxTimeMS(4000); // Reduced timeout for faster response
@@ -1289,7 +1297,13 @@ export async function GET(req) {
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     return response;
   } catch (err) {
-    if (err?.code === 'UNAUTHORIZED_HR' || err?.code === 'UNAUTHORIZED') return errorResponse('Unauthorized', 401);
+    if (
+      err?.code === 'UNAUTHORIZED_HR' ||
+      err?.code === 'UNAUTHORIZED' ||
+      err?.code === 'UNAUTHORIZED_EMPLOYEE'
+    ) {
+      return errorResponse('Unauthorized', 401);
+    }
     return errorResponseFromException(err, req);
   }
 }

@@ -8,6 +8,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
     await requireHR();
     await connectDB();
     
@@ -35,8 +38,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+        error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
       },
       { status: 500 }
     );

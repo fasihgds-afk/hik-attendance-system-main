@@ -5,7 +5,7 @@ import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS
 import { requireHR } from '../../../../../lib/auth/requireAuth';
 
 export const runtime = 'nodejs';
-export const revalidate = 60;
+export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/hr/employees/dept-stats
@@ -14,6 +14,7 @@ export const revalidate = 60;
  */
 export async function GET(req) {
   try {
+    await requireHR();
     await connectDB();
 
     const departmentCounts = await Employee.aggregate(
@@ -34,7 +35,6 @@ export async function GET(req) {
     );
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
-    console.error('[dept-stats] Error:', err.message);
     return errorResponseFromException(err, req);
   }
 }

@@ -19,7 +19,7 @@ export const authOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
         empCode: { label: "Emp Code", type: "text" },
-        cnic: { label: "CNIC", type: "text" }, // kept here but NOT used now
+        cnic: { label: "CNIC", type: "text" },
       },
       async authorize(credentials) {
         const startTime = Date.now();
@@ -28,7 +28,7 @@ export const authOptions = {
         // Fail fast for malformed requests before DB work.
         if (!mode) return null;
         if (mode === 'HR' && (!email || !password)) return null;
-        if (mode === 'EMPLOYEE' && !empCode) return null;
+        if (mode === 'EMPLOYEE' && !String(empCode || '').trim()) return null;
         if (mode !== 'HR' && mode !== 'EMPLOYEE') return null;
 
         try {
@@ -79,19 +79,16 @@ export const authOptions = {
           }
         }
 
-        // ---------- EMPLOYEE LOGIN (empCode only) ----------
+        // ---------- EMPLOYEE LOGIN (employee code only → JWT session) ----------
         if (mode === "EMPLOYEE") {
           try {
-            // Optimize: Use lean() and select only needed fields
-            // empCode is indexed, so this should be fast
-            // Remove optional User query to speed up login - we can get user later if needed
-            const employee = await Employee.findOne({ empCode })
-              .select('_id name email department designation shift allowWebClockIn')
+            const code = String(empCode).trim();
+            const employee = await Employee.findOne({ empCode: code })
+              .select("_id name email department designation shift allowWebClockIn")
               .lean()
-              .maxTimeMS(2000); // Reduced to 2 seconds
-              
+              .maxTimeMS(2000);
+
             if (!employee) {
-              // NextAuth Employee not found
               return null;
             }
 
@@ -102,11 +99,10 @@ export const authOptions = {
 
             return {
               id: employee._id.toString(),
-              name: employee.name || empCode,
+              name: employee.name || code,
               email: employee.email || "",
               role: "EMPLOYEE",
-              empCode,
-              // extra profile fields for dashboard
+              empCode: code,
               department: employee.department || "",
               designation: employee.designation || "",
               shift: employee.shift || "",

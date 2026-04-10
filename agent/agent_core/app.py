@@ -24,11 +24,10 @@ from .config import log, safe_print
 from .state import AgentState
 from .tracker import ActivityTracker
 from .listeners import InputListeners
-from .popup import IdlePopup
 from .platform_win import (
     is_system_locked, get_system_idle_seconds, detect_autoclicker_processes,
 )
-from .api import send_heartbeat, send_break_start, send_break_end, send_break_reason
+from .api import send_heartbeat
 from . import http_client
 from . import network
 
@@ -54,8 +53,6 @@ class AgentApp:
         self._input_queue = queue.Queue()
         self._listeners = InputListeners(self._input_queue)
         self._root = None
-        self._popup = None
-        self._break_end_in_flight = False
         self._autoclicker_detected = []   # list of detected process names
         self._autoclicker_warned = False   # True once warning popup has been shown
         self._cheat_warning_top = None     # Toplevel for the warning popup
@@ -65,7 +62,6 @@ class AgentApp:
         self._root = tk.Tk()
         self._root.withdraw()
 
-        self._popup = IdlePopup(self._root, self._config, self._on_popup_submitted)
         self._listeners.start()
 
         # Schedule recurring tasks
@@ -125,18 +121,9 @@ class AgentApp:
         except Exception as e:
             log.error("_poll_input error: %s", e)
 
-        interval = 500 if self.state.popup_visible else 200
-        self._root.after(interval, self._poll_input)
+        self._root.after(200, self._poll_input)
 
     def _drain_queue(self):
-        if self.state.popup_visible:
-            try:
-                while True:
-                    self._input_queue.get_nowait()
-            except queue.Empty:
-                pass
-            return
-
         had_input = False
         batch = 0
         while batch < 200:
@@ -160,11 +147,6 @@ class AgentApp:
         if had_input and self._is_within_shift():
             self.state.record_activity()
 
-            if self.state.awaiting_first_activity:
-                log.info("Real activity detected after popup — ending break")
-                self.state.on_user_active()
-                self._send_break_end_async()
-
     # ─── Tick: idle / lock / heartbeat (every 3s) ────────────
 
     def _tick(self):
@@ -185,7 +167,7 @@ class AgentApp:
         # pynput can't see input from elevated (admin) windows.
         # GetLastInputInfo reports OS-level idle regardless of elevation.
         sys_idle = get_system_idle_seconds()
-        if sys_idle >= 0 and not self.state.popup_visible:
+        if sys_idle >= 0:
             if sys_idle < self.state.idle_seconds - 5:
                 self.state.record_activity()
 
@@ -213,25 +195,7 @@ class AgentApp:
 
         # Log approaching idle (once, at ~170s)
         if 170 <= idle_secs < 173 and current == "ACTIVE":
-            log.info("Approaching idle: %.0fs (threshold=%ds, can_popup=%s)",
-                     idle_secs, IDLE_THRESHOLD_SEC, self.state.can_show_popup())
-
-        # ── Unlock → immediate popup (real locks only) ──
-        if (self.state.was_locked
-                and not self.state.system_locked
-                and not self.state.lock_popup_handled):
-            self.state.lock_popup_handled = True
-            log.info("Lock popup check: can_show=%s", self.state.can_show_popup())
-            if self.state.can_show_popup():
-                self._show_popup()
-
-        # ── Idle timeout → popup ─────────────────
-        if (current == "IDLE"
-                and not self.state.system_locked
-                and idle_secs >= IDLE_THRESHOLD_SEC
-                and self.state.can_show_popup()):
-            log.info("Idle threshold reached (%.0fs) — showing popup", idle_secs)
-            self._show_popup()
+            log.info("Approaching idle: %.0fs (threshold=%ds)", idle_secs, IDLE_THRESHOLD_SEC)
 
         # ── Heartbeat ────────────────────────────
         interval = self._config.get("heartbeatIntervalSec", HEARTBEAT_INTERVAL_SEC)
@@ -290,8 +254,7 @@ class AgentApp:
             online_now = network.is_online(server_url)
             if not online_now:
                 self.state.mark_offline()
-                log.warning("Network OFFLINE — starting offline break tracking")
-                self._start_offline_break()
+                log.warning("Network OFFLINE")
             else:
                 self.state.consecutive_hb_failures = 0
 
@@ -299,8 +262,14 @@ class AgentApp:
         if not self.state.online:
             online_now = network.is_online(server_url)
             if online_now:
-                self._on_reconnect()
-        # When online: flush any buffered requests (e.g. break form submitted during brief outage)
+                log.info("Network ONLINE — reconnected")
+                self.state.mark_online()
+                if network.has_buffered_requests():
+                    def flush():
+                        time.sleep(1)
+                        network.flush_buffer()
+                    threading.Thread(target=flush, daemon=True).start()
+        # When online: flush any buffered requests
         elif network.has_buffered_requests():
             last = getattr(self, "_last_buffered_flush", 0)
             if time.time() - last >= 60:
@@ -309,45 +278,6 @@ class AgentApp:
                     time.sleep(1)
                     network.flush_buffer()
                 threading.Thread(target=flush, daemon=True).start()
-
-    def _start_offline_break(self):
-        """Record internet disconnect as break start."""
-        if self.state.offline_break_started:
-            return
-        self.state.offline_break_started = True
-
-        start_time = self.state.offline_since
-        log.info("Auto-creating break for network disconnect at %.0f", start_time)
-        threading.Thread(
-            target=send_break_start,
-            args=(self._config, start_time),
-            daemon=True,
-        ).start()
-
-    def _on_reconnect(self):
-        """Handle internet reconnection: flush buffer first, then close any remaining open break."""
-        log.info("Network ONLINE — reconnected")
-        had_offline_break = self.state.offline_break_started
-
-        self.state.mark_online()
-
-        def reconnect_flow():
-            time.sleep(2)  # Brief delay to let the connection stabilize
-            # 1. Flush buffered requests first (user's break start/reason/end)
-            if network.has_buffered_requests():
-                network.flush_buffer()
-            # 2. Then close any remaining open break from offline (safety net)
-            if had_offline_break:
-                time.sleep(1)  # Let flush settle
-                log.info("Ending offline disconnect break + updating reason (if still open)")
-                send_break_reason(
-                    self._config,
-                    "General",
-                    "Internet disconnection (auto-detected)",
-                )
-                send_break_end(self._config)
-
-        threading.Thread(target=reconnect_flow, daemon=True).start()
 
     # ─── Dynamic shift refresh (every 10 min) ───────────────────
 
@@ -476,47 +406,6 @@ class AgentApp:
             log.error("_save_alive error: %s", e)
         self._root.after(ALIVE_SAVE_SEC * 1000, self._save_alive)
 
-    # ─── Popup lifecycle ─────────────────────────────────────
-
-    def _show_popup(self):
-        """Show the idle popup and open a break in DB. Main thread only."""
-        # Use lock_start_time when triggered by lock so break duration is correct
-        start_time = self.state.lock_start_time if self.state.was_locked else time.time()
-        self.state.on_popup_shown(break_start_time=start_time)
-        self._popup.show()
-
-        # When offline_break_started, we already have a break start buffered — don't send another
-        if not self.state.offline_break_started:
-            start_time = self.state.break_start_time
-            threading.Thread(
-                target=send_break_start,
-                args=(self._config, start_time),
-                daemon=True,
-            ).start()
-            log.info("Idle popup shown, break_start sent (episode)")
-        else:
-            log.info("Idle popup shown (offline break already buffered — reason form only)")
-
-    def _on_popup_submitted(self, reason, custom_reason):
-        """Callback from IdlePopup after successful submit. Main thread."""
-        self.state.on_popup_submitted()
-        log.info("Popup submitted: %s — %s", reason, custom_reason)
-
-    def _send_break_end_async(self):
-        if self._break_end_in_flight:
-            return
-        self._break_end_in_flight = True
-
-        def do_call():
-            try:
-                send_break_end(self._config)
-            except Exception as e:
-                log.warning("Break end thread error: %s", e)
-            finally:
-                self._break_end_in_flight = False
-
-        threading.Thread(target=do_call, daemon=True).start()
-
     # ─── Listener watchdog (every 30s) ───────────────────────
 
     def _check_listeners(self):
@@ -532,9 +421,8 @@ class AgentApp:
 def recover_downtime(config, shift_info=None):
     """
     Check for a power-off/restart gap since last run.
-    If the gap is > DOWNTIME_MIN_GAP_SEC, create a completed break record
-    covering only the portion of downtime that falls inside the shift+grace
-    window.  Time outside the shift is silently ignored.
+    If the gap is significant, clip it to the shift window and persist
+    alive state for future analytics/reporting hooks.
     """
     emp_code = config["empCode"]
     last_alive = network.get_last_alive_ts(emp_code)
@@ -549,13 +437,9 @@ def recover_downtime(config, shift_info=None):
         network.save_alive_ts(emp_code)
         return
 
-    log.warning(
-        "Detected %.0fs power-off gap (%.1f min) — creating recovery break",
-        gap, gap / 60,
-    )
+    log.warning("Detected %.0fs power-off gap (%.1f min)", gap, gap / 60)
 
     # Clip recovery to shift+grace window if shift info is available.
-    # This prevents recording 17+ hour "breaks" that span past shift end.
     effective_start = last_alive
     if shift_info:
         try:
@@ -606,7 +490,7 @@ def recover_downtime(config, shift_info=None):
                 # Skip entirely if last_alive was already past grace end
                 if last_alive >= grace_end_ts:
                     log.info(
-                        "Power-off at %.0f was after shift grace end (%.0f) — no recovery break needed",
+                        "Power-off at %.0f was after shift grace end (%.0f) — no recovery action needed",
                         last_alive, grace_end_ts,
                     )
                     network.save_alive_ts(emp_code)
@@ -623,15 +507,5 @@ def recover_downtime(config, shift_info=None):
         except Exception as e:
             log.warning("Shift-clip calculation failed (using raw gap): %s", e)
 
-    try:
-        ok = send_break_start(config, effective_start)
-        if ok:
-            send_break_reason(config, "General", "System Power Off / Restart (auto-detected)")
-            send_break_end(config)
-            log.info("Downtime recovery break recorded successfully")
-        else:
-            log.warning("Downtime recovery break-start failed — will retry via buffer")
-    except Exception as e:
-        log.error("Downtime recovery error: %s", e)
-
+    _ = effective_start  # reserved for future downtime analytics hooks
     network.save_alive_ts(emp_code)

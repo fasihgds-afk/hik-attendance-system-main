@@ -5,17 +5,21 @@ import Employee from '../../../../models/Employee';
 import bcrypt from 'bcryptjs';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError, UnauthorizedError } from '../../../../lib/errors/errorHandler';
+import { rateLimiters } from '../../../../lib/middleware/rateLimit';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
+  const rateLimitResponse = await rateLimiters.auth(req);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     await connectDB();
 
     const body = await req.json();
-    const { role, email, password, empCode, cnic } = body;
+    const { role, email, password, empCode } = body;
 
     if (!role) {
       throw new ValidationError('role is required');
@@ -48,40 +52,18 @@ export async function POST(req) {
       );
     }
 
-    // Employee login
     if (role === 'EMPLOYEE') {
-      if (!empCode || !cnic) {
-        throw new ValidationError('empCode and cnic are required for employee login');
+      if (!empCode || !String(empCode).trim()) {
+        throw new ValidationError('empCode is required for employee login');
       }
 
-      // OPTIMIZATION: Run Employee and User queries in parallel for faster login
-      const [employee, existingUser] = await Promise.all([
-        Employee.findOne({ empCode, cnic })
-          .select('empCode name')
-          .lean()
-          .maxTimeMS(1500), // Reduced timeout
-        User.findOne({
-          role: 'EMPLOYEE',
-          employeeEmpCode: empCode,
-        })
-          .select('role employeeEmpCode')
-          .lean()
-          .maxTimeMS(1500) // Reduced timeout
-      ]);
+      const employee = await Employee.findOne({ empCode: String(empCode).trim() })
+        .select('empCode name')
+        .lean()
+        .maxTimeMS(1500);
 
       if (!employee) {
-        throw new UnauthorizedError('Employee not found for given code + CNIC');
-      }
-
-      // Optionally auto-create a User row once employee is verified
-      let user = existingUser;
-      if (!user) {
-        user = await User.create({
-          email: `${empCode}@auto.gds.local`,
-          passwordHash: await bcrypt.hash(cnic, 10),
-          role: 'EMPLOYEE',
-          employeeEmpCode: empCode,
-        });
+        throw new UnauthorizedError('Employee not found');
       }
 
       return successResponse(

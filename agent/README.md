@@ -1,6 +1,6 @@
 # GDS Attendance Agent
 
-Windows desktop agent for employee activity monitoring and break tracking. Connects to the GDS Attendance Portal at **https://ams.globaldigitsolutions.com**.
+Windows desktop agent for employee activity monitoring. Connects to the GDS Attendance Portal at **https://ams.globaldigitsolutions.com**.
 
 ## Setup
 
@@ -31,7 +31,7 @@ Output: `dist\whealthsvc.exe`
 ## Features
 
 - Heartbeat every 3 minutes
-- Idle detection (3 min) → break reason form
+- Idle detection (3 min)
 - Auto-clicker / mouse-jiggler detection
 - Lock screen detection
 - Offline buffering with auto-sync

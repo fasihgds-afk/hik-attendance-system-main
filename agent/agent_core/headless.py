@@ -1,7 +1,7 @@
 """
 Headless agent — runs without Tkinter when Tcl/Tk fails (e.g. PyInstaller on short usernames).
 
-Sends heartbeats, tracks activity, works offline. No popup (no break form).
+Sends heartbeats, tracks activity, and works offline.
 Frontend will show Active/Idle/Offline based on heartbeats.
 """
 
