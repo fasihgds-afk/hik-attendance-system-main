@@ -21,7 +21,11 @@ export default function DepartmentPoliciesPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ type: '', text: '' });
   const [modalOpen, setModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', saturdayPolicy: 'alternate' });
+  const [formData, setFormData] = useState({
+    name: '',
+    saturdayPolicy: 'alternate',
+    fifthSaturdayPolicy: 'working_all',
+  });
   const [saving, setSaving] = useState(false);
 
   function showToast(type, text) {
@@ -59,7 +63,11 @@ export default function DepartmentPoliciesPage() {
   };
 
   function openAddModal() {
-    setFormData({ name: '', saturdayPolicy: 'alternate' });
+    setFormData({
+      name: '',
+      saturdayPolicy: 'alternate',
+      fifthSaturdayPolicy: 'working_all',
+    });
     setModalOpen(true);
   }
 
@@ -79,7 +87,11 @@ export default function DepartmentPoliciesPage() {
       const res = await fetch('/api/hr/departments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, saturdayPolicy: formData.saturdayPolicy || 'alternate' }),
+        body: JSON.stringify({
+          name,
+          saturdayPolicy: formData.saturdayPolicy || 'alternate',
+          fifthSaturdayPolicy: formData.fifthSaturdayPolicy || 'working_all',
+        }),
       });
       const response = await res.json();
       if (!res.ok) throw new Error(response.error || response.message || 'Failed to create department');
@@ -98,7 +110,11 @@ export default function DepartmentPoliciesPage() {
       const res = await fetch('/api/hr/departments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: dept.name, saturdayPolicy: newPolicy }),
+        body: JSON.stringify({
+          name: dept.name,
+          saturdayPolicy: newPolicy,
+          fifthSaturdayPolicy: dept.fifthSaturdayPolicy || 'working_all',
+        }),
       });
       const response = await res.json();
       if (!res.ok) throw new Error(response.error || response.message || 'Failed to update');
@@ -109,7 +125,32 @@ export default function DepartmentPoliciesPage() {
     }
   }
 
+  async function handleFifthPolicyChange(dept, newFifthPolicy) {
+    try {
+      const res = await fetch('/api/hr/departments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dept.name,
+          saturdayPolicy: dept.saturdayPolicy || 'alternate',
+          fifthSaturdayPolicy: newFifthPolicy,
+        }),
+      });
+      const response = await res.json();
+      if (!res.ok) throw new Error(response.error || response.message || 'Failed to update');
+      showToast('success', `"${dept.name}" 5th Saturday policy updated`);
+      await loadDepartments();
+    } catch (err) {
+      showToast('error', err.message || 'Failed to update');
+    }
+  }
+
   const policyLabel = (p) => (p === 'all_off' ? 'All Saturdays Off' : 'Alternate (1st/3rd vs 2nd/4th)');
+  const fifthPolicyLabel = (p) => {
+    if (p === 'off_all') return 'Off for all';
+    if (p === 'group_alternate') return 'By group (A off odd, B off even)';
+    return 'Working for all';
+  };
 
   // Portal-like colors: full-width layout, dark blue background, gradient header
   const pageBg = theme === 'dark' ? '#0a0a23' : (colors.gradient?.overlay ?? colors.background?.default);
@@ -144,7 +185,7 @@ export default function DepartmentPoliciesPage() {
               -webkit-overflow-scrolling: touch;
             }
             .dept-table {
-              min-width: 560px;
+              min-width: 860px;
             }
             .dept-modal {
               padding: 16px !important;
@@ -459,7 +500,7 @@ export default function DepartmentPoliciesPage() {
           color: theme === 'dark' ? '#cbd5e1' : colors.text?.secondary,
           lineHeight: 1.6,
         }}>
-          Assign a <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>Saturday policy</strong> per department. Employees get their department from the employee form; use the same name here. <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>All Saturdays Off</strong> = every Saturday is off. <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>Alternate</strong> = 1st & 3rd Saturday off for Group A, 2nd & 4th for Group B (set Group on employee).
+          Assign a <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>Saturday policy</strong> per department. Employees get their department from the employee form; use the same name here. <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>All Saturdays Off</strong> = every Saturday is off. <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>Alternate</strong> = Group A off on 1st/3rd, Group B off on 2nd/4th. Use the <strong style={{ color: theme === 'dark' ? '#f1f5f9' : 'inherit' }}>5th Saturday policy</strong> to decide what happens when a month has 5 Saturdays.
         </p>
 
         {loading ? (
@@ -483,7 +524,7 @@ export default function DepartmentPoliciesPage() {
           >
             <table
               className="dept-table"
-              style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}
+              style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}
             >
               <thead>
                 <tr style={{ backgroundColor: tableHeaderBg(colors, theme === 'dark'), borderBottom: `2px solid ${tableBorder(colors, theme === 'dark')}` }}>
@@ -492,6 +533,9 @@ export default function DepartmentPoliciesPage() {
                   </th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: tableHeaderColor(colors, theme === 'dark') }}>
                     Saturday Policy
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: tableHeaderColor(colors, theme === 'dark') }}>
+                    5th Saturday
                   </th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: tableHeaderColor(colors, theme === 'dark') }}>
                     Action
@@ -520,24 +564,53 @@ export default function DepartmentPoliciesPage() {
                     <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, theme === 'dark') }}>
                       {policyLabel(d.saturdayPolicy)}
                     </td>
+                    <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, theme === 'dark') }}>
+                      {d.saturdayPolicy === 'all_off' ? (
+                        <span style={{ opacity: 0.7 }}>N/A (all Saturdays off)</span>
+                      ) : (
+                        fifthPolicyLabel(d.fifthSaturdayPolicy)
+                      )}
+                    </td>
                     <td style={{ padding: '12px 16px' }}>
-                      <select
-                        value={d.saturdayPolicy || 'alternate'}
-                        onChange={(e) => handlePolicyChange(d, e.target.value)}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 8,
-                          border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`,
-                          background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
-                          color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
-                          fontSize: 13,
-                          cursor: 'pointer',
-                          outline: 'none',
-                        }}
-                      >
-                        <option value="alternate">Alternate (1st/3rd vs 2nd/4th)</option>
-                        <option value="all_off">All Saturdays Off</option>
-                      </select>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <select
+                          value={d.saturdayPolicy || 'alternate'}
+                          onChange={(e) => handlePolicyChange(d, e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`,
+                            background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
+                            color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
+                            fontSize: 13,
+                            cursor: 'pointer',
+                            outline: 'none',
+                          }}
+                        >
+                          <option value="alternate">Alternate (1st/3rd vs 2nd/4th)</option>
+                          <option value="all_off">All Saturdays Off</option>
+                        </select>
+                        <select
+                          value={d.fifthSaturdayPolicy || 'working_all'}
+                          onChange={(e) => handleFifthPolicyChange(d, e.target.value)}
+                          disabled={d.saturdayPolicy === 'all_off'}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`,
+                            background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
+                            color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
+                            fontSize: 13,
+                            cursor: d.saturdayPolicy === 'all_off' ? 'not-allowed' : 'pointer',
+                            outline: 'none',
+                            opacity: d.saturdayPolicy === 'all_off' ? 0.6 : 1,
+                          }}
+                        >
+                          <option value="working_all">5th Saturday: Working for all</option>
+                          <option value="off_all">5th Saturday: Off for all</option>
+                          <option value="group_alternate">5th Saturday: By group</option>
+                        </select>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -661,6 +734,45 @@ export default function DepartmentPoliciesPage() {
                     <option value="alternate">Alternate (1st/3rd vs 2nd/4th by employee group)</option>
                     <option value="all_off">All Saturdays Off</option>
                   </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.text?.secondary,
+                      marginBottom: 6,
+                      display: 'block',
+                    }}
+                  >
+                    5th Saturday policy
+                  </label>
+                  <select
+                    value={formData.fifthSaturdayPolicy}
+                    onChange={(e) => setFormData((p) => ({ ...p, fifthSaturdayPolicy: e.target.value }))}
+                    disabled={formData.saturdayPolicy === 'all_off'}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border?.input ?? colors.border?.default}`,
+                      fontSize: 14,
+                      width: '100%',
+                      outline: 'none',
+                      backgroundColor: colors.background?.input ?? colors.background?.default,
+                      color: colors.text?.primary,
+                      cursor: formData.saturdayPolicy === 'all_off' ? 'not-allowed' : 'pointer',
+                      opacity: formData.saturdayPolicy === 'all_off' ? 0.6 : 1,
+                    }}
+                  >
+                    <option value="working_all">Working for all</option>
+                    <option value="off_all">Off for all</option>
+                    <option value="group_alternate">By group (A off odd, B off even)</option>
+                  </select>
+                  {formData.saturdayPolicy === 'all_off' && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: colors.text?.muted ?? colors.text?.secondary }}>
+                      Not used when Saturday policy is set to All Saturdays Off.
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>

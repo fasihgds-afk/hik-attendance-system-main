@@ -468,13 +468,17 @@ export async function GET(req) {
         .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
         .lean()
         .maxTimeMS(isEmployeeViewer ? 1500 : 2500),
-      Department.find().select('name saturdayPolicy').lean().maxTimeMS(1500),
+      Department.find().select('name saturdayPolicy fifthSaturdayPolicy').lean().maxTimeMS(1500),
     ]);
 
     const useDynamicShifts = shiftCount > 0;
     const departmentPolicyMap = new Map();
     (departmentDocs || []).forEach((d) => {
-      if (d.name != null) departmentPolicyMap.set(String(d.name).trim().toLowerCase(), d.saturdayPolicy || 'alternate');
+      if (d.name == null) return;
+      departmentPolicyMap.set(String(d.name).trim().toLowerCase(), {
+        saturdayPolicy: d.saturdayPolicy || 'alternate',
+        fifthSaturdayPolicy: d.fifthSaturdayPolicy || 'working_all',
+      });
     });
 
     const shiftAttendanceFilter = {
@@ -591,8 +595,8 @@ export async function GET(req) {
 
       // Auto-detect Saturday group from actual attendance pattern
       // Uses both punches AND no-punches to determine which group the employee is in
-      // Group A: works 1st & 3rd (odd), off 2nd & 4th (even)
-      // Group B: off 1st & 3rd (odd), works 2nd & 4th (even)
+      // Group A: off 1st & 3rd (odd), works 2nd & 4th (even)
+      // Group B: off 2nd & 4th (even), works 1st & 3rd (odd)
       {
         let oddPunches = 0, evenPunches = 0;
         let oddNoPunch = 0, evenNoPunch = 0;
@@ -611,8 +615,9 @@ export async function GET(req) {
           }
         }
         // Score: punches on your working Saturdays + no-punches on your off Saturdays
-        const scoreA = oddPunches + evenNoPunch;
-        const scoreB = evenPunches + oddNoPunch;
+        // A works even Saturdays, B works odd Saturdays
+        const scoreA = evenPunches + oddNoPunch;
+        const scoreB = oddPunches + evenNoPunch;
         if (scoreA > scoreB) emp.saturdayGroup = 'A';
         else if (scoreB > scoreA) emp.saturdayGroup = 'B';
       }
@@ -1046,7 +1051,11 @@ export async function GET(req) {
         
         // Apply absent deduction using database rules
         // IMPORTANT: Don't count if it's already a leave (Unpaid Leave, Sick Leave, Leave Without Inform, or extraordinary)
-        if (isAbsentDay && !isWeekendOff && status !== 'Un Paid Leave' && status !== 'Sick Leave' && status !== 'Leave Without Inform' && !EXTRAORDINARY_LEAVE_STATUSES.includes(status)) {
+        const hrMarkedAbsentOnWeekendOff =
+          wasManuallyEdited &&
+          isWeekendOff &&
+          status === 'Absent';
+        if (isAbsentDay && (!isWeekendOff || hrMarkedAbsentOnWeekendOff) && status !== 'Un Paid Leave' && status !== 'Sick Leave' && status !== 'Leave Without Inform' && !EXTRAORDINARY_LEAVE_STATUSES.includes(status)) {
           const missingPunchDays = getMissingPunchDeductionDays(bothMissing, partialPunch, violationRules.absentConfig);
           absentDays += missingPunchDays;
         }
@@ -1351,7 +1360,7 @@ export async function POST(req) {
         .select('empCode name shift shiftId department designation monthlySalary saturdayGroup')
         .lean()
         .maxTimeMS(2000),
-      Department.find().select('name saturdayPolicy').lean().maxTimeMS(1500),
+      Department.find().select('name saturdayPolicy fifthSaturdayPolicy').lean().maxTimeMS(1500),
     ]);
     
     const allShiftsMap = new Map();
@@ -1361,7 +1370,11 @@ export async function POST(req) {
     });
     const departmentPolicyMap = new Map();
     (departmentDocs || []).forEach((d) => {
-      if (d.name != null) departmentPolicyMap.set(String(d.name).trim().toLowerCase(), d.saturdayPolicy || 'alternate');
+      if (d.name == null) return;
+      departmentPolicyMap.set(String(d.name).trim().toLowerCase(), {
+        saturdayPolicy: d.saturdayPolicy || 'alternate',
+        fifthSaturdayPolicy: d.fifthSaturdayPolicy || 'working_all',
+      });
     });
     if (!emp) {
       throw new NotFoundError(`Employee ${empCode}`);
