@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/theme/ThemeContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { resolveShiftGracePeriods } from '@/lib/shift/gracePeriods';
 
 export default function ShiftManagementPage() {
   const router = useRouter();
@@ -50,7 +51,13 @@ export default function ShiftManagementPage() {
     startTime: '',
     endTime: '',
     crossesMidnight: false,
-    gracePeriod: 15,
+    checkInGracePeriod: 20,
+    checkOutGracePeriod: 20,
+    /** YYYY-MM-DD — new grace applies from this company date (set with shift save) */
+    graceEffectiveFrom: '',
+    /** Optional: grace for calendar days before graceEffectiveFrom (both required if set) */
+    priorCheckInGracePeriod: '',
+    priorCheckOutGracePeriod: '',
     description: '',
     isActive: true,
   });
@@ -97,39 +104,79 @@ export default function ShiftManagementPage() {
     loadShifts();
   }, []);
 
-  function openNewModal() {
+  async function openNewModal() {
     setEditingShift(null);
+    let todayYmd = new Date().toISOString().slice(0, 10);
+    try {
+      const r = await fetch('/api/hr/company-today', { cache: 'no-store' });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.todayYmd) todayYmd = d.todayYmd;
+      }
+    } catch {
+      // keep ISO fallback
+    }
     setFormData({
       name: '',
       code: '',
       startTime: '',
       endTime: '',
       crossesMidnight: false,
-      gracePeriod: 15,
+      checkInGracePeriod: 20,
+      checkOutGracePeriod: 20,
+      graceEffectiveFrom: todayYmd,
+      priorCheckInGracePeriod: '',
+      priorCheckOutGracePeriod: '',
       description: '',
       isActive: true,
     });
     setModalOpen(true);
   }
 
-  function openEditModal(shift) {
+  async function openEditModal(shift) {
     // Ensure we have a valid ID
     if (!shift._id && !shift.id) {
       showToast('error', 'Invalid shift: missing ID');
       return;
     }
-    
+
+    let todayYmd = new Date().toISOString().slice(0, 10);
+    try {
+      const r = await fetch('/api/hr/company-today', { cache: 'no-store' });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.todayYmd) todayYmd = d.todayYmd;
+      }
+    } catch {
+      // ignore
+    }
+
     setEditingShift({
       ...shift,
       _id: shift._id || shift.id, // Support both _id and id
     });
+    const g = resolveShiftGracePeriods(shift);
+    const eff =
+      typeof shift.graceEffectiveFrom === 'string' && shift.graceEffectiveFrom.length >= 10
+        ? shift.graceEffectiveFrom.slice(0, 10)
+        : todayYmd;
     setFormData({
       name: shift.name || '',
       code: shift.code || '',
       startTime: shift.startTime || '',
       endTime: shift.endTime || '',
       crossesMidnight: shift.crossesMidnight || false,
-      gracePeriod: shift.gracePeriod || 15,
+      checkInGracePeriod: g.checkIn,
+      checkOutGracePeriod: g.checkOut,
+      graceEffectiveFrom: eff,
+      priorCheckInGracePeriod:
+        shift.priorCheckInGracePeriod != null && shift.priorCheckInGracePeriod !== ''
+          ? Number(shift.priorCheckInGracePeriod)
+          : '',
+      priorCheckOutGracePeriod:
+        shift.priorCheckOutGracePeriod != null && shift.priorCheckOutGracePeriod !== ''
+          ? Number(shift.priorCheckOutGracePeriod)
+          : '',
       description: shift.description || '',
       isActive: shift.isActive !== undefined ? shift.isActive : true,
     });
@@ -162,10 +209,28 @@ export default function ShiftManagementPage() {
 
       console.log('Submitting shift:', { editingShift, shiftId: shiftIdString, url, method, formData });
 
+      const payload = { ...formData };
+      const pi = payload.priorCheckInGracePeriod;
+      const po = payload.priorCheckOutGracePeriod;
+      const priorFilled =
+        pi !== '' &&
+        pi !== null &&
+        po !== '' &&
+        po !== null &&
+        Number.isFinite(Number(pi)) &&
+        Number.isFinite(Number(po));
+      if (priorFilled) {
+        payload.priorCheckInGracePeriod = Number(pi);
+        payload.priorCheckOutGracePeriod = Number(po);
+      } else {
+        delete payload.priorCheckInGracePeriod;
+        delete payload.priorCheckOutGracePeriod;
+      }
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -701,7 +766,7 @@ export default function ShiftManagementPage() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: 600,
+                minWidth: 720,
               }}
             >
               <thead>
@@ -716,7 +781,10 @@ export default function ShiftManagementPage() {
                     Time
                   </th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: colors.text.table.header }}>
-                    Grace Period
+                    Check-in grace
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: colors.text.table.header }}>
+                    Check-out grace
                   </th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: colors.text.table.header }}>
                     Status
@@ -730,7 +798,7 @@ export default function ShiftManagementPage() {
                 {shifts.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       style={{
                         padding: 40,
                         textAlign: 'center',
@@ -743,7 +811,9 @@ export default function ShiftManagementPage() {
                     </td>
                   </tr>
                 ) : (
-                  shifts.map((shift, index) => (
+                  shifts.map((shift, index) => {
+                    const gr = resolveShiftGracePeriods(shift);
+                    return (
                     <tr
                       key={shift._id}
                       style={{
@@ -770,7 +840,12 @@ export default function ShiftManagementPage() {
                         {shift.startTime} - {shift.endTime}
                         {shift.crossesMidnight && ' (next day)'}
                       </td>
-                      <td style={{ padding: '12px 16px', fontSize: 14, color: colors.text.table.cell }}>{shift.gracePeriod} min</td>
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: colors.text.table.cell }}>
+                        {gr.checkIn} min
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: colors.text.table.cell }}>
+                        {gr.checkOut} min
+                      </td>
                       <td style={{ padding: '12px 16px', fontSize: 14 }}>
                         <span
                           style={{
@@ -867,7 +942,8 @@ export default function ShiftManagementPage() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                  })
                 )}
               </tbody>
             </table>
@@ -1083,12 +1159,14 @@ export default function ShiftManagementPage() {
                       display: 'block',
                     }}
                   >
-                    Grace Period (minutes)
+                    Check-in grace (minutes)
                   </label>
                   <input
                     type="number"
-                    value={formData.gracePeriod}
-                    onChange={(e) => setFormData({ ...formData, gracePeriod: Number(e.target.value) })}
+                    value={formData.checkInGracePeriod}
+                    onChange={(e) =>
+                      setFormData({ ...formData, checkInGracePeriod: Number(e.target.value) })
+                    }
                     style={{
                       padding: '10px 14px',
                       borderRadius: 8,
@@ -1101,6 +1179,151 @@ export default function ShiftManagementPage() {
                     }}
                     min="0"
                     required
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.text.secondary,
+                      marginBottom: 6,
+                      display: 'block',
+                    }}
+                  >
+                    Check-out grace (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.checkOutGracePeriod}
+                    onChange={(e) =>
+                      setFormData({ ...formData, checkOutGracePeriod: Number(e.target.value) })
+                    }
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border.input}`,
+                      fontSize: 14,
+                      width: '100%',
+                      outline: 'none',
+                      backgroundColor: colors.background.input,
+                      color: colors.text.primary,
+                    }}
+                    min="0"
+                    required
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.text.secondary,
+                      marginBottom: 6,
+                      display: 'block',
+                    }}
+                  >
+                    New grace applies from (date)
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.graceEffectiveFrom}
+                    onChange={(e) =>
+                      setFormData({ ...formData, graceEffectiveFrom: e.target.value })
+                    }
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border.input}`,
+                      fontSize: 14,
+                      width: '100%',
+                      outline: 'none',
+                      backgroundColor: colors.background.input,
+                      color: colors.text.primary,
+                    }}
+                    required
+                  />
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: colors.text.muted,
+                      marginTop: 6,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Before this date, monthly reports use the “grace before” minutes below (or 20 for each if left empty and not yet stored). On or after this date, the check-in and check-out grace above apply.
+                  </p>
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.text.secondary,
+                      marginBottom: 6,
+                      display: 'block',
+                    }}
+                  >
+                    Grace before effective date — check-in (optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.priorCheckInGracePeriod === '' ? '' : formData.priorCheckInGracePeriod}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setFormData({
+                        ...formData,
+                        priorCheckInGracePeriod: raw === '' ? '' : Number(raw),
+                      });
+                    }}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border.input}`,
+                      fontSize: 14,
+                      width: '100%',
+                      outline: 'none',
+                      backgroundColor: colors.background.input,
+                      color: colors.text.primary,
+                    }}
+                    min="0"
+                    placeholder="e.g. 20"
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.text.secondary,
+                      marginBottom: 6,
+                      display: 'block',
+                    }}
+                  >
+                    Grace before effective date — check-out (optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.priorCheckOutGracePeriod === '' ? '' : formData.priorCheckOutGracePeriod}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setFormData({
+                        ...formData,
+                        priorCheckOutGracePeriod: raw === '' ? '' : Number(raw),
+                      });
+                    }}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: `1px solid ${colors.border.input}`,
+                      fontSize: 14,
+                      width: '100%',
+                      outline: 'none',
+                      backgroundColor: colors.background.input,
+                      color: colors.text.primary,
+                    }}
+                    min="0"
+                    placeholder="e.g. 20"
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 28 }}>

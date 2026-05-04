@@ -50,7 +50,12 @@ def run_headless(config, shift_info=None):
     if shift_info:
         state.shift_start = shift_info.get("shiftStart")
         state.shift_end = shift_info.get("shiftEnd")
-        state.shift_grace_min = shift_info.get("gracePeriod", 20)
+        state.shift_grace_min = int(
+            shift_info.get("checkInGracePeriod", shift_info.get("gracePeriod", 20))
+        )
+        state.shift_check_out_grace_min = int(
+            shift_info.get("checkOutGracePeriod", shift_info.get("gracePeriod", 20))
+        )
         state.shift_crosses_midnight = shift_info.get("crossesMidnight", False)
 
     listeners.start()

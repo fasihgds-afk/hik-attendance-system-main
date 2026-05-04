@@ -1,7 +1,7 @@
 // app/api/hr/shifts/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
-import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
+import Shift, { mergeGraceFromBody } from '../../../../models/Shift';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -25,7 +25,9 @@ export async function GET(req) {
     // Shifts are small dataset, query is fast with proper index
     const query = activeOnly ? { isActive: true } : {};
     const shifts = await Shift.find(query)
-      .select('_id name code startTime endTime crossesMidnight gracePeriod description isActive')
+      .select(
+        '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod description isActive'
+      )
       .sort({ code: 1 })
       .lean()
       .maxTimeMS(1500); // Reduced timeout for faster response
@@ -84,7 +86,7 @@ export async function POST(req) {
     await connectDB();
 
     const body = await req.json();
-    const { name, code, startTime, endTime, crossesMidnight, gracePeriod, description } = body;
+    const { name, code, startTime, endTime, crossesMidnight, description } = body;
 
     if (!name || !code || !startTime || !endTime) {
       throw new ValidationError('name, code, startTime, and endTime are required');
@@ -96,6 +98,8 @@ export async function POST(req) {
       throw new ValidationError('startTime and endTime must be in HH:mm format');
     }
 
+    const grace = mergeGraceFromBody(body, null);
+
     // OPTIMIZATION: Create with validation in one operation
     const shift = await Shift.create({
       name,
@@ -103,7 +107,8 @@ export async function POST(req) {
       startTime,
       endTime,
       crossesMidnight: crossesMidnight || false,
-      gracePeriod: gracePeriod ?? DEFAULT_GRACE_PERIOD,
+      checkInGracePeriod: grace.checkInGracePeriod,
+      checkOutGracePeriod: grace.checkOutGracePeriod,
       description: description || '',
       isActive: true,
     });

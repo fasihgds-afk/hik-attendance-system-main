@@ -34,6 +34,10 @@ const ShiftAttendanceSchema = new mongoose.Schema(
 
     manuallyEdited: { type: Boolean, default: false },
 
+    /** Snapshotted shift grace (minutes) when punches were saved — used for past-day violation math */
+    checkInGracePeriod: { type: Number },
+    checkOutGracePeriod: { type: Number },
+
     /** Punches created from employee portal self-service (not device sync). */
     webSelfService: { type: Boolean, default: false },
 

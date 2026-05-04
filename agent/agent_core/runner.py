@@ -88,7 +88,12 @@ def main():
         if shift_info:
             app.state.shift_start = shift_info.get("shiftStart")
             app.state.shift_end = shift_info.get("shiftEnd")
-            app.state.shift_grace_min = shift_info.get("gracePeriod", 20)
+            app.state.shift_grace_min = int(
+                shift_info.get("checkInGracePeriod", shift_info.get("gracePeriod", 20))
+            )
+            app.state.shift_check_out_grace_min = int(
+                shift_info.get("checkOutGracePeriod", shift_info.get("gracePeriod", 20))
+            )
             app.state.shift_crosses_midnight = shift_info.get("crossesMidnight", False)
         app.run()
     except Exception as e:

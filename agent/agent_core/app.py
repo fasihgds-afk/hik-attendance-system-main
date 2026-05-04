@@ -288,13 +288,19 @@ class AgentApp:
             if info:
                 self.state.shift_start = info.get("shiftStart")
                 self.state.shift_end = info.get("shiftEnd")
-                self.state.shift_grace_min = info.get("gracePeriod", 20)
+                self.state.shift_grace_min = int(
+                    info.get("checkInGracePeriod", info.get("gracePeriod", 20))
+                )
+                self.state.shift_check_out_grace_min = int(
+                    info.get("checkOutGracePeriod", info.get("gracePeriod", 20))
+                )
                 self.state.shift_crosses_midnight = info.get("crossesMidnight", False)
                 log.info(
-                    "Shift config refreshed: %s→%s (grace=%s)",
+                    "Shift config refreshed: %s→%s (in_grace=%s, out_grace=%s)",
                     self.state.shift_start or "?",
                     self.state.shift_end or "?",
                     self.state.shift_grace_min,
+                    self.state.shift_check_out_grace_min,
                 )
         except Exception as e:
             log.warning("Shift refresh failed (non-fatal): %s", e)
@@ -443,7 +449,13 @@ def recover_downtime(config, shift_info=None):
     effective_start = last_alive
     if shift_info:
         try:
-            grace_sec = shift_info.get("gracePeriod", 20) * 60
+            grace_out_min = int(
+                shift_info.get(
+                    "checkOutGracePeriod",
+                    shift_info.get("gracePeriod", 20),
+                )
+            )
+            grace_sec = grace_out_min * 60
             shift_end_str = shift_info.get("shiftEnd")      # "HH:MM"
             shift_start_str = shift_info.get("shiftStart")   # "HH:MM"
             crosses = shift_info.get("crossesMidnight", False)

@@ -2,7 +2,9 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
 import { requireHR } from '../../../../../lib/auth/requireAuth';
-import Shift from '../../../../../models/Shift';
+import Shift, { mergeGraceFromBody, resolveShiftGracePeriods } from '../../../../../models/Shift';
+import { DEFAULT_GRACE_PERIOD } from '../../../../../lib/shift/gracePeriods.js';
+import { getCompanyTodayYmd } from '../../../../../lib/time/companyToday.js';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 import { NotFoundError, ValidationError } from '../../../../../lib/errors/errorHandler';
 
@@ -21,7 +23,9 @@ export async function GET(req, { params }) {
     const { id } = resolvedParams;
     // OPTIMIZATION: Select only required fields, add timeout
     const shift = await Shift.findById(id)
-      .select('_id name code startTime endTime crossesMidnight gracePeriod description isActive')
+      .select(
+        '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod description isActive'
+      )
       .lean()
       .maxTimeMS(2000);
 
@@ -59,7 +63,7 @@ export async function PUT(req, { params }) {
     }
 
     const body = await req.json();
-    const { name, code, startTime, endTime, crossesMidnight, gracePeriod, description, isActive } = body;
+    const { name, code, startTime, endTime, crossesMidnight, description, isActive } = body;
 
     // Fetch the existing shift first so we only update fields that actually changed
     const existing = await Shift.findById(id).lean().maxTimeMS(2000);
@@ -111,21 +115,84 @@ export async function PUT(req, { params }) {
       update.endTime = endTime;
     }
     if (crossesMidnight !== undefined && crossesMidnight !== existing.crossesMidnight) update.crossesMidnight = crossesMidnight;
-    if (gracePeriod !== undefined && gracePeriod !== existing.gracePeriod) update.gracePeriod = gracePeriod;
+
+    const graceKeys = [
+      'gracePeriod',
+      'checkInGracePeriod',
+      'checkOutGracePeriod',
+      'graceEffectiveFrom',
+      'priorCheckInGracePeriod',
+      'priorCheckOutGracePeriod',
+    ];
+    const graceTouched = graceKeys.some((k) => body[k] !== undefined);
+    let unsetLegacyGrace = false;
+    if (graceTouched) {
+      const merged = mergeGraceFromBody(body, existing);
+      const before = resolveShiftGracePeriods(existing);
+      const numbersChanged =
+        merged.checkInGracePeriod !== before.checkIn ||
+        merged.checkOutGracePeriod !== before.checkOut;
+
+      const effFromBody =
+        typeof body.graceEffectiveFrom === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(String(body.graceEffectiveFrom).trim())
+          ? String(body.graceEffectiveFrom).trim()
+          : null;
+
+      if (effFromBody) {
+        update.graceEffectiveFrom = effFromBody;
+      }
+
+      if (numbersChanged) {
+        update.checkInGracePeriod = merged.checkInGracePeriod;
+        update.checkOutGracePeriod = merged.checkOutGracePeriod;
+        if (existing.gracePeriod != null) unsetLegacyGrace = true;
+        if (!effFromBody) {
+          update.graceEffectiveFrom = getCompanyTodayYmd();
+        }
+        update.priorCheckInGracePeriod = before.checkIn;
+        update.priorCheckOutGracePeriod = before.checkOut;
+      } else {
+        if (
+          body.priorCheckInGracePeriod !== undefined &&
+          body.priorCheckOutGracePeriod !== undefined
+        ) {
+          const pi = Number(body.priorCheckInGracePeriod);
+          const po = Number(body.priorCheckOutGracePeriod);
+          if (Number.isFinite(pi) && pi >= 0 && Number.isFinite(po) && po >= 0) {
+            update.priorCheckInGracePeriod = pi;
+            update.priorCheckOutGracePeriod = po;
+          }
+        } else if (
+          effFromBody &&
+          (existing.priorCheckInGracePeriod == null || existing.priorCheckOutGracePeriod == null)
+        ) {
+          update.priorCheckInGracePeriod = DEFAULT_GRACE_PERIOD;
+          update.priorCheckOutGracePeriod = DEFAULT_GRACE_PERIOD;
+        }
+      }
+    }
+
     if (description !== undefined && description !== (existing.description || '')) update.description = description;
     if (isActive !== undefined && isActive !== existing.isActive) update.isActive = isActive;
 
+    const mongoUpdate = {};
+    if (Object.keys(update).length > 0) mongoUpdate.$set = update;
+    if (unsetLegacyGrace) mongoUpdate.$unset = { gracePeriod: '' };
+
     // If nothing changed, return the existing shift as-is
-    if (Object.keys(update).length === 0) {
+    if (!mongoUpdate.$set && !mongoUpdate.$unset) {
       return NextResponse.json({ shift: existing });
     }
 
     const shift = await Shift.findByIdAndUpdate(
       id, 
-      { $set: update }, 
+      mongoUpdate, 
       { new: true, runValidators: true }
     )
-      .select('_id name code startTime endTime crossesMidnight gracePeriod description isActive')
+      .select(
+        '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod description isActive'
+      )
       .lean()
       .maxTimeMS(3000);
 

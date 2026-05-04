@@ -8,6 +8,7 @@ import { getShiftsForEmployeesOnDate } from '@/lib/shift/getShiftForDate';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '@/lib/api/response';
 import { ValidationError } from '@/lib/errors/errorHandler';
 import { computeLateEarly } from '@/lib/calculations/violations';
+import { resolveGracePeriodsForCalendarDate } from '@/lib/shift/gracePeriods';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -123,7 +124,9 @@ export async function POST(req) {
     const shiftById = new Map();
     const allShiftsMap = new Map();
     const shifts = await Shift.find({})
-      .select('_id code startTime endTime crossesMidnight gracePeriod')
+      .select(
+        '_id code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+      )
       .lean()
       .maxTimeMS(1500);
     for (const s of shifts) {
@@ -145,6 +148,9 @@ export async function POST(req) {
     if (!shiftCode) {
       throw new ValidationError('No shift assigned. HR must assign a shift before you can clock in.');
     }
+
+    const shiftDef = allShiftsMap.get(shiftCode);
+    const graceSnap = resolveGracePeriodsForCalendarDate(shiftDef || {}, date);
 
     const now = new Date();
 
@@ -184,6 +190,8 @@ export async function POST(req) {
             earlyLeave: false,
             webSelfService: true,
             manuallyEdited: false,
+            checkInGracePeriod: graceSnap.checkIn,
+            checkOutGracePeriod: graceSnap.checkOut,
             updatedAt: now,
           },
         },
@@ -218,7 +226,8 @@ export async function POST(req) {
       shiftCode,
       checkInDate,
       checkOut,
-      allShiftsMap
+      allShiftsMap,
+      date
     );
 
     await ShiftAttendance.updateOne(
@@ -231,6 +240,8 @@ export async function POST(req) {
           late,
           earlyLeave,
           webSelfService: true,
+          checkInGracePeriod: graceSnap.checkIn,
+          checkOutGracePeriod: graceSnap.checkOut,
           updatedAt: now,
         },
       }

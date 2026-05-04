@@ -2,7 +2,7 @@ import { connectDB } from '../../../../lib/db';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requiredString, verifyDevice } from '../../../../lib/agent/common';
 import Employee from '../../../../models/Employee';
-import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
+import Shift, { shiftWithGraceResolvedForDate } from '../../../../models/Shift';
 import { resolveShiftWindow } from '../../../../lib/shift/resolveShiftWindow';
 
 export const runtime = 'nodejs';
@@ -32,25 +32,31 @@ export async function GET(req) {
     let shift = null;
     if (employee.shiftId) {
       shift = await Shift.findById(employee.shiftId)
-        .select('code name startTime endTime crossesMidnight gracePeriod')
+        .select(
+          'code name startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+        )
         .lean()
         .maxTimeMS(2000);
     }
     if (!shift && employee.shift) {
       shift = await Shift.findOne({ code: String(employee.shift).toUpperCase() })
-        .select('code name startTime endTime crossesMidnight gracePeriod')
+        .select(
+          'code name startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+        )
         .lean()
         .maxTimeMS(2000);
     }
     if (!shift) throw new Error(`No shift assigned for employee ${empCode}`);
 
+    const shiftForDate = shiftWithGraceResolvedForDate(shift, date);
     const window = resolveShiftWindow({
       date,
-      shift,
+      shift: shiftForDate,
       timezoneOffset: process.env.TIMEZONE_OFFSET || '+05:00'
     });
 
-    const gracePeriod = Number(shift.gracePeriod ?? DEFAULT_GRACE_PERIOD);
+    const checkInGracePeriod = shiftForDate.checkInGracePeriod;
+    const checkOutGracePeriod = shiftForDate.checkOutGracePeriod;
     const crossesMidnight = !!shift.crossesMidnight;
     return successResponse(
       {
@@ -58,7 +64,9 @@ export async function GET(req) {
         date,
         shiftStart: shift.startTime,
         shiftEnd: shift.endTime,
-        gracePeriod,
+        checkInGracePeriod,
+        checkOutGracePeriod,
+        gracePeriod: checkInGracePeriod,
         crossesMidnight,
         shift: {
           code: shift.code,
@@ -66,7 +74,9 @@ export async function GET(req) {
           startTime: shift.startTime,
           endTime: shift.endTime,
           crossesMidnight,
-          gracePeriod
+          checkInGracePeriod,
+          checkOutGracePeriod,
+          gracePeriod: checkInGracePeriod,
         },
         window: {
           shiftStart: window?.shiftStart?.toISOString() || null,

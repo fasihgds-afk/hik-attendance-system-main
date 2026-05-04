@@ -1,8 +1,14 @@
 // models/Shift.js
 import mongoose from 'mongoose';
+import { DEFAULT_GRACE_PERIOD } from '../lib/shift/gracePeriods.js';
 
-/** Single source of truth: default grace period when shift.gracePeriod is not set */
-export const DEFAULT_GRACE_PERIOD = 20;
+export {
+  DEFAULT_GRACE_PERIOD,
+  resolveShiftGracePeriods,
+  mergeGraceFromBody,
+  resolveGracePeriodsForCalendarDate,
+  shiftWithGraceResolvedForDate,
+} from '../lib/shift/gracePeriods.js';
 
 const ShiftSchema = new mongoose.Schema(
   {
@@ -34,11 +40,28 @@ const ShiftSchema = new mongoose.Schema(
       default: false,
       // true if shift end time is next day (e.g., 18:00-03:00)
     },
-    gracePeriod: {
+    checkInGracePeriod: {
       type: Number,
       default: DEFAULT_GRACE_PERIOD,
-      // Grace period in minutes: check-in late / check-out early within this limit (configurable per shift)
+      // Minutes after shift start still counted as on-time for arrival
     },
+    checkOutGracePeriod: {
+      type: Number,
+      default: DEFAULT_GRACE_PERIOD,
+      // Minutes before shift end still counted as on-time for departure (early-leave threshold)
+    },
+    /** @deprecated Use checkInGracePeriod / checkOutGracePeriod; kept for existing documents */
+    gracePeriod: {
+      type: Number,
+    },
+    /** First calendar day (YYYY-MM-DD) when current checkInGracePeriod / checkOutGracePeriod apply */
+    graceEffectiveFrom: {
+      type: String,
+      trim: true,
+    },
+    /** Grace minutes before graceEffectiveFrom when no per-row snapshot exists */
+    priorCheckInGracePeriod: { type: Number },
+    priorCheckOutGracePeriod: { type: Number },
     isActive: {
       type: Boolean,
       default: true,

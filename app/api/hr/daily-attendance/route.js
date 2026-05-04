@@ -10,6 +10,7 @@ import AttendanceEvent from '../../../../models/AttendanceEvent';
 import Employee from '../../../../models/Employee';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
 import Shift from '../../../../models/Shift';
+import { resolveGracePeriodsForCalendarDate } from '../../../../lib/shift/gracePeriods.js';
 
 import { getNextDateStr, classifyByTime } from './attendance/time-utils.js';
 import { getFirstAndLastPunchPerEmployee } from './attendance/punch-helpers.js';
@@ -84,7 +85,9 @@ export async function POST(req) {
 
     // Load ALL shifts (active + inactive) so historical attendance (R1, R2) resolves when shifts are deactivated
     const allShifts = await Shift.find({})
-      .select('_id name code startTime endTime crossesMidnight gracePeriod')
+      .select(
+        '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+      )
       .lean()
       .maxTimeMS(2000);
 
@@ -101,7 +104,9 @@ export async function POST(req) {
         .lean()
         .maxTimeMS(2000),
       ShiftAttendance.find({ date })
-        .select('date empCode checkIn checkOut shift attendanceStatus reason leaveType totalPunches manuallyEdited late earlyLeave excused lateExcused earlyExcused')
+        .select(
+          'date empCode checkIn checkOut shift attendanceStatus reason leaveType totalPunches manuallyEdited late earlyLeave excused lateExcused earlyExcused checkInGracePeriod checkOutGracePeriod'
+        )
         .lean()
         .maxTimeMS(2000),
       getFirstAndLastPunchPerEmployee(AttendanceEvent, startLocal, endLocal, 5000),
@@ -220,6 +225,9 @@ export async function POST(req) {
       const preserveManual = existing && MANUAL_OR_LEAVE_STATUSES.has(existing.attendanceStatus);
       const preserveManuallyEdited = existing?.manuallyEdited;
 
+      const shiftDef = shiftByCode.get(item.shift);
+      const graceSnap = resolveGracePeriodsForCalendarDate(shiftDef || {}, date);
+
       const update = {
         date,
         empCode: item.empCode,
@@ -230,6 +238,8 @@ export async function POST(req) {
         checkIn: item.checkIn,
         checkOut: item.checkOut || null,
         totalPunches: item.totalPunches,
+        checkInGracePeriod: graceSnap.checkIn,
+        checkOutGracePeriod: graceSnap.checkOut,
         updatedAt: new Date(),
       };
 
@@ -250,6 +260,13 @@ export async function POST(req) {
         update.excused = existing.excused ?? false;
         update.lateExcused = existing.lateExcused ?? false;
         update.earlyExcused = existing.earlyExcused ?? false;
+        if (
+          existing.checkInGracePeriod != null &&
+          existing.checkOutGracePeriod != null
+        ) {
+          update.checkInGracePeriod = existing.checkInGracePeriod;
+          update.checkOutGracePeriod = existing.checkOutGracePeriod;
+        }
       } else if (preserveManual) {
         update.attendanceStatus = existing.attendanceStatus;
         if (existing.reason != null) update.reason = existing.reason;

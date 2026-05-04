@@ -34,7 +34,8 @@ class AgentState:
     # ── Shift info (fetched from server, None = always-on) ────
     shift_start: Optional[str] = None   # "HH:MM" or None
     shift_end: Optional[str] = None
-    shift_grace_min: int = 20
+    shift_grace_min: int = 20  # minutes — check-in grace (matches API checkInGracePeriod)
+    shift_check_out_grace_min: int = 20  # minutes — early check-out threshold (checkOutGracePeriod)
     shift_crosses_midnight: bool = False
 
     @property

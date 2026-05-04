@@ -171,7 +171,9 @@ def save_cached_shift(config, shift_info):
             "deviceId": config.get("deviceId"),
             "shiftStart": shift_info.get("shiftStart"),
             "shiftEnd": shift_info.get("shiftEnd"),
-            "gracePeriod": shift_info.get("gracePeriod", 20),
+            "checkInGracePeriod": shift_info.get("checkInGracePeriod", shift_info.get("gracePeriod", 20)),
+            "checkOutGracePeriod": shift_info.get("checkOutGracePeriod", shift_info.get("gracePeriod", 20)),
+            "gracePeriod": shift_info.get("gracePeriod", shift_info.get("checkInGracePeriod", 20)),
             "crossesMidnight": shift_info.get("crossesMidnight", False),
         }
         SHIFT_CACHE_FILE.write_text(json.dumps(data), encoding="utf-8")
@@ -189,7 +191,9 @@ def load_cached_shift(config):
             return {
                 "shiftStart": data.get("shiftStart"),
                 "shiftEnd": data.get("shiftEnd"),
-                "gracePeriod": data.get("gracePeriod", 20),
+                "checkInGracePeriod": data.get("checkInGracePeriod", data.get("gracePeriod", 20)),
+                "checkOutGracePeriod": data.get("checkOutGracePeriod", data.get("gracePeriod", 20)),
+                "gracePeriod": data.get("gracePeriod", data.get("checkInGracePeriod", 20)),
                 "crossesMidnight": data.get("crossesMidnight", False),
             }
     except Exception:
@@ -202,7 +206,7 @@ def load_cached_shift(config):
 def fetch_shift_info(config):
     """
     Fetch the employee's current shift from the server.
-    Returns dict with shiftStart, shiftEnd, gracePeriod or None on failure.
+    Returns dict with shiftStart, shiftEnd, checkInGracePeriod, checkOutGracePeriod (and legacy gracePeriod) or None on failure.
     Falls back gracefully if the endpoint doesn't exist (404 → None).
     """
     url = f"{config['serverUrl']}/api/agent/shift-info"
@@ -217,16 +221,21 @@ def fetch_shift_info(config):
             raw = resp.json()
             data = raw.get("data") or raw
             if raw.get("success", True):
+                cin = data.get("checkInGracePeriod", data.get("gracePeriod", 20))
+                cout = data.get("checkOutGracePeriod", data.get("gracePeriod", 20))
                 log.info(
-                    "Shift info: %s → %s (grace=%dmin)",
+                    "Shift info: %s → %s (in_grace=%s, out_grace=%s)",
                     data.get("shiftStart", "?"),
                     data.get("shiftEnd", "?"),
-                    data.get("gracePeriod", 20),
+                    cin,
+                    cout,
                 )
                 info = {
                     "shiftStart": data.get("shiftStart"),
                     "shiftEnd": data.get("shiftEnd"),
-                    "gracePeriod": data.get("gracePeriod", 20),
+                    "checkInGracePeriod": cin,
+                    "checkOutGracePeriod": cout,
+                    "gracePeriod": data.get("gracePeriod", cin),
                     "crossesMidnight": data.get("crossesMidnight", False),
                 }
                 save_cached_shift(config, info)

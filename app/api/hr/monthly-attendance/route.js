@@ -34,7 +34,14 @@ import mongoose from 'mongoose';
 import { connectDB } from '../../../../lib/db';
 import Employee from '../../../../models/Employee';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
-import Shift, { DEFAULT_GRACE_PERIOD } from '../../../../models/Shift';
+import Shift from '../../../../models/Shift';
+import {
+  resolveShiftGracePeriods,
+  resolveGracePeriodsForCalendarDate,
+  shiftWithGracePolicyForAttendanceRow,
+  shiftWithGraceResolvedForDate,
+} from '../../../../lib/shift/gracePeriods.js';
+import { getCompanyTodayYmd } from '../../../../lib/time/companyToday.js';
 import ViolationRules from '../../../../models/ViolationRules';
 import PaidLeaveQuarter from '../../../../models/PaidLeaveQuarter';
 import LeaveRecord from '../../../../models/LeaveRecord';
@@ -149,7 +156,13 @@ function parseTimeToMinutes(timeStr) {
 //  - lateMinutes / earlyMinutes = minutes BEYOND grace period
 // shift can be either a shift object (from DB) or a shift code string (legacy)
 // PERFORMANCE: Memoized to avoid recalculating same shift/checkIn/checkOut combinations
-const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMap = null) {
+const _computeLateEarlyOriginal = function(
+  shift,
+  checkIn,
+  checkOut,
+  allShiftsMap = null,
+  calendarDateYmd = null
+) {
   if (!shift || !checkIn || !checkOut) {
     return { late: false, earlyLeave: false, lateMinutes: 0, earlyMinutes: 0 };
   }
@@ -161,7 +174,8 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
   let startMin = 0;
   let endMin = 0;
   let rawEndMin = 0;
-  let gracePeriod = DEFAULT_GRACE_PERIOD; // from Shift model; overridden by shift.gracePeriod
+  let graceCheckIn = null;
+  let graceCheckOut = null;
   let crossesMidnight = false;
 
   // Get shift object - could be already an object or a code string
@@ -177,7 +191,10 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
   if (shiftObj && shiftObj.code === 'N2' && allShiftsMap && isCompanySaturday(checkIn)) {
     const n1Shift = allShiftsMap.get('N1');
     if (n1Shift && n1Shift.startTime) {
-      shiftObj = n1Shift; // Use N1 timing for N2 on Saturday
+      shiftObj =
+        calendarDateYmd != null && calendarDateYmd !== ''
+          ? shiftWithGraceResolvedForDate(n1Shift, calendarDateYmd)
+          : n1Shift;
     }
   }
 
@@ -185,7 +202,12 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
     // Use shift times from database (fully dynamic)
     startMin = parseTimeToMinutes(shiftObj.startTime);
     rawEndMin = parseTimeToMinutes(shiftObj.endTime);
-    gracePeriod = shiftObj.gracePeriod ?? DEFAULT_GRACE_PERIOD;
+    const g =
+      calendarDateYmd != null && calendarDateYmd !== ''
+        ? resolveGracePeriodsForCalendarDate(shiftObj, calendarDateYmd)
+        : resolveShiftGracePeriods(shiftObj);
+    graceCheckIn = g.checkIn;
+    graceCheckOut = g.checkOut;
     crossesMidnight = shiftObj.crossesMidnight || false;
     
     // For midnight-crossing shifts, normalize end time
@@ -285,22 +307,24 @@ const _computeLateEarlyOriginal = function(shift, checkIn, checkOut, allShiftsMa
   // Determine violations: only if minutes exceed grace period
   // Note: earlyMinutesTotal = 0 means on-time or late (both are GREEN)
   //       lateMinutesTotal = 0 means on-time or early (both are GREEN)
-  const late = lateMinutesTotal > gracePeriod;
-  const earlyLeave = earlyMinutesTotal > gracePeriod;
+  const late = lateMinutesTotal > graceCheckIn;
+  const earlyLeave = earlyMinutesTotal > graceCheckOut;
 
   // Violation minutes = minutes AFTER grace
-  const lateMinutes = late ? lateMinutesTotal - gracePeriod : 0;
-  const earlyMinutes = earlyLeave ? earlyMinutesTotal - gracePeriod : 0;
+  const lateMinutes = late ? lateMinutesTotal - graceCheckIn : 0;
+  const earlyMinutes = earlyLeave ? earlyMinutesTotal - graceCheckOut : 0;
 
   return { late, earlyLeave, lateMinutes, earlyMinutes };
 };
 
 // Memoize computeLateEarly for performance (same shift/checkIn/checkOut = same result)
-const computeLateEarly = memoize(_computeLateEarlyOriginal, (shift, checkIn, checkOut) => {
+const computeLateEarly = memoize(_computeLateEarlyOriginal, (shift, checkIn, checkOut, allShiftsMap, calendarDateYmd) => {
   const shiftKey = typeof shift === 'object' ? shift.code || shift._id : shift;
+  const gIn = typeof shift === 'object' && shift?.checkInGracePeriod != null ? shift.checkInGracePeriod : '';
+  const gOut = typeof shift === 'object' && shift?.checkOutGracePeriod != null ? shift.checkOutGracePeriod : '';
   const checkInKey = checkIn instanceof Date ? checkIn.getTime() : checkIn;
   const checkOutKey = checkOut instanceof Date ? checkOut.getTime() : checkOut;
-  return createCacheKey(shiftKey, checkInKey, checkOutKey);
+  return createCacheKey(shiftKey, gIn, gOut, checkInKey, checkOutKey, calendarDateYmd || '');
 });
 
 // YYYY-MM-DD from a Date, using UTC fields so server timezone doesn't matter
@@ -408,6 +432,7 @@ export async function GET(req) {
 
     // company "today" in company time (with 08:55 cutoff)
     const companyToday = getCompanyTodayParts();
+    const companyTodayYmd = getCompanyTodayYmd();
 
     let monthRelation = 0; // -1 past, 0 same, 1 future
     if (year < companyToday.year) monthRelation = -1;
@@ -489,7 +514,9 @@ export async function GET(req) {
     }
 
     const shiftDocs = await ShiftAttendance.find(shiftAttendanceFilter)
-      .select('date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited')
+      .select(
+        'date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited checkInGracePeriod checkOutGracePeriod'
+      )
       .lean()
       .maxTimeMS(4000); // Reduced timeout for faster response
 
@@ -520,7 +547,9 @@ export async function GET(req) {
       // OPTIMIZATION: Fetch shifts with minimal fields, fast timeout
       // Load ALL shifts (active + inactive) so historical codes (R1, R2) resolve correctly when deactivated
       const allShifts = await Shift.find({})
-        .select('_id name code startTime endTime crossesMidnight gracePeriod')
+        .select(
+          '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+        )
         .sort({ code: 1 }) // Consistent ordering
         .lean()
         .maxTimeMS(1500); // Reduced timeout
@@ -922,8 +951,15 @@ export async function GET(req) {
             const extractedEmpShift = extractShiftCode(emp.shift);
             shiftForCalc = allShiftsMap?.get(extractedEmpShift);
           }
-          
-          const flags = computeLateEarly(shiftForCalc, checkIn, checkOut, allShiftsMap);
+
+          const shiftDated = shiftWithGraceResolvedForDate(shiftForCalc, date);
+          const shiftForViolation = shiftWithGracePolicyForAttendanceRow(
+            shiftDated,
+            doc,
+            date,
+            companyTodayYmd
+          );
+          const flags = computeLateEarly(shiftForViolation, checkIn, checkOut, allShiftsMap, date);
           
           
           late = !!flags.late;
@@ -1353,7 +1389,9 @@ export async function POST(req) {
     // OPTIMIZATION: Run queries in parallel for faster response
     const [allShifts, emp, departmentDocs] = await Promise.all([
       Shift.find({})
-        .select('_id name code startTime endTime crossesMidnight gracePeriod')
+        .select(
+          '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+        )
         .lean()
         .maxTimeMS(1500),
       Employee.findOne({ empCode })
@@ -1404,6 +1442,13 @@ export async function POST(req) {
     }
     if (!shiftCode) shiftCode = emp.shift || '';
 
+    const companyTodayYmdPost = getCompanyTodayYmd();
+
+    const existingRecord = await ShiftAttendance.findOne({ empCode, date, shift: shiftCode })
+      .select('attendanceStatus leaveType checkInGracePeriod checkOutGracePeriod')
+      .lean()
+      .maxTimeMS(2000);
+
     let checkIn = null;
     let checkOut = null;
 
@@ -1439,7 +1484,14 @@ export async function POST(req) {
       // Normalize shiftCode in case it's a formatted string
       const normalizedShiftCode = shiftCode ? extractShiftCode(shiftCode) : null;
       const shiftForCalc = shiftObj || (normalizedShiftCode ? allShiftsMap?.get(normalizedShiftCode) : null);
-      const flags = computeLateEarly(shiftForCalc, checkIn, checkOut, allShiftsMap);
+      const shiftDated = shiftWithGraceResolvedForDate(shiftForCalc, date);
+      const shiftForViolation = shiftWithGracePolicyForAttendanceRow(
+        shiftDated,
+        existingRecord,
+        date,
+        companyTodayYmdPost
+      );
+      const flags = computeLateEarly(shiftForViolation, checkIn, checkOut, allShiftsMap, date);
       late = flags.late;
       earlyLeave = flags.earlyLeave;
     }
@@ -1533,12 +1585,17 @@ export async function POST(req) {
       updatedAt: new Date(),
     };
 
-    // Check current status in database to detect changes (read before transaction)
-    // Include shift in filter to match the correct record (unique index: empCode, date, shift)
-    const existingRecord = await ShiftAttendance.findOne({ empCode, date, shift: shiftCode })
-      .select('attendanceStatus leaveType')
-      .lean()
-      .maxTimeMS(2000);
+    const gPost = resolveGracePeriodsForCalendarDate(shiftObj || {}, date);
+    if (date >= companyTodayYmdPost) {
+      update.checkInGracePeriod = gPost.checkIn;
+      update.checkOutGracePeriod = gPost.checkOut;
+    } else if (
+      existingRecord?.checkInGracePeriod == null ||
+      existingRecord?.checkOutGracePeriod == null
+    ) {
+      update.checkInGracePeriod = gPost.checkIn;
+      update.checkOutGracePeriod = gPost.checkOut;
+    }
 
     const wasPaidLeave = existingRecord?.attendanceStatus === 'Paid Leave';
     const isPaidLeave = attendanceStatus === 'Paid Leave';
