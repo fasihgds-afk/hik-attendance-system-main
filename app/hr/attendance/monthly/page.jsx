@@ -320,6 +320,13 @@ export default function MonthlyHrPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
+  // ---- Bulk holiday (e.g. Eid) – mark selected days for ALL employees -------
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState('Eid Holiday');
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkDays, setBulkDays] = useState([]); // array of day numbers (1..daysInMonth)
+  const [bulkSaving, setBulkSaving] = useState(false);
+
   // track horizontal scroll to add shadow on frozen cols
   const [scrollLeft, setScrollLeft] = useState(0);
 
@@ -558,6 +565,77 @@ export default function MonthlyHrPage() {
     } catch (err) {
       console.error('Save error:', err);
       showToast('error', err.message || 'Failed to save day');
+    }
+  }
+
+  // ---- Bulk holiday helpers ------------------------------------------------
+  function openBulkModal() {
+    setBulkStatus('Eid Holiday');
+    setBulkReason('');
+    setBulkDays([]);
+    setBulkOpen(true);
+  }
+
+  function closeBulkModal() {
+    if (bulkSaving) return;
+    setBulkOpen(false);
+  }
+
+  function toggleBulkDay(dayNum) {
+    setBulkDays((prev) =>
+      prev.includes(dayNum)
+        ? prev.filter((d) => d !== dayNum)
+        : [...prev, dayNum].sort((a, b) => a - b)
+    );
+  }
+
+  async function handleApplyBulk() {
+    if (bulkDays.length === 0) {
+      showToast('error', 'Select at least one day.');
+      return;
+    }
+
+    const apiMonth = data.month || month; // YYYY-MM
+    const dates = bulkDays.map(
+      (d) => `${apiMonth}-${String(d).padStart(2, '0')}`
+    );
+
+    try {
+      setBulkSaving(true);
+      const res = await fetch('/api/hr/monthly-attendance/bulk-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dates,
+          status: bulkStatus,
+          reason: bulkReason,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let message = `Failed to apply (${res.status})`;
+        try {
+          const json = JSON.parse(text);
+          message = json.error || json.message || message;
+        } catch (_) {
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+
+      const json = await res.json();
+      const msg =
+        json?.message ||
+        `Applied ${bulkStatus} to all employees on ${dates.length} day(s).`;
+      showToast('success', msg);
+      setBulkOpen(false);
+      await loadMonth(true);
+    } catch (err) {
+      console.error('Bulk apply error:', err);
+      showToast('error', err.message || 'Failed to apply holiday');
+    } finally {
+      setBulkSaving(false);
     }
   }
 
@@ -1485,6 +1563,29 @@ export default function MonthlyHrPage() {
                 </div>
               )}
             </div>
+
+            <button
+              onClick={openBulkModal}
+              disabled={loading}
+              title="Mark Eid / public holidays for all employees at once"
+              style={{
+                padding: '9px 20px',
+                borderRadius: 999,
+                border: 'none',
+                background:
+                  'linear-gradient(135deg, #7c3aed, #2563eb, #06b6d4)',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: loading ? 'default' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 14px 30px rgba(124,58,237,0.45)',
+              }}
+            >
+              🕌 Mark Eid / Holidays
+            </button>
 
             <button
               onClick={loadMonth}
@@ -2628,6 +2729,248 @@ export default function MonthlyHrPage() {
                   Save Changes
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Holiday Modal (e.g. Eid) – applies to ALL employees */}
+      {bulkOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15,23,42,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+            animation: 'modalFade 0.18s ease-out',
+          }}
+          onClick={closeBulkModal}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 640,
+              borderRadius: 22,
+              backgroundColor: '#f9fafb',
+              border: '1px solid #c7d2fe',
+              boxShadow: '0 28px 80px rgba(15,23,42,0.75)',
+              padding: '22px 26px 22px',
+              color: '#0f172a',
+              animation: 'modalZoom 0.18s ease-out',
+              position: 'relative',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700 }}>
+                  Mark Eid / Holidays for All Employees
+                </h3>
+                <p style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>
+                  Pick the day(s) in{' '}
+                  <strong>{data.month || month}</strong> and the status, then
+                  Apply. It will be set for <strong>every employee</strong> at
+                  once.
+                </p>
+              </div>
+              <button
+                onClick={closeBulkModal}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#9ca3af',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Status */}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}
+            >
+              <label style={{ fontSize: 11, fontWeight: 600 }}>Status</label>
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5f5',
+                  backgroundColor: '#ffffff',
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              >
+                <option value="Eid Holiday">Eid Holiday (Eid)</option>
+                <option value="Holiday">Holiday (H)</option>
+                <option value="Present">Present (P)</option>
+                <option value="Work From Home">Work From Home (WFH)</option>
+                <option value="Absent">Absent (A)</option>
+              </select>
+              <span style={{ fontSize: 11, color: '#64748b' }}>
+                Eid Holiday & Holiday are paid (no salary deduction).
+              </span>
+            </div>
+
+            {/* Day picker */}
+            <div style={{ marginBottom: 14 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 6,
+                }}
+              >
+                <label style={{ fontSize: 11, fontWeight: 600 }}>
+                  Select Day(s){' '}
+                  {bulkDays.length > 0 && (
+                    <span style={{ color: '#2563eb' }}>
+                      ({bulkDays.length} selected)
+                    </span>
+                  )}
+                </label>
+                {bulkDays.length > 0 && (
+                  <button
+                    onClick={() => setBulkDays([])}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#dc2626',
+                      fontSize: 11.5,
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(7, 1fr)',
+                  gap: 6,
+                }}
+              >
+                {dayNumbers.map((d) => {
+                  const selectedDay = bulkDays.includes(d);
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => toggleBulkDay(d)}
+                      style={{
+                        padding: '8px 0',
+                        borderRadius: 8,
+                        border: selectedDay
+                          ? '1px solid #2563eb'
+                          : '1px solid #d1d5db',
+                        backgroundColor: selectedDay ? '#2563eb' : '#ffffff',
+                        color: selectedDay ? '#ffffff' : '#374151',
+                        fontSize: 13,
+                        fontWeight: selectedDay ? 700 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Reason */}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 18 }}
+            >
+              <label style={{ fontSize: 11, fontWeight: 600 }}>
+                Reason / Note (optional)
+              </label>
+              <input
+                type="text"
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+                placeholder="e.g. Eid-ul-Adha holidays"
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5f5',
+                  backgroundColor: '#ffffff',
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            <div
+              style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}
+            >
+              <button
+                onClick={closeBulkModal}
+                disabled={bulkSaving}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 999,
+                  border: '1px solid #d1d5db',
+                  backgroundColor: 'transparent',
+                  color: '#374151',
+                  fontSize: 13,
+                  cursor: bulkSaving ? 'default' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyBulk}
+                disabled={bulkSaving || bulkDays.length === 0}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background:
+                    bulkSaving || bulkDays.length === 0
+                      ? '#94a3b8'
+                      : 'linear-gradient(135deg,#7c3aed,#2563eb,#06b6d4)',
+                  color: '#f9fafb',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor:
+                    bulkSaving || bulkDays.length === 0 ? 'default' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 10px 24px rgba(124,58,237,0.45)',
+                }}
+              >
+                {bulkSaving && (
+                  <span
+                    style={{
+                      width: 15,
+                      height: 15,
+                      borderRadius: '999px',
+                      border: '2px solid rgba(255,255,255,0.4)',
+                      borderTopColor: '#ffffff',
+                      animation: 'spin 0.7s linear infinite',
+                    }}
+                  />
+                )}
+                {bulkSaving ? 'Applying…' : 'Apply to All Employees'}
+              </button>
             </div>
           </div>
         </div>
