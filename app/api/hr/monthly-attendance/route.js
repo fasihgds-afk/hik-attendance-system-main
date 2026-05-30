@@ -52,6 +52,7 @@ import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturda
 import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
 import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
+import { getCompanySettings } from '../../../../lib/settings/getCompanySettings';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -493,7 +494,7 @@ export async function GET(req) {
         .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
         .lean()
         .maxTimeMS(isEmployeeViewer ? 1500 : 2500),
-      Department.find().select('name saturdayPolicy fifthSaturdayPolicy').lean().maxTimeMS(1500),
+      Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
     ]);
 
     const useDynamicShifts = shiftCount > 0;
@@ -503,8 +504,17 @@ export async function GET(req) {
       departmentPolicyMap.set(String(d.name).trim().toLowerCase(), {
         saturdayPolicy: d.saturdayPolicy || 'alternate',
         fifthSaturdayPolicy: d.fifthSaturdayPolicy || 'working_all',
+        saturdayShiftMode: d.saturdayShiftMode || 'own_time',
+        saturdayUnifiedStart: d.saturdayUnifiedStart || '21:00',
+        saturdayUnifiedEnd: d.saturdayUnifiedEnd || '06:00',
+        saturdayUnifiedCrossesMidnight: d.saturdayUnifiedCrossesMidnight ?? true,
       });
     });
+
+    // Dynamic weekly off days (default [0] = Sunday). Saturday (6) is handled
+    // separately by department policy below, so it is excluded here.
+    const companySettings = await getCompanySettings();
+    const weeklyOffDays = (companySettings.weeklyOffDays || [0]).filter((d) => d !== 6);
 
     const shiftAttendanceFilter = {
       date: { $gte: monthStartDate, $lte: monthEndDate },
@@ -593,6 +603,7 @@ export async function GET(req) {
       weekendFlags.set(day, {
         dow,
         isSunday: dow === 0,
+        isWeeklyOff: weeklyOffDays.includes(dow),
         isSaturday,
       });
       if (isSaturday && saturdayCounter < 4) {
@@ -621,6 +632,7 @@ export async function GET(req) {
       let totalEarlyMinutes = 0;
 
       let saturdayIndex = 0;
+      let employeeOffDayCount = 0; // weekend/off days for this employee (used by 'actual' working-days mode)
 
       // Auto-detect Saturday group from actual attendance pattern
       // Uses both punches AND no-punches to determine which group the employee is in
@@ -688,11 +700,12 @@ export async function GET(req) {
         const dow = weekendInfo.dow;
         
         let isWeekendOff = false;
-        if (weekendInfo.isSunday) isWeekendOff = true; // Sunday
+        if (weekendInfo.isWeeklyOff) isWeekendOff = true; // configurable weekly off days (default Sunday)
         if (weekendInfo.isSaturday) {
           saturdayIndex++;
           if (isSaturdayOffForEmployee(saturdayIndex, emp, departmentPolicyMap, emp.department || '')) isWeekendOff = true;
         }
+        if (isWeekendOff) employeeOffDayCount++;
 
         // Get shift for this date - use shift effective on this date (history-first)
         const shiftForDate = shiftForDateMap.get(`${emp.empCode}|${date}`);
@@ -745,6 +758,23 @@ export async function GET(req) {
             isFuture: true,
           });
           continue;
+        }
+
+        // Saturday unified-shift-time override (per-department, OFF by default).
+        // When a department uses 'unified_time', all shifts are judged against one
+        // common Saturday timing. Only applies on worked Saturdays.
+        if (weekendInfo.isSaturday && !isWeekendOff) {
+          const deptCfg = departmentPolicyMap.get(String(emp.department || '').trim().toLowerCase());
+          if (deptCfg && deptCfg.saturdayShiftMode === 'unified_time' && deptCfg.saturdayUnifiedStart && deptCfg.saturdayUnifiedEnd) {
+            // Replace the shift object used for calculation only (display shiftCode kept as-is).
+            shiftObj = {
+              code: 'SAT-UNIFIED',
+              name: 'Saturday Unified',
+              startTime: deptCfg.saturdayUnifiedStart,
+              endTime: deptCfg.saturdayUnifiedEnd,
+              crossesMidnight: !!deptCfg.saturdayUnifiedCrossesMidnight,
+            };
+          }
         }
 
         const checkIn = doc?.checkIn ? new Date(doc.checkIn) : null;
@@ -804,9 +834,7 @@ export async function GET(req) {
                     ? nextCheckOutValue 
                     : new Date(nextCheckOutValue);
                   if (!isNaN(nextCheckOut.getTime())) {
-                    const TZ = process.env.TIMEZONE_OFFSET || '+05:00';
-                    const TZ_MS = TZ === '+05:00' ? 5 * 60 * 60 * 1000 : 0;
-                    const checkOutLocal = new Date(nextCheckOut.getTime() + TZ_MS);
+                    const checkOutLocal = new Date(nextCheckOut.getTime() + COMPANY_OFFSET_MS);
                     const checkOutHour = checkOutLocal.getUTCHours();
                     const checkOutMin = checkOutLocal.getUTCMinutes();
                     const checkOutTotalMin = checkOutHour * 60 + checkOutMin;
@@ -1227,9 +1255,18 @@ export async function GET(req) {
 
 
       const grossSalary = emp.monthlySalary || 0;
-      // Working days = total calendar days - 6 (Sundays + alternate Saturdays)
-      // 31-day month → 25 working days, 30-day month → 24, 28-day month → 22, 29-day month → 23
-      const workingDaysInMonth = daysInMonth - 6;
+      // Working days per month, controlled by CompanySettings.workingDaysMode:
+      //  - 'legacy' (default): daysInMonth - 6 (preserves historical behavior)
+      //  - 'actual': daysInMonth minus this employee's real weekend/off days
+      //  - 'fixed' : a fixed configured number
+      let workingDaysInMonth;
+      if (companySettings.workingDaysMode === 'fixed') {
+        workingDaysInMonth = companySettings.fixedDaysPerMonth || 26;
+      } else if (companySettings.workingDaysMode === 'actual') {
+        workingDaysInMonth = Math.max(1, daysInMonth - employeeOffDayCount);
+      } else {
+        workingDaysInMonth = daysInMonth - 6;
+      }
       const salaryCalc = calculateSalaryAmounts(
         grossSalary, 
         salaryDeductDays, 
@@ -1414,6 +1451,11 @@ export async function POST(req) {
         fifthSaturdayPolicy: d.fifthSaturdayPolicy || 'working_all',
       });
     });
+
+    // Dynamic weekly off days (default [0] = Sunday). Saturday handled by department policy.
+    const companySettings = await getCompanySettings();
+    const weeklyOffDays = (companySettings.weeklyOffDays || [0]).filter((d) => d !== 6);
+
     if (!emp) {
       throw new NotFoundError(`Employee ${empCode}`);
     }
@@ -1441,6 +1483,26 @@ export async function POST(req) {
       shiftCode = shiftCode || (shiftObj ? shiftObj.code : extractedCode);
     }
     if (!shiftCode) shiftCode = emp.shift || '';
+
+    // Saturday unified-shift-time override (per-department, OFF by default).
+    // Replaces the shift used for calc/checkout on Saturdays when the department
+    // uses 'unified_time'. Storage shiftCode is kept as the employee's real shift.
+    {
+      const postLocal = new Date(`${date}T00:00:00${TZ}`);
+      const postDow = new Date(postLocal.getTime() + COMPANY_OFFSET_MS).getUTCDay();
+      if (postDow === 6) {
+        const deptCfg = departmentPolicyMap.get(String(emp.department || '').trim().toLowerCase());
+        if (deptCfg && deptCfg.saturdayShiftMode === 'unified_time' && deptCfg.saturdayUnifiedStart && deptCfg.saturdayUnifiedEnd) {
+          shiftObj = {
+            code: 'SAT-UNIFIED',
+            name: 'Saturday Unified',
+            startTime: deptCfg.saturdayUnifiedStart,
+            endTime: deptCfg.saturdayUnifiedEnd,
+            crossesMidnight: !!deptCfg.saturdayUnifiedCrossesMidnight,
+          };
+        }
+      }
+    }
 
     const companyTodayYmdPost = getCompanyTodayYmd();
 
@@ -1524,8 +1586,8 @@ export async function POST(req) {
     const saturdayIndex = getSaturdayIndexInMonth(year, monthIndex, dayOfMonth, dow, firstParts.dow);
     
     let isWeekendOff = false;
-    if (dow === 0) {
-      isWeekendOff = true; // Sunday
+    if (weeklyOffDays.includes(dow)) {
+      isWeekendOff = true; // configurable weekly off days (default Sunday)
     } else if (dow === 6) {
       isWeekendOff = saturdayIndex == null ? true : isSaturdayOffForEmployee(saturdayIndex, emp, departmentPolicyMap, emp.department || '');
     }

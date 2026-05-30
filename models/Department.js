@@ -34,6 +34,18 @@ const DepartmentSchema = new mongoose.Schema(
       enum: ['working_all', 'off_all', 'group_alternate'],
       default: 'working_all',
     },
+
+    // Saturday shift-time behavior (only applies on worked Saturdays):
+    // - 'own_time' (default)   → each employee works their own assigned shift timing (current behavior).
+    // - 'unified_time'         → ALL shifts in this department use one common timing on Saturdays.
+    saturdayShiftMode: {
+      type: String,
+      enum: ['own_time', 'unified_time'],
+      default: 'own_time',
+    },
+    saturdayUnifiedStart: { type: String, default: '21:00' }, // HH:MM, used when unified_time
+    saturdayUnifiedEnd: { type: String, default: '06:00' },   // HH:MM, used when unified_time
+    saturdayUnifiedCrossesMidnight: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

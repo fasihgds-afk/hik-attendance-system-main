@@ -19,13 +19,33 @@ function normalizeFifthSaturdayPolicy(value) {
   return 'working_all';
 }
 
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+// Returns the Saturday-shift fields, defaulting to current behavior ('own_time').
+function normalizeSaturdayShift(body) {
+  const mode = body.saturdayShiftMode === 'unified_time' ? 'unified_time' : 'own_time';
+  const start = TIME_RE.test(String(body.saturdayUnifiedStart || '')) ? body.saturdayUnifiedStart : '21:00';
+  const end = TIME_RE.test(String(body.saturdayUnifiedEnd || '')) ? body.saturdayUnifiedEnd : '06:00';
+  const crosses = body.saturdayUnifiedCrossesMidnight === undefined
+    ? true
+    : !!body.saturdayUnifiedCrossesMidnight;
+  return {
+    saturdayShiftMode: mode,
+    saturdayUnifiedStart: start,
+    saturdayUnifiedEnd: end,
+    saturdayUnifiedCrossesMidnight: crosses,
+  };
+}
+
+const DEPT_SELECT = 'name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight';
+
 // GET /api/hr/departments - List all departments (name, saturdayPolicy, fifthSaturdayPolicy)
 export async function GET() {
   try {
     await requireHR();
     await connectDB();
     const departments = await Department.find()
-      .select('name saturdayPolicy fifthSaturdayPolicy')
+      .select(DEPT_SELECT)
       .sort({ name: 1 })
       .lean()
       .maxTimeMS(1500);
@@ -46,9 +66,10 @@ export async function POST(req) {
     if (!name) throw new ValidationError('name is required');
     const saturdayPolicy = normalizeSaturdayPolicy(body.saturdayPolicy);
     const fifthSaturdayPolicy = normalizeFifthSaturdayPolicy(body.fifthSaturdayPolicy);
+    const saturdayShift = normalizeSaturdayShift(body);
     const existing = await Department.findOne({ name }).lean().maxTimeMS(1500);
     if (existing) throw new ValidationError(`Department "${name}" already exists`);
-    const doc = await Department.create({ name, saturdayPolicy, fifthSaturdayPolicy });
+    const doc = await Department.create({ name, saturdayPolicy, fifthSaturdayPolicy, ...saturdayShift });
     return successResponse(
       {
         department: {
@@ -56,6 +77,10 @@ export async function POST(req) {
           name: doc.name,
           saturdayPolicy: doc.saturdayPolicy,
           fifthSaturdayPolicy: doc.fifthSaturdayPolicy,
+          saturdayShiftMode: doc.saturdayShiftMode,
+          saturdayUnifiedStart: doc.saturdayUnifiedStart,
+          saturdayUnifiedEnd: doc.saturdayUnifiedEnd,
+          saturdayUnifiedCrossesMidnight: doc.saturdayUnifiedCrossesMidnight,
         },
       },
       'Department created',
@@ -77,12 +102,18 @@ export async function PATCH(req) {
     if (!name) throw new ValidationError('name is required');
     const saturdayPolicy = normalizeSaturdayPolicy(body.saturdayPolicy);
     const fifthSaturdayPolicy = normalizeFifthSaturdayPolicy(body.fifthSaturdayPolicy);
+    const $set = { saturdayPolicy, fifthSaturdayPolicy };
+    // Only touch Saturday-shift fields when the caller actually sent them, so the
+    // existing Saturday-off dropdowns don't reset a configured unified timing.
+    if (body.saturdayShiftMode !== undefined) {
+      Object.assign($set, normalizeSaturdayShift(body));
+    }
     const doc = await Department.findOneAndUpdate(
       { name },
-      { $set: { saturdayPolicy, fifthSaturdayPolicy } },
+      { $set },
       { new: true, runValidators: true }
     )
-      .select('name saturdayPolicy fifthSaturdayPolicy')
+      .select(DEPT_SELECT)
       .lean()
       .maxTimeMS(1500);
     if (!doc) throw new ValidationError(`Department "${name}" not found`);

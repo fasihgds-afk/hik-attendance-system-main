@@ -145,6 +145,31 @@ export default function DepartmentPoliciesPage() {
     }
   }
 
+  async function handleSaturdayShiftChange(dept, patch) {
+    try {
+      const res = await fetch('/api/hr/departments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dept.name,
+          saturdayPolicy: dept.saturdayPolicy || 'alternate',
+          fifthSaturdayPolicy: dept.fifthSaturdayPolicy || 'working_all',
+          saturdayShiftMode: dept.saturdayShiftMode || 'own_time',
+          saturdayUnifiedStart: dept.saturdayUnifiedStart || '21:00',
+          saturdayUnifiedEnd: dept.saturdayUnifiedEnd || '06:00',
+          saturdayUnifiedCrossesMidnight: dept.saturdayUnifiedCrossesMidnight ?? true,
+          ...patch,
+        }),
+      });
+      const response = await res.json();
+      if (!res.ok) throw new Error(response.error || response.message || 'Failed to update');
+      showToast('success', `"${dept.name}" Saturday shift updated`);
+      await loadDepartments();
+    } catch (err) {
+      showToast('error', err.message || 'Failed to update');
+    }
+  }
+
   const policyLabel = (p) => (p === 'all_off' ? 'All Saturdays Off' : 'Alternate (1st/3rd vs 2nd/4th)');
   const fifthPolicyLabel = (p) => {
     if (p === 'off_all') return 'Off for all';
@@ -538,6 +563,9 @@ export default function DepartmentPoliciesPage() {
                     5th Saturday
                   </th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: tableHeaderColor(colors, theme === 'dark') }}>
+                    Saturday Shift
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 13, fontWeight: 600, color: tableHeaderColor(colors, theme === 'dark') }}>
                     Action
                   </th>
                 </tr>
@@ -569,6 +597,45 @@ export default function DepartmentPoliciesPage() {
                         <span style={{ opacity: 0.7 }}>N/A (all Saturdays off)</span>
                       ) : (
                         fifthPolicyLabel(d.fifthSaturdayPolicy)
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {d.saturdayPolicy === 'all_off' ? (
+                        <span style={{ opacity: 0.7, fontSize: 13, color: tableCellColor(colors, theme === 'dark') }}>N/A (no Saturday work)</span>
+                      ) : (
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          <select
+                            value={d.saturdayShiftMode || 'own_time'}
+                            onChange={(e) => handleSaturdayShiftChange(d, { saturdayShiftMode: e.target.value })}
+                            style={{
+                              padding: '8px 12px', borderRadius: 8,
+                              border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`,
+                              background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
+                              color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
+                              fontSize: 13, cursor: 'pointer', outline: 'none',
+                            }}
+                          >
+                            <option value="own_time">Each shift&apos;s own time</option>
+                            <option value="unified_time">One unified time</option>
+                          </select>
+                          {d.saturdayShiftMode === 'unified_time' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tableCellColor(colors, theme === 'dark') }}>
+                              <input
+                                type="time"
+                                defaultValue={d.saturdayUnifiedStart || '21:00'}
+                                onBlur={(e) => { if (e.target.value && e.target.value !== d.saturdayUnifiedStart) handleSaturdayShiftChange(d, { saturdayUnifiedStart: e.target.value }); }}
+                                style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12 }}
+                              />
+                              <span>to</span>
+                              <input
+                                type="time"
+                                defaultValue={d.saturdayUnifiedEnd || '06:00'}
+                                onBlur={(e) => { if (e.target.value && e.target.value !== d.saturdayUnifiedEnd) handleSaturdayShiftChange(d, { saturdayUnifiedEnd: e.target.value }); }}
+                                style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12 }}
+                              />
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
