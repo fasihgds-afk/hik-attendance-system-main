@@ -39,20 +39,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# next-app build and dependencies
-next-app/.next/
-next-app/node_modules/
-
-# sync-service (optional; exclude from repo if not needed)
-/sync-service/
-
-# agent-ts
-agent-ts/node_modules/
-agent-ts/data/
-
-# agent (Python)
-agent/**/__pycache__/
-agent/build/
-agent/dist/
-agent/agent_data/

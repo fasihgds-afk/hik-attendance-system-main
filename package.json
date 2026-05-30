@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:mongo": "node scripts/test-mongo-connection.js"
+    "test:mongo": "node scripts/test-mongo-connection.js",
+    "cleanup:monitoring": "node --env-file=.env.local scripts/drop-monitoring-collections.js"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",
