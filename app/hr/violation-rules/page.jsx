@@ -35,9 +35,6 @@ export default function ViolationRulesPage() {
       halfDayDays: 0.5,
       paidLeaveDays: 0.0,
     },
-    salaryConfig: {
-      daysPerMonth: 25,
-    },
     description: '',
   });
 
@@ -87,7 +84,6 @@ export default function ViolationRulesPage() {
           violationConfig: data.rules.violationConfig || formData.violationConfig,
           absentConfig: data.rules.absentConfig || formData.absentConfig,
           leaveConfig: data.rules.leaveConfig || formData.leaveConfig,
-          salaryConfig: data.rules.salaryConfig || formData.salaryConfig,
           description: data.rules.description || '',
         });
       }
@@ -266,13 +262,49 @@ export default function ViolationRulesPage() {
                   fontWeight: 500,
                 }}
               >
-                Violation Rules & Salary Deduction Management
+                Violation &amp; Leave Deduction Rules
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => router.push('/hr/employees')}
+              style={{
+                padding: '10px 18px',
+                borderRadius: 12,
+                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border.default}`,
+                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
+                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                backdropFilter: 'blur(10px)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              HR Home
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/hr/company-settings')}
+              style={{
+                padding: '10px 18px',
+                borderRadius: 12,
+                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border.default}`,
+                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
+                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                backdropFilter: 'blur(10px)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Company Settings
+            </button>
             <button
               type="button"
               onClick={handleLogout}
@@ -825,87 +857,38 @@ export default function ViolationRulesPage() {
               </div>
             </div>
 
-            {/* Salary Configuration */}
+            {/* Per-day salary lives on Company Settings */}
             <div
               className="rules-form-section"
               style={{
                 marginBottom: 24,
-                padding: '20px 24px',
+                padding: '16px 20px',
                 borderRadius: 12,
-                backgroundColor: colors.background.secondary,
-                border: `1px solid ${colors.border.default}`,
+                backgroundColor: theme === 'dark' ? 'rgba(59, 130, 246, 0.12)' : '#e0f2fe',
+                border: `1px solid ${colors.primary[300]}`,
               }}
             >
-              <h3
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  marginBottom: 16,
-                  color: colors.text.primary,
-                  borderBottom: `2px solid ${colors.primary[500]}`,
-                  paddingBottom: 8,
-                }}
-              >
-                Salary Calculation Configuration
-              </h3>
-              <div
-                style={{
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  backgroundColor: theme === 'dark' ? 'rgba(59, 130, 246, 0.15)' : '#e0f2fe',
-                  border: `1px solid ${colors.primary[300]}`,
-                  marginBottom: 16,
-                }}
-              >
-                <p style={{ fontSize: 12, color: colors.text.secondary, margin: 0, lineHeight: 1.6 }}>
-                  <strong style={{ color: colors.primary[600] }}>ℹ️ Note:</strong> The system automatically uses the <strong>actual number of days in each month</strong> (28, 29, 30, or 31) for salary calculations. 
-                  The "Days Per Month" value below is used as a <strong>default/fallback</strong> only if the actual month days cannot be determined.
-                </p>
-              </div>
-              <p style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 16 }}>
-                Configure the default days per month for salary calculation (used as fallback).
+              <p style={{ fontSize: 13, color: colors.text.secondary, margin: 0, lineHeight: 1.65 }}>
+                <strong style={{ color: colors.text.primary }}>Per-day salary divisor</strong> (how monthly salary is split into working days)
+                is configured on{' '}
+                <button
+                  type="button"
+                  onClick={() => router.push('/hr/company-settings')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: theme === 'dark' ? '#38bdf8' : colors.primary[600],
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Company Settings
+                </button>
+                . This page only controls <strong style={{ color: colors.text.primary }}>how many days to deduct</strong> for
+                violations, absences, and leaves.
               </p>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-                  gap: 16,
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: colors.text.secondary,
-                      marginBottom: 6,
-                      display: 'block',
-                    }}
-                  >
-                    Working Days Per Month (fallback)
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.salaryConfig.daysPerMonth}
-                    onChange={(e) => updateNestedField('salaryConfig', 'daysPerMonth', Number(e.target.value))}
-                    min="1"
-                    max="31"
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      border: `1px solid ${colors.border.input}`,
-                      fontSize: 14,
-                      width: '100%',
-                      outline: 'none',
-                      backgroundColor: colors.background.input,
-                      color: colors.text.primary,
-                    }}
-                  />
-                  <p style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
-                    Auto-calculated: 31-day month = 25, 30-day = 24, 29-day = 23, 28-day = 22 working days.
-                  </p>
-                </div>
-              </div>
             </div>
 
             {/* Description */}

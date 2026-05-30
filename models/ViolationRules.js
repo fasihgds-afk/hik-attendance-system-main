@@ -81,14 +81,14 @@ const ViolationRulesSchema = new mongoose.Schema(
       },
     },
 
-    // Salary Calculation Configuration
+    // Deprecated: per-day salary divisor moved to CompanySettings.workingDaysMode.
+    // Kept in schema for backward compatibility with existing documents.
     salaryConfig: {
       daysPerMonth: {
         type: Number,
         default: 30,
         min: 1,
         max: 31,
-        comment: 'Days per month for salary calculation (can be 26, 30, 31)',
       },
     },
 

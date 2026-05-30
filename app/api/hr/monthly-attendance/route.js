@@ -447,7 +447,7 @@ export async function GET(req) {
 
     // OPTIMIZATION: Fetch violation rules with minimal fields, fast timeout
     let violationRules = await ViolationRules.findOne({ isActive: true })
-      .select('violationConfig absentConfig leaveConfig salaryConfig')
+      .select('violationConfig absentConfig leaveConfig')
       .lean()
       .maxTimeMS(1500); // Reduced timeout
     if (!violationRules) {
@@ -469,9 +469,6 @@ export async function GET(req) {
           sickLeaveDays: 1.0,
           halfDayDays: 0.5,
           paidLeaveDays: 0.0,
-        },
-        salaryConfig: {
-          daysPerMonth: 25,
         },
       };
     }

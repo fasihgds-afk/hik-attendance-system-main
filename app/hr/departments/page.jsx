@@ -385,6 +385,38 @@ export default function DepartmentPoliciesPage() {
             <ThemeToggle />
             <button
               type="button"
+              onClick={() => router.push('/hr/company-settings')}
+              className="dept-button"
+              style={{
+                padding: '9px 18px',
+                borderRadius: 12,
+                border: `1px solid ${theme === 'dark' ? 'rgba(148, 163, 184, 0.45)' : colors.border?.default}`,
+                backgroundColor: theme === 'dark' ? 'rgba(100, 116, 139, 0.25)' : colors.background?.card,
+                color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                whiteSpace: 'nowrap',
+                backdropFilter: 'blur(10px)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(100, 116, 139, 0.4)' : colors.background?.hover;
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(100, 116, 139, 0.25)' : colors.background?.card;
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              Company Settings
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/hr/employees')}
               className="dept-button"
               style={{

@@ -253,6 +253,10 @@ export default function HrDashboardPage() {
     router.push("/hr/violation-rules");
   }
 
+  function openCompanySettings() {
+    router.push("/hr/company-settings");
+  }
+
   function openComplaints() {
     router.push("/hr/complaints");
   }
@@ -390,6 +394,30 @@ export default function HrDashboardPage() {
         btn: {
           background: isDark ? "rgba(255, 255, 255, 0.92)" : "#0f766e",
           color: isDark ? "#134e4a" : "#ffffff",
+        },
+      },
+      settings: {
+        border: "1px solid rgba(100, 116, 139, 0.4)",
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(148, 163, 184, 0.65)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(71, 85, 105, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(100, 116, 139, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? "linear-gradient(135deg, #1e293b 0%, #334155 100%)"
+          : "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)",
+        kickerColor: isDark ? "#94a3b8" : "#475569",
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#cbd5e1" : "#64748b",
+        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(100, 116, 139, 0.32), rgba(100, 116, 139, 0.14))",
+          border: "1px solid rgba(148, 163, 184, 0.45)",
+          stroke: "#94a3b8",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#475569",
+          color: isDark ? "#1e293b" : "#ffffff",
         },
       },
       complaints: {
@@ -993,6 +1021,33 @@ export default function HrDashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
                 Violation Rules
+              </button>
+
+              <button
+                type="button"
+                onClick={openCompanySettings}
+                style={{
+                  ...headerActionBtn,
+                  border: "1px solid rgba(148, 163, 184, 0.45)",
+                  backgroundColor: "rgba(100, 116, 139, 0.22)",
+                  color: "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  boxShadow: "0 2px 8px rgba(100, 116, 139, 0.25)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(100, 116, 139, 0.32)";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(100, 116, 139, 0.22)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Company Settings
               </button>
 
               <button
@@ -1751,6 +1806,43 @@ export default function HrDashboardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     Open Shift Management
+                  </button>
+                </div>
+              </div>
+
+              {/* COMPANY SETTINGS */}
+              <div style={hub.card("settings")} {...hub.hoverProps("settings")}>
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("settings")}>Configuration</div>
+                    <h3 style={hub.headline("settings")}>Company settings</h3>
+                    <div style={hub.hint("settings")}>Timezone, off-days &amp; salary mode</div>
+                  </div>
+                  <div style={hub.icon48("settings")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("settings")} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <p style={hub.desc("settings")}>
+                  Set company timezone, weekly off days, night-shift rules, and how working days per month are calculated.
+                </p>
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={openCompanySettings}
+                    style={hub.btn("settings")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    Open Company Settings
                   </button>
                 </div>
               </div>

@@ -21,7 +21,7 @@ export async function GET(req) {
 
     // OPTIMIZATION: Get the active rules with minimal fields, fast timeout
     const activeRules = await ViolationRules.findOne({ isActive: true })
-      .select('violationConfig absentConfig leaveConfig salaryConfig isActive description')
+      .select('violationConfig absentConfig leaveConfig isActive description')
       .lean()
       .maxTimeMS(2000); // Fast timeout for Vercel
 
@@ -45,9 +45,6 @@ export async function GET(req) {
             sickLeaveDays: 1.0,
             halfDayDays: 0.5,
             paidLeaveDays: 0.0,
-          },
-          salaryConfig: {
-            daysPerMonth: 30,
           },
           isActive: true,
           description: 'Default rules',
@@ -79,15 +76,14 @@ export async function POST(req) {
       violationConfig,
       absentConfig,
       leaveConfig,
-      salaryConfig,
       description,
       updatedBy,
     } = body;
 
     // Validate required fields
-    if (!violationConfig || !absentConfig || !leaveConfig || !salaryConfig) {
+    if (!violationConfig || !absentConfig || !leaveConfig) {
       return NextResponse.json(
-        { error: 'All configuration sections are required' },
+        { error: 'violationConfig, absentConfig, and leaveConfig are required' },
         { status: 400 }
       );
     }
@@ -117,11 +113,8 @@ export async function POST(req) {
         halfDayDays: leaveConfig.halfDayDays ?? 0.5,
         paidLeaveDays: leaveConfig.paidLeaveDays ?? 0.0,
       },
-      salaryConfig: {
-        daysPerMonth: salaryConfig.daysPerMonth ?? 30,
-      },
       isActive: true,
-      description: description || 'Violation and salary deduction rules',
+      description: description || 'Violation and leave deduction rules',
       updatedBy: updatedBy || 'HR',
     });
 
@@ -153,7 +146,6 @@ export async function PUT(req) {
       violationConfig,
       absentConfig,
       leaveConfig,
-      salaryConfig,
       description,
       updatedBy,
     } = body;
@@ -164,9 +156,9 @@ export async function PUT(req) {
     if (!activeRules) {
       // If no active rules exist, create new ones using the same logic as POST
       // (Cannot call POST(req) because body has already been read)
-      if (!violationConfig || !absentConfig || !leaveConfig || !salaryConfig) {
+      if (!violationConfig || !absentConfig || !leaveConfig) {
         return NextResponse.json(
-          { error: 'All configuration sections are required' },
+          { error: 'violationConfig, absentConfig, and leaveConfig are required' },
           { status: 400 }
         );
       }
@@ -196,11 +188,8 @@ export async function PUT(req) {
           halfDayDays: leaveConfig.halfDayDays ?? 0.5,
           paidLeaveDays: leaveConfig.paidLeaveDays ?? 0.0,
         },
-        salaryConfig: {
-          daysPerMonth: salaryConfig.daysPerMonth ?? 30,
-        },
         isActive: true,
-        description: description || 'Violation and salary deduction rules',
+        description: description || 'Violation and leave deduction rules',
         updatedBy: updatedBy || 'HR',
       });
 
@@ -237,12 +226,6 @@ export async function PUT(req) {
         sickLeaveDays: leaveConfig.sickLeaveDays ?? activeRules.leaveConfig.sickLeaveDays,
         halfDayDays: leaveConfig.halfDayDays ?? activeRules.leaveConfig.halfDayDays,
         paidLeaveDays: leaveConfig.paidLeaveDays ?? activeRules.leaveConfig.paidLeaveDays,
-      };
-    }
-
-    if (salaryConfig) {
-      activeRules.salaryConfig = {
-        daysPerMonth: salaryConfig.daysPerMonth ?? activeRules.salaryConfig.daysPerMonth,
       };
     }
 
