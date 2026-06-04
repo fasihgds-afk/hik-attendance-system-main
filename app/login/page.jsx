@@ -87,16 +87,35 @@ function LoginInner() {
     setLoading(true);
 
     try {
+      const code = empCode.trim();
+      const precheck = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "EMPLOYEE", empCode: code }),
+      });
+      const precheckBody = await precheck.json().catch(() => ({}));
+      if (!precheck.ok) {
+        setErrorMsg(
+          precheckBody.error ||
+            precheckBody.message ||
+            (precheck.status === 403
+              ? "Your employee portal access is disabled. Please contact HR."
+              : "Unknown employee code. Check with HR.")
+        );
+        setLoading(false);
+        return;
+      }
+
       const result = await signIn("credentials", {
         redirect: false,
         mode: "EMPLOYEE",
-        empCode: empCode.trim(),
+        empCode: code,
         password: "",
         callbackUrl: "/employee/dashboard",
       });
 
       if (!result || result.error) {
-        setErrorMsg("Unknown employee code. Check with HR.");
+        setErrorMsg("Unable to sign in. Check with HR.");
         setLoading(false);
         return;
       }

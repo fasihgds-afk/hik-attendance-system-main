@@ -257,6 +257,10 @@ export default function HrDashboardPage() {
     router.push("/hr/company-settings");
   }
 
+  function openPortalAccess() {
+    router.push("/hr/portal-access");
+  }
+
   function openComplaints() {
     router.push("/hr/complaints");
   }
@@ -418,6 +422,30 @@ export default function HrDashboardPage() {
         btn: {
           background: isDark ? "rgba(255, 255, 255, 0.92)" : "#475569",
           color: isDark ? "#1e293b" : "#ffffff",
+        },
+      },
+      portal: {
+        border: "1px solid rgba(244, 63, 94, 0.35)",
+        boxShadow: isDark ? shD : shL,
+        hoverBorder: "1px solid rgba(251, 113, 133, 0.55)",
+        hoverShadow: isDark
+          ? "0 12px 32px rgba(244, 63, 94, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
+          : "0 12px 28px rgba(244, 63, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
+        background: isDark
+          ? "linear-gradient(135deg, #881337 0%, #9f1239 100%)"
+          : "linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%)",
+        kickerColor: isDark ? "#fda4af" : "#be123c",
+        headlineColor: colors.text.primary,
+        hintColor: isDark ? "#fecdd3" : "#e11d48",
+        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
+        icon: {
+          bg: "linear-gradient(135deg, rgba(244, 63, 94, 0.32), rgba(244, 63, 94, 0.14))",
+          border: "1px solid rgba(251, 113, 133, 0.45)",
+          stroke: "#fb7185",
+        },
+        btn: {
+          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#e11d48",
+          color: isDark ? "#881337" : "#ffffff",
         },
       },
       complaints: {
@@ -1052,34 +1080,30 @@ export default function HrDashboardPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  window.location.reload();
-                }}
+                onClick={openPortalAccess}
                 style={{
                   ...headerActionBtn,
-                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                  background:
-                    theme === "dark"
-                      ? `linear-gradient(135deg, ${colors.background.card} 0%, ${colors.background.secondary} 100%)`
-                      : "linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)",
-                  color: theme === "dark" ? colors.text.primary : colors.primary[700],
-                  fontWeight: 700,
-                  boxShadow: "0 2px 10px rgba(0, 0, 0, 0.15)",
+                  border: "1px solid rgba(251, 113, 133, 0.45)",
+                  backgroundColor: "rgba(244, 63, 94, 0.22)",
+                  color: "#ffffff",
+                  backdropFilter: "blur(8px)",
+                  boxShadow: "0 2px 8px rgba(244, 63, 94, 0.25)",
                 }}
                 onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(244, 63, 94, 0.32)";
                   e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.filter = "brightness(1.05)";
                 }}
                 onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "rgba(244, 63, 94, 0.22)";
                   e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.filter = "";
                 }}
               >
                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
-                Refresh
+                Portal Access
               </button>
+
               <ThemeToggle />
               <button
                 type="button"
@@ -1806,6 +1830,42 @@ export default function HrDashboardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     Open Shift Management
+                  </button>
+                </div>
+              </div>
+
+              {/* EMPLOYEE PORTAL ACCESS */}
+              <div style={hub.card("portal")} {...hub.hoverProps("portal")}>
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("portal")}>Security</div>
+                    <h3 style={hub.headline("portal")}>Portal access</h3>
+                    <div style={hub.hint("portal")}>Block or activate sign-in</div>
+                  </div>
+                  <div style={hub.icon48("portal")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("portal")} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                </div>
+                <p style={hub.desc("portal")}>
+                  Control which employees can log in to the employee portal. Blocked staff see a clear message at login.
+                </p>
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={openPortalAccess}
+                    style={hub.btn("portal")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    Manage Portal Access
                   </button>
                 </div>
               </div>

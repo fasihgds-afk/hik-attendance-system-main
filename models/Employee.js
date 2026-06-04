@@ -54,6 +54,12 @@ const EmployeeSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    /** When false, employee cannot sign in to the employee portal (HR can toggle). */
+    portalEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

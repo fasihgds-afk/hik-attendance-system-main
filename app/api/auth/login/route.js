@@ -4,7 +4,8 @@ import User from '../../../../models/User';
 import Employee from '../../../../models/Employee';
 import bcrypt from 'bcryptjs';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { ValidationError, UnauthorizedError } from '../../../../lib/errors/errorHandler';
+import { ValidationError, UnauthorizedError, ForbiddenError } from '../../../../lib/errors/errorHandler';
+import { isPortalEnabled } from '../../../../lib/auth/portalAccess';
 import { rateLimiters } from '../../../../lib/middleware/rateLimit';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
@@ -58,12 +59,18 @@ export async function POST(req) {
       }
 
       const employee = await Employee.findOne({ empCode: String(empCode).trim() })
-        .select('empCode name')
+        .select('empCode name portalEnabled')
         .lean()
         .maxTimeMS(1500);
 
       if (!employee) {
         throw new UnauthorizedError('Employee not found');
+      }
+
+      if (!isPortalEnabled(employee)) {
+        throw new ForbiddenError(
+          'Your employee portal access is disabled. Please contact HR.'
+        );
       }
 
       return successResponse(

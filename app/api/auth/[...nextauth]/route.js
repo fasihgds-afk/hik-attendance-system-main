@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { connectDB } from "../../../../lib/db";
 import User from "../../../../models/User";
 import Employee from "../../../../models/Employee";
+import { isPortalEnabled } from "../../../../lib/auth/portalAccess";
 import bcrypt from "bcryptjs";
 
 export const authOptions = {
@@ -84,11 +85,11 @@ export const authOptions = {
           try {
             const code = String(empCode).trim();
             const employee = await Employee.findOne({ empCode: code })
-              .select("_id name email department designation shift allowWebClockIn")
+              .select("_id name email department designation shift allowWebClockIn portalEnabled")
               .lean()
               .maxTimeMS(2000);
 
-            if (!employee) {
+            if (!employee || !isPortalEnabled(employee)) {
               return null;
             }
 

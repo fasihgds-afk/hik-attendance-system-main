@@ -146,6 +146,7 @@ export async function GET(req) {
       designation: 1,
       saturdayGroup: 1,
       allowWebClockIn: 1,
+      portalEnabled: 1,
       // Excluded: profileImageUrl, cnic, phoneNumber, createdAt, updatedAt
     };
     
