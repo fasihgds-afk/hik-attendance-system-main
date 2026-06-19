@@ -88,11 +88,25 @@ export async function PATCH(req) {
     }
     update.updatedBy = user?.email || user?.name || 'unknown';
 
-    const doc = await CompanySettings.findOneAndUpdate(
+    // Ensure the singleton document exists (creates defaults if missing).
+    // Avoid upsert with overlapping $set + $setOnInsert fields — MongoDB rejects that on insert (500).
+    await getCompanySettings({ fresh: true });
+
+    let doc = await CompanySettings.findOneAndUpdate(
       { configId: 'default' },
-      { $set: update, $setOnInsert: { configId: 'default', ...DEFAULT_COMPANY_SETTINGS } },
-      { new: true, upsert: true, runValidators: true }
+      { $set: update },
+      { new: true, runValidators: true }
     ).lean().maxTimeMS(2000);
+
+    if (!doc) {
+      const seed = {
+        ...DEFAULT_COMPANY_SETTINGS,
+        timezoneOffset: process.env.TIMEZONE_OFFSET || DEFAULT_COMPANY_SETTINGS.timezoneOffset,
+        ...update,
+      };
+      const created = await CompanySettings.create({ configId: 'default', ...seed });
+      doc = created.toObject ? created.toObject() : created;
+    }
 
     invalidateCompanySettingsCache();
     const settings = await getCompanySettings({ fresh: true });
