@@ -5,8 +5,9 @@ import mongoose from 'mongoose';
  * Used by monthly attendance to decide if a Saturday is off for employees in this department.
  *
  * saturdayPolicy:
- * - 'all_off'   → Every Saturday is off for this department.
- * - 'alternate' → Alternate Saturdays: use employee's saturdayGroup (A = 1st & 3rd Sat off, B = 2nd & 4th Sat off).
+ * - 'all_working' → Every Saturday is a working day for this department.
+ * - 'all_off'     → Every Saturday is off for this department.
+ * - 'alternate'   → Alternate Saturdays: use employee's saturdayGroup (A = 1st & 3rd Sat off, B = 2nd & 4th Sat off).
  *
  * fifthSaturdayPolicy (used when saturdayPolicy='alternate'):
  * - 'working_all'     → 5th Saturday is working for all employees.
@@ -26,7 +27,7 @@ const DepartmentSchema = new mongoose.Schema(
     },
     saturdayPolicy: {
       type: String,
-      enum: ['all_off', 'alternate'],
+      enum: ['all_working', 'all_off', 'alternate'],
       default: 'alternate',
     },
     fifthSaturdayPolicy: {

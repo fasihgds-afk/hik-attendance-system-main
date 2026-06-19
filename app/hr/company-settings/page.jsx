@@ -604,7 +604,7 @@ export default function HrCompanySettingsPage() {
                     )}
                     {settings.workingDaysMode === 'actual' && (
                       <span style={hintStyle}>
-                        Each employee&apos;s divisor = calendar days minus their Sundays + Saturday rules
+                        Each employee&apos;s divisor = calendar days minus their Sundays + department Saturday rules (all working, alternate, or all off)
                       </span>
                     )}
                   </div>

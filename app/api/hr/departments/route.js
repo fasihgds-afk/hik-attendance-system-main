@@ -10,7 +10,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function normalizeSaturdayPolicy(value) {
-  return value === 'all_off' ? 'all_off' : 'alternate';
+  if (value === 'all_working') return 'all_working';
+  if (value === 'all_off') return 'all_off';
+  return 'alternate';
 }
 
 function normalizeFifthSaturdayPolicy(value) {
