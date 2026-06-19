@@ -60,6 +60,18 @@ const EmployeeSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    /** Soft-delete lifecycle — active employees appear in HR lists; archived do not. */
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'terminated'],
+      default: 'active',
+      index: true,
+    },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: String, default: null },
+    deleteReason: { type: String, default: null },
+    lastWorkingDay: { type: String, default: null }, // YYYY-MM-DD
   },
   { timestamps: true }
 );
@@ -94,6 +106,9 @@ EmployeeSchema.index({ shiftId: 1, department: 1 }, { background: true });
 // CRITICAL: Compound index for department + empCode sorting (used in hr/employees route)
 // This index is essential for fast sorting by department then empCode
 EmployeeSchema.index({ department: 1, empCode: 1 }, { background: true });
+
+// Index for active vs archived list queries
+EmployeeSchema.index({ status: 1, empCode: 1 }, { background: true });
 
 // CRITICAL: Index for sorting by empCode (used in all list queries)
 // This index is essential for fast pagination - MUST exist for performance

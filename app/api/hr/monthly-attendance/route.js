@@ -53,6 +53,7 @@ import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSal
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
 import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
 import { getCompanySettings } from '../../../../lib/settings/getCompanySettings';
+import { fetchEmployeesForMonthlySheet } from '../../../../lib/employees/activeFilter';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -482,15 +483,21 @@ export async function GET(req) {
     const monthStartDate = `${monthPrefix}-01`;
     const monthEndDate = `${monthPrefix}-${String(daysInMonth).padStart(2, '0')}`;
 
-    const employeeMongoFilter = isEmployeeViewer ? { empCode: myEmpCode } : {};
-
     // OPTIMIZATION: Run queries in parallel; employees scoped to one row when viewer is EMPLOYEE
     const [shiftCount, employees, departmentDocs] = await Promise.all([
       Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
-      Employee.find(employeeMongoFilter)
-        .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
-        .lean()
-        .maxTimeMS(isEmployeeViewer ? 1500 : 2500),
+      isEmployeeViewer
+        ? Employee.find({ empCode: myEmpCode })
+            .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
+            .lean()
+            .maxTimeMS(1500)
+        : fetchEmployeesForMonthlySheet(Employee, ShiftAttendance, {
+            monthStartDate,
+            monthEndDate,
+            monthRelation,
+            projection: 'empCode name department designation shift shiftId monthlySalary saturdayGroup',
+            maxTimeMS: 2500,
+          }),
       Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
     ]);
 

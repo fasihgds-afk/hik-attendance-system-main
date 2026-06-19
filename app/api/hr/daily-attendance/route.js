@@ -8,6 +8,7 @@ import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 import AttendanceEvent from '../../../../models/AttendanceEvent';
 import Employee from '../../../../models/Employee';
+import { mergeActiveFilter } from '../../../../lib/employees/activeFilter';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
 import Shift from '../../../../models/Shift';
 import { resolveGracePeriodsForCalendarDate } from '../../../../lib/shift/gracePeriods.js';
@@ -99,7 +100,7 @@ export async function POST(req) {
     const endLocal = new Date(`${nextDateStr}T08:00:00${TZ}`);
 
     const [allEmployees, existingRecords, punchMap] = await Promise.all([
-      Employee.find()
+      Employee.find(mergeActiveFilter({}))
         .select('empCode name shift shiftId department designation')
         .lean()
         .maxTimeMS(2000),

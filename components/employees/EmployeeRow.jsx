@@ -254,7 +254,7 @@ export default function EmployeeRow({
                 e.stopPropagation();
                 onDelete(employee);
               }}
-              title="Delete employee"
+              title="Deactivate employee"
               style={{
                 padding: '8px 12px',
                 borderRadius: 8,

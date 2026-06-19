@@ -26,6 +26,7 @@ import { ValidationError } from '../../../../../lib/errors/errorHandler';
 
 import { connectDB } from '../../../../../lib/db';
 import Employee from '../../../../../models/Employee';
+import { mergeActiveFilter } from '../../../../../lib/employees/activeFilter';
 import ShiftAttendance from '../../../../../models/ShiftAttendance';
 import Shift from '../../../../../models/Shift';
 import { normalizeStatus, extractShiftCode } from '../../../../../lib/calculations';
@@ -75,7 +76,7 @@ export async function POST(req) {
 
     const [allShifts, employees] = await Promise.all([
       Shift.find({}).select('_id code').lean().maxTimeMS(2000),
-      Employee.find({})
+      Employee.find(mergeActiveFilter({}))
         .select('empCode name department designation shift shiftId')
         .lean()
         .maxTimeMS(3000),

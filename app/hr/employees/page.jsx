@@ -261,6 +261,10 @@ export default function HrDashboardPage() {
     router.push("/hr/portal-access");
   }
 
+  function openFormerEmployees() {
+    router.push("/hr/employees/archived");
+  }
+
   function openComplaints() {
     router.push("/hr/complaints");
   }
@@ -1751,6 +1755,25 @@ export default function HrDashboardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     Open Manager
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openFormerEmployees}
+                    style={{
+                      ...hub.btn("employees"),
+                      background: "transparent",
+                      color: colors.text?.secondary || "#64748b",
+                      border: `1px solid ${colors.border?.default || "#cbd5e1"}`,
+                      boxShadow: "none",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    Former Employees
                   </button>
                 </div>
               </div>

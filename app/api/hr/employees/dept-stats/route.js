@@ -1,6 +1,7 @@
 // next-app/app/api/hr/employees/dept-stats/route.js
 import { connectDB } from '../../../../../lib/db';
 import Employee from '../../../../../models/Employee';
+import { ACTIVE_EMPLOYEE_FILTER } from '../../../../../lib/employees/activeFilter';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 import { requireHR } from '../../../../../lib/auth/requireAuth';
 
@@ -19,6 +20,7 @@ export async function GET(req) {
 
     const departmentCounts = await Employee.aggregate(
       [
+        { $match: ACTIVE_EMPLOYEE_FILTER },
         { $group: { _id: { $ifNull: ['$department', 'Unassigned'] }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $project: { name: '$_id', count: 1, _id: 0 } },

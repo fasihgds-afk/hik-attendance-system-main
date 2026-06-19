@@ -8,6 +8,7 @@ import { rateLimiters } from '../../../../lib/middleware/rateLimit';
 import { z } from 'zod';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requireHR } from '../../../../lib/auth/requireAuth';
+import { mergeActiveFilter } from '../../../../lib/employees/activeFilter';
 import SecurityAuditLog from '../../../../models/SecurityAuditLog';
 
 // Validation schema for user registration
@@ -68,7 +69,7 @@ export async function POST(req) {
         throw new ValidationError('empCode is required for EMPLOYEE role');
       }
 
-      employeeDoc = await Employee.findOne({ empCode })
+      employeeDoc = await Employee.findOne(mergeActiveFilter({ empCode }))
         .select('empCode')
         .lean()
         .maxTimeMS(1500);

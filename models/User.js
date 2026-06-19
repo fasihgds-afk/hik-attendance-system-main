@@ -24,6 +24,12 @@ const UserSchema = new mongoose.Schema(
       type: String, // same code as in Employee.empCode
       index: true,
     },
+    /** When false, login is blocked (e.g. employee deactivated). */
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
   },
   { timestamps: true }
 );

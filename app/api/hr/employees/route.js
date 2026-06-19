@@ -1,6 +1,7 @@
 // next-app/app/api/hr/employees/route.js
 import { connectDB } from "../../../../lib/db";
 import Employee from "../../../../models/Employee";
+import { mergeActiveFilter } from "../../../../lib/employees/activeFilter";
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
 import { requireHR } from "../../../../lib/auth/requireAuth";
 
@@ -27,10 +28,11 @@ export async function GET(req) {
 
     // OPTIMIZATION: Run count and data queries in parallel for faster response
     // MongoDB will auto-select the compound index { department: 1, empCode: 1 } for sorting
+    const activeFilter = mergeActiveFilter({});
     const [total, employees] = await Promise.all([
-      Employee.countDocuments({})
+      Employee.countDocuments(activeFilter)
         .maxTimeMS(2500), // Reduced timeout
-      Employee.find({})
+      Employee.find(activeFilter)
         .select(EMPLOYEE_LIST_FIELDS)
         .sort({ department: 1, empCode: 1 }) // Uses compound index { department: 1, empCode: 1 }
         .skip(skip)

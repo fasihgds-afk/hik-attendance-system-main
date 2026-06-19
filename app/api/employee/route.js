@@ -13,6 +13,7 @@ import {
   hasAnyBankDetails,
   normalizeBankDetailsInput,
 } from '../../../lib/security/bankDetailsCrypto';
+import { mergeActiveFilter, isEmployeeActive, EMPLOYEE_STATUS } from '../../../lib/employees/activeFilter';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -126,8 +127,7 @@ export async function GET(req) {
     const skip = (page - 1) * limit;
     
     // Use direct Mongoose queries instead of aggregation for simplicity and reliability
-    // Aggregation can have issues in serverless environments
-    const queryFilter = Object.keys(filter).length > 0 ? filter : {};
+    const queryFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
     
     // OPTIMIZATION: Use empCode index for sorting (faster than department+empCode compound)
     const optimizedSort = sortOptions || { empCode: 1 };
@@ -351,6 +351,14 @@ export async function POST(req) {
 
     // Execute update: employees can only update existing record; HR can create/update
     const upsertAllowed = user.role === 'HR' || user.role === 'ADMIN';
+
+    const existing = await Employee.findOne({ empCode }).select('status empCode').lean().maxTimeMS(1500);
+    if (existing && !isEmployeeActive(existing)) {
+      throw new NotFoundError(
+        `Employee ${empCode} is archived. Restore from Former Employees before editing.`
+      );
+    }
+
     const employee = await Employee.findOneAndUpdate(
       { empCode },
       { $set: update },
@@ -376,33 +384,47 @@ export async function POST(req) {
   }
 }
 
-// DELETE /api/employee?empCode=XXXXX - HR/ADMIN only
+// DELETE /api/employee?empCode=XXXXX - HR/ADMIN only (soft delete / deactivate)
 export async function DELETE(req) {
   try {
-    await requireHR();
+    const { user } = await requireHR();
     await connectDB();
 
     const { searchParams } = new URL(req.url);
     const empCode = searchParams.get('empCode');
+    const deleteReason = (searchParams.get('deleteReason') || '').trim() || null;
+    const lastWorkingDay = (searchParams.get('lastWorkingDay') || '').trim() || null;
 
     if (!empCode) {
       throw new ValidationError('empCode is required');
     }
 
-    // OPTIMIZATION: Add timeout for delete operation
-    const deleted = await Employee.findOneAndDelete({ empCode })
-      .lean()
+    const employee = await Employee.findOne(mergeActiveFilter({ empCode }))
       .maxTimeMS(2000);
 
-    if (!deleted) {
-      throw new NotFoundError(`Employee ${empCode}`);
+    if (!employee) {
+      throw new NotFoundError(`Active employee ${empCode}`);
     }
 
-    await User.deleteOne({ role: 'EMPLOYEE', employeeEmpCode: String(empCode).trim() }).catch(() => {});
+    employee.status = EMPLOYEE_STATUS.TERMINATED;
+    employee.deletedAt = new Date();
+    employee.deletedBy = user?.email || user?.name || 'HR';
+    employee.deleteReason = deleteReason;
+    employee.lastWorkingDay = lastWorkingDay;
+    employee.portalEnabled = false;
+    await employee.save();
+
+    await User.updateMany(
+      { role: 'EMPLOYEE', employeeEmpCode: String(empCode).trim() },
+      { $set: { isActive: false } }
+    ).catch(() => {});
+
+    const deactivated = employee.toObject();
+    deactivated.bankDetails = decryptBankDetails(deactivated.bankDetails);
 
     return successResponse(
-      { employee: deleted },
-      `Employee ${empCode} deleted successfully`,
+      { employee: deactivated },
+      `Employee ${empCode} deactivated successfully`,
       HTTP_STATUS.OK
     );
   } catch (err) {

@@ -2,13 +2,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import EmployeeTable from '../../../../components/employees/EmployeeTable';
 import EmployeeFilters from '../../../../components/employees/EmployeeFilters';
 import PaginationControls from '../../../../components/common/PaginationControls';
 import EmployeeForm from '../../../../components/employees/EmployeeForm';
 import Modal from '../../../../components/ui/Modal';
 import Toast from '../../../../components/common/Toast';
-import ConfirmDialog from '../../../../components/ui/ConfirmDialog';
 
 const thStyle = {
   padding: '10px 12px',
@@ -44,6 +44,7 @@ const selectStyle = {
 };
 
 export default function EmployeeShiftPage() {
+  const router = useRouter();
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -70,6 +71,8 @@ export default function EmployeeShiftPage() {
     isOpen: false,
     employee: null,
   });
+  const [deleteReason, setDeleteReason] = useState('Resigned');
+  const [lastWorkingDay, setLastWorkingDay] = useState('');
 
   // Shift history for modal (if needed)
   const [shiftHistory, setShiftHistory] = useState([]);
@@ -811,6 +814,22 @@ export default function EmployeeShiftPage() {
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button
+              onClick={() => router.push('/hr/employees/archived')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.35)',
+                backgroundColor: 'rgba(127,29,29,0.35)',
+                color: '#fee2e2',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Former Employees
+            </button>
+
+            <button
               onClick={() => loadEmployees(true)}
               disabled={loading}
               style={{
@@ -983,43 +1002,114 @@ export default function EmployeeShiftPage() {
         />
       </Modal>
 
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
+      {/* Deactivate confirmation */}
+      <Modal
         isOpen={deleteConfirm.isOpen}
-        onClose={() => setDeleteConfirm({ isOpen: false, employee: null })}
-        onConfirm={async () => {
-          if (!deleteConfirm.employee) return;
-
-          try {
-            const empCode = deleteConfirm.employee.empCode;
-            const res = await fetch(`/api/employee?empCode=${empCode}`, {
-              method: 'DELETE',
-            });
-
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error(text || `Failed to delete employee (${res.status})`);
-            }
-
-            // Remove from local state
-            setEmployees((prev) => prev.filter((e) => e.empCode !== empCode));
-
-            showToast('success', `Employee ${empCode} deleted successfully`);
-            setDeleteConfirm({ isOpen: false, employee: null });
-            
-            // Force refresh to get latest data from server (bypass cache)
-            loadEmployees(true);
-          } catch (err) {
-            console.error(err);
-            showToast('error', err.message || 'Failed to delete employee');
-          }
+        onClose={() => {
+          setDeleteConfirm({ isOpen: false, employee: null });
+          setDeleteReason('Resigned');
+          setLastWorkingDay('');
         }}
-        title="Delete Employee"
-        message={`Are you sure you want to delete employee ${deleteConfirm.employee?.empCode} (${deleteConfirm.employee?.name || 'No name'})? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        variant="danger"
-      />
+        title="Deactivate Employee"
+        size="md"
+      >
+        <p style={{ margin: '0 0 16px', fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
+          Remove{' '}
+          <strong>
+            {deleteConfirm.employee?.empCode} ({deleteConfirm.employee?.name || 'No name'})
+          </strong>{' '}
+          from active lists? Attendance and payroll history will be kept. They can be restored from Former
+          Employees.
+        </p>
+        <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
+          <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+            Reason
+            <select
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              style={selectStyle}
+            >
+              {['Resigned', 'Terminated', 'Contract ended', 'Duplicate record', 'Other'].map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+            Last working day (optional)
+            <input
+              type="date"
+              value={lastWorkingDay}
+              onChange={(e) => setLastWorkingDay(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteConfirm({ isOpen: false, employee: null });
+              setDeleteReason('Resigned');
+              setLastWorkingDay('');
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!deleteConfirm.employee) return;
+
+              try {
+                const empCode = deleteConfirm.employee.empCode;
+                const params = new URLSearchParams({ empCode });
+                if (deleteReason) params.set('deleteReason', deleteReason);
+                if (lastWorkingDay) params.set('lastWorkingDay', lastWorkingDay);
+
+                const res = await fetch(`/api/employee?${params.toString()}`, {
+                  method: 'DELETE',
+                });
+
+                if (!res.ok) {
+                  const text = await res.text();
+                  throw new Error(text || `Failed to deactivate employee (${res.status})`);
+                }
+
+                setEmployees((prev) => prev.filter((e) => e.empCode !== empCode));
+                showToast('success', `Employee ${empCode} deactivated`);
+                setDeleteConfirm({ isOpen: false, employee: null });
+                setDeleteReason('Resigned');
+                setLastWorkingDay('');
+                loadEmployees(true);
+              } catch (err) {
+                console.error(err);
+                showToast('error', err.message || 'Failed to deactivate employee');
+              }
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: '#dc2626',
+              color: '#fff',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Deactivate
+          </button>
+        </div>
+      </Modal>
     </React.Fragment>
   );
 }

@@ -5,6 +5,7 @@ import PaidLeaveQuarter from '../../../../models/PaidLeaveQuarter';
 import LeaveRecord from '../../../../models/LeaveRecord';
 import ShiftAttendance from '../../../../models/ShiftAttendance';
 import Employee from '../../../../models/Employee';
+import { mergeActiveFilter } from '../../../../lib/employees/activeFilter';
 import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
@@ -42,7 +43,9 @@ export async function GET(req) {
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString(), 10);
     const empCodeFilter = (searchParams.get('empCode') || '').trim();
 
-    const employeeQuery = empCodeFilter ? { empCode: empCodeFilter } : {};
+    const employeeQuery = empCodeFilter
+      ? { empCode: empCodeFilter }
+      : mergeActiveFilter({});
     const employees = await Employee.find(employeeQuery)
       .select('empCode name department designation')
       .sort({ department: 1, empCode: 1 })

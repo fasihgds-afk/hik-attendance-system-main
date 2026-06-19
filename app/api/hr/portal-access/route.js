@@ -4,6 +4,7 @@ import { connectDB } from '../../../../lib/db';
 import Employee from '../../../../models/Employee';
 import { buildEmployeeFilter } from '../../../../lib/db/queryOptimizer';
 import { isPortalEnabled } from '../../../../lib/auth/portalAccess';
+import { mergeActiveFilter } from '../../../../lib/employees/activeFilter';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requireHR } from '../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
@@ -49,7 +50,7 @@ export async function GET(req) {
     }
 
     const skip = (page - 1) * limit;
-    const queryFilter = Object.keys(filter).length > 0 ? filter : {};
+    const queryFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
 
     const [items, total, blockedCount, activeCount] = await Promise.all([
       Employee.find(queryFilter)
@@ -60,8 +61,8 @@ export async function GET(req) {
         .lean()
         .maxTimeMS(2500),
       Employee.countDocuments(queryFilter).maxTimeMS(2000),
-      Employee.countDocuments({ portalEnabled: false }).maxTimeMS(2000),
-      Employee.countDocuments({ portalEnabled: { $ne: false } }).maxTimeMS(2000),
+      Employee.countDocuments(mergeActiveFilter({ portalEnabled: false })).maxTimeMS(2000),
+      Employee.countDocuments(mergeActiveFilter({ portalEnabled: { $ne: false } })).maxTimeMS(2000),
     ]);
 
     return successResponse(
@@ -102,7 +103,7 @@ export async function PATCH(req) {
     }
 
     const employee = await Employee.findOneAndUpdate(
-      { empCode },
+      mergeActiveFilter({ empCode }),
       { $set: { portalEnabled: body.portalEnabled } },
       { new: true, runValidators: true }
     )

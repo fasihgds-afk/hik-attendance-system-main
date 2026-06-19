@@ -5,6 +5,7 @@ import { connectDB } from "../../../../lib/db";
 import User from "../../../../models/User";
 import Employee from "../../../../models/Employee";
 import { isPortalEnabled } from "../../../../lib/auth/portalAccess";
+import { isEmployeeActive } from "../../../../lib/employees/activeFilter";
 import bcrypt from "bcryptjs";
 
 export const authOptions = {
@@ -85,11 +86,11 @@ export const authOptions = {
           try {
             const code = String(empCode).trim();
             const employee = await Employee.findOne({ empCode: code })
-              .select("_id name email department designation shift allowWebClockIn portalEnabled")
+              .select("_id name email department designation shift allowWebClockIn portalEnabled status")
               .lean()
               .maxTimeMS(2000);
 
-            if (!employee || !isPortalEnabled(employee)) {
+            if (!employee || !isEmployeeActive(employee) || !isPortalEnabled(employee)) {
               return null;
             }
 
