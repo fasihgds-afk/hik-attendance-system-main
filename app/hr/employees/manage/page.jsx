@@ -9,42 +9,11 @@ import PaginationControls from '../../../../components/common/PaginationControls
 import EmployeeForm from '../../../../components/employees/EmployeeForm';
 import Modal from '../../../../components/ui/Modal';
 import Toast from '../../../../components/common/Toast';
-
-const thStyle = {
-  padding: '10px 12px',
-  textAlign: 'left',
-  borderBottom: '1px solid #E5E7EB',
-  fontWeight: 600,
-  fontSize: 13,
-  color: '#0f172a',
-  backgroundColor: '#e5f1ff',
-};
-
-const tdStyle = {
-  padding: '9px 12px',
-  borderBottom: '1px solid #E5E7EB',
-  fontSize: 13,
-  color: '#0f172a',
-  backgroundColor: '#ffffff',
-};
-
-const inputStyle = {
-  padding: '8px 10px',
-  borderRadius: 6,
-  border: '1px solid #cbd5f5',
-  backgroundColor: '#ffffff',
-  color: '#0f172a',
-  fontSize: 13,
-  outline: 'none',
-};
-
-const selectStyle = {
-  ...inputStyle,
-  minWidth: 120,
-};
+import { useTheme } from '@/lib/theme/ThemeContext';
 
 export default function EmployeeShiftPage() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -819,8 +788,8 @@ export default function EmployeeShiftPage() {
                 padding: '8px 16px',
                 borderRadius: 999,
                 border: '1px solid rgba(255,255,255,0.35)',
-                backgroundColor: 'rgba(127,29,29,0.35)',
-                color: '#fee2e2',
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                color: '#f9fafb',
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -1011,23 +980,46 @@ export default function EmployeeShiftPage() {
           setLastWorkingDay('');
         }}
         title="Deactivate Employee"
-        size="md"
+        size="sm"
       >
-        <p style={{ margin: '0 0 16px', fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
+        <p
+          style={{
+            margin: '0 0 16px',
+            fontSize: 14,
+            color: colors.text?.secondary || '#94a3b8',
+            lineHeight: 1.6,
+          }}
+        >
           Remove{' '}
-          <strong>
+          <strong style={{ color: colors.text?.primary || '#f1f5f9' }}>
             {deleteConfirm.employee?.empCode} ({deleteConfirm.employee?.name || 'No name'})
           </strong>{' '}
-          from active lists? Attendance and payroll history will be kept. They can be restored from Former
-          Employees.
+          from active lists? Attendance and payroll history will be kept. They can be restored from{' '}
+          <span style={{ color: '#38bdf8', fontWeight: 600 }}>Former Employees</span>.
         </p>
         <div style={{ display: 'grid', gap: 14, marginBottom: 20 }}>
-          <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+          <label
+            style={{
+              display: 'grid',
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              color: colors.text?.primary || '#e2e8f0',
+            }}
+          >
             Reason
             <select
               value={deleteReason}
               onChange={(e) => setDeleteReason(e.target.value)}
-              style={selectStyle}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border?.default || '#374151'}`,
+                backgroundColor: colors.background?.input || '#ffffff',
+                color: colors.text?.primary || '#0f172a',
+                fontSize: 13,
+                outline: 'none',
+              }}
             >
               {['Resigned', 'Terminated', 'Contract ended', 'Duplicate record', 'Other'].map((r) => (
                 <option key={r} value={r}>
@@ -1036,17 +1028,41 @@ export default function EmployeeShiftPage() {
               ))}
             </select>
           </label>
-          <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 600, color: '#334155' }}>
+          <label
+            style={{
+              display: 'grid',
+              gap: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              color: colors.text?.primary || '#e2e8f0',
+            }}
+          >
             Last working day (optional)
             <input
               type="date"
               value={lastWorkingDay}
               onChange={(e) => setLastWorkingDay(e.target.value)}
-              style={inputStyle}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border?.default || '#374151'}`,
+                backgroundColor: colors.background?.input || '#ffffff',
+                color: colors.text?.primary || '#0f172a',
+                fontSize: 13,
+                outline: 'none',
+              }}
             />
           </label>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 10,
+            paddingTop: 4,
+            borderTop: `1px solid ${colors.border?.default || '#374151'}`,
+          }}
+        >
           <button
             type="button"
             onClick={() => {
@@ -1057,10 +1073,12 @@ export default function EmployeeShiftPage() {
             style={{
               padding: '8px 16px',
               borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              background: '#fff',
+              border: `1px solid ${colors.border?.default || '#cbd5e1'}`,
+              background: colors.background?.card || '#fff',
+              color: colors.text?.primary || '#374151',
               cursor: 'pointer',
               fontWeight: 600,
+              fontSize: 13,
             }}
           >
             Cancel
@@ -1097,13 +1115,15 @@ export default function EmployeeShiftPage() {
               }
             }}
             style={{
-              padding: '8px 16px',
+              padding: '8px 20px',
               borderRadius: 8,
               border: 'none',
-              background: '#dc2626',
+              background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
               color: '#fff',
               cursor: 'pointer',
               fontWeight: 600,
+              fontSize: 13,
+              boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)',
             }}
           >
             Deactivate
