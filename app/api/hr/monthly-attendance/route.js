@@ -50,6 +50,7 @@ import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturdayIndexInMonth, EXTRAORDINARY_LEAVE_STATUSES } from '../../../../lib/calculations';
 import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
+import { calculateAwayDeductionDays, getPaidWorkHours, getShiftDurationHours, getShiftBreakMinutes, buildDeductionRemarks } from '../../../../lib/calculations/awayDeduction';
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
 import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
 import { getCompanySettings } from '../../../../lib/settings/getCompanySettings';
@@ -529,7 +530,7 @@ export async function GET(req) {
 
     const shiftDocs = await ShiftAttendance.find(shiftAttendanceFilter)
       .select(
-        'date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited checkInGracePeriod checkOutGracePeriod'
+        'date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited checkInGracePeriod checkOutGracePeriod awayHours awayNote awayReportedBy'
       )
       .lean()
       .maxTimeMS(4000); // Reduced timeout for faster response
@@ -562,7 +563,7 @@ export async function GET(req) {
       // Load ALL shifts (active + inactive) so historical codes (R1, R2) resolve correctly when deactivated
       const allShifts = await Shift.find({})
         .select(
-          '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+          '_id name code startTime endTime crossesMidnight breakMinutes paidHoursPerDay gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
         )
         .sort({ code: 1 }) // Consistent ordering
         .lean()
@@ -632,6 +633,8 @@ export async function GET(req) {
       let earlyViolationCount = 0;     // early violations counted separately
       let violationBaseDays = 0;      // full days from 3rd, 6th, 9th, ... (each type)
       let perMinuteFineDays = 0;      // extra days from per-minute fine
+      let awayDeductionDays = 0;      // HR-recorded away-from-workstation (hours / shift hours)
+      let totalAwayHours = 0;
       let totalLateMinutes = 0;       // sum of late minutes (beyond grace)
       let totalEarlyMinutes = 0;
 
@@ -1142,6 +1145,30 @@ export async function GET(req) {
         }
         // Paid Leave = no deduction (excluded from all deduction logic)
 
+        // HR-recorded away from workstation (hourly proportional deduction)
+        const awayHoursRaw = Number(doc?.awayHours) || 0;
+        const shiftGrossHours = getShiftDurationHours(shiftObj);
+        const shiftBreakMinutes = getShiftBreakMinutes(shiftObj);
+        const shiftPaidHours = getPaidWorkHours(shiftObj);
+        let awayDeductionForDay = 0;
+        const awayEligible =
+          awayHoursRaw > 0 &&
+          !isFutureDay &&
+          checkIn &&
+          !isWeekendOff &&
+          status !== 'Holiday' &&
+          status !== 'Eid Holiday' &&
+          status !== 'Paid Leave' &&
+          status !== 'Un Paid Leave' &&
+          status !== 'Sick Leave' &&
+          !EXTRAORDINARY_LEAVE_STATUSES.includes(status);
+
+        if (awayEligible) {
+          awayDeductionForDay = calculateAwayDeductionDays(awayHoursRaw, shiftPaidHours);
+          awayDeductionDays += awayDeductionForDay;
+          totalAwayHours += awayHoursRaw;
+        }
+
         days.push({
           date,
           shift: shiftCode, // Use shift code for display
@@ -1155,6 +1182,13 @@ export async function GET(req) {
           lateExcused,
           earlyExcused,
           leaveType: doc?.leaveType || null, // Quarter-based: 'paid' only (no casual/annual)
+          awayHours: awayHoursRaw,
+          awayDeductionDays: awayDeductionForDay,
+          awayNote: doc?.awayNote || '',
+          awayReportedBy: doc?.awayReportedBy || '',
+          shiftHours: shiftPaidHours,
+          shiftGrossHours,
+          breakMinutes: shiftBreakMinutes,
           isFuture: false,
         });
       }
@@ -1248,6 +1282,7 @@ export async function GET(req) {
       const salaryDeductDaysRaw =
         violationFullDays +      // Full days from milestone violations
         perMinuteDays +          // Days from per-minute violation fines
+        awayDeductionDays +      // Away from workstation (hours / shift hours)
         unpaidLeaveDays +        // Unpaid Leave + Sick Leave
         absentDays +             // Missing punches + Leave Without Inform
         halfDays;                // Half-day leaves
@@ -1279,6 +1314,8 @@ export async function GET(req) {
       const perDaySalary = salaryCalc.perDaySalary;
       const salaryDeductAmount = salaryCalc.deductionAmount;
       const netSalary = salaryCalc.netSalary;
+
+      const deductionRemarks = buildDeductionRemarks(days, perDaySalary);
 
       // Get dynamic shift for the employee - use current shift assignment (no history)
       let dynamicShift = emp.shift || '';
@@ -1324,7 +1361,11 @@ export async function GET(req) {
         unpaidLeaveDays,
         absentDays,
         halfDays,
+        awayDeductionDays,
+        totalAwayHours,
         salaryDeductDays,
+        perDaySalary: Number(perDaySalary.toFixed(2)),
+        deductionRemarks,
         totalLateMinutes,
         totalEarlyMinutes,
         days,
@@ -1404,7 +1445,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
-    await requireHR();
+    const { user } = await requireHR();
     await connectDB();
 
     const body = await req.json();
@@ -1419,6 +1460,9 @@ export async function POST(req) {
       lateExcused,
       earlyExcused,
       leaveType, // 'paid' only (quarter-based; no casual/annual)
+      awayHours,
+      awayNote,
+      awayReportedBy,
     } = body;
 
     if (!empCode || !date) {
@@ -1431,7 +1475,7 @@ export async function POST(req) {
     const [allShifts, emp, departmentDocs] = await Promise.all([
       Shift.find({})
         .select(
-          '_id name code startTime endTime crossesMidnight gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+          '_id name code startTime endTime crossesMidnight breakMinutes paidHoursPerDay gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
         )
         .lean()
         .maxTimeMS(1500),
@@ -1650,6 +1694,26 @@ export async function POST(req) {
       manuallyEdited: true,
       updatedAt: new Date(),
     };
+
+    if (awayHours !== undefined && awayHours !== null && awayHours !== '') {
+      const parsedAway = Number(awayHours);
+      if (Number.isNaN(parsedAway) || parsedAway < 0) {
+        throw new ValidationError('awayHours must be a non-negative number');
+      }
+      if (parsedAway > 0) {
+        update.awayHours = parsedAway;
+        update.awayNote = String(awayNote || '').trim() || null;
+        update.awayReportedBy = String(awayReportedBy || '').trim() || null;
+        update.awayRecordedBy = user?.email || user?.name || 'HR';
+        update.awayRecordedAt = new Date();
+      } else {
+        update.awayHours = null;
+        update.awayNote = null;
+        update.awayReportedBy = null;
+        update.awayRecordedBy = null;
+        update.awayRecordedAt = null;
+      }
+    }
 
     const gPost = resolveGracePeriodsForCalendarDate(shiftObj || {}, date);
     if (date >= companyTodayYmdPost) {

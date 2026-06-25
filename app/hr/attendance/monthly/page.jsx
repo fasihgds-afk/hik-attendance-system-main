@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import { calculateAwayDeductionDays, calculateAwayDeductionAmount } from '@/lib/calculations/awayDeduction';
 
 // Styles will be generated dynamically based on theme
 
@@ -87,6 +88,22 @@ function formatCurrency(value) {
   });
 }
 
+function previewAwayDeduction(monthlySalary, paidWorkHours, hoursAway, workingDays = 26) {
+  const gross = Number(monthlySalary) || 0;
+  const paidH = Number(paidWorkHours) || 8;
+  const hours = Number(hoursAway) || 0;
+  if (!gross || !hours) {
+    return { perDay: 0, hourly: 0, days: 0, amount: 0 };
+  }
+  const perDay = gross / workingDays;
+  return {
+    perDay,
+    hourly: perDay / paidH,
+    days: calculateAwayDeductionDays(hours, paidH),
+    amount: calculateAwayDeductionAmount(perDay, hours, paidH),
+  };
+}
+
 // --- Cell color rules (includes EXCUSED + missing punches + WFH) ------
 function getCellStyle(day, colors, baseCell, theme) {
   const isLeaveType =
@@ -107,6 +124,19 @@ function getCellStyle(day, colors, baseCell, theme) {
       backgroundColor: theme === 'dark' ? 'rgba(59, 130, 246, 0.2)' : '#dbeafe',
       color: theme === 'dark' ? colors.primary[300] : colors.primary[800],
       fontWeight: 600,
+    };
+  }
+
+  // HR-recorded away from workstation during shift
+  if ((Number(day.awayHours) || 0) > 0) {
+    return {
+      ...baseCell,
+      backgroundColor: theme === 'dark' ? 'rgba(168, 85, 247, 0.22)' : '#f3e8ff',
+      color: theme === 'dark' ? '#c4b5fd' : '#6b21a8',
+      fontWeight: 600,
+      boxShadow: theme === 'dark'
+        ? 'inset 0 0 0 1px rgba(168, 85, 247, 0.5)'
+        : 'inset 0 0 0 1px #c4b5fd',
     };
   }
 
@@ -317,6 +347,9 @@ export default function MonthlyHrPage() {
   const [editCheckOut, setEditCheckOut] = useState('');
   const [editLateExcused, setEditLateExcused] = useState(false);
   const [editEarlyExcused, setEditEarlyExcused] = useState(false);
+  const [editAwayHours, setEditAwayHours] = useState('');
+  const [editAwayNote, setEditAwayNote] = useState('');
+  const [editAwayReportedBy, setEditAwayReportedBy] = useState('');
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -500,6 +533,9 @@ export default function MonthlyHrPage() {
     
     setEditLateExcused(lateExcusedValue);
     setEditEarlyExcused(earlyExcusedValue);
+    setEditAwayHours(day.awayHours != null && day.awayHours > 0 ? String(day.awayHours) : '');
+    setEditAwayNote(day.awayNote || '');
+    setEditAwayReportedBy(day.awayReportedBy || '');
 
     console.log('Opening modal - excused flags:', {
       date: day.date,
@@ -534,6 +570,9 @@ export default function MonthlyHrPage() {
         lateExcused: editLateExcused,
         earlyExcused: editEarlyExcused,
         violationExcused: editLateExcused || editEarlyExcused, // Legacy: for backward compatibility
+        awayHours: editAwayHours === '' ? 0 : Number(editAwayHours),
+        awayNote: editAwayNote,
+        awayReportedBy: editAwayReportedBy,
         // Quarter-based: only 'paid' leave (no casual/annual)
         ...(editStatus === 'Paid Leave' && { leaveType: 'paid' }),
       };
@@ -2321,6 +2360,10 @@ export default function MonthlyHrPage() {
                             timeInfo,
                             day.late ? `Late: YES${lateExcused ? ' (Excused)' : ''}` : '',
                             isEarlyLike ? `Early leave: YES${earlyExcused ? ' (Excused)' : ''}` : '',
+                            (day.awayHours || 0) > 0
+                              ? `Away from seat: ${day.awayHours}h (−${(day.awayDeductionDays || 0).toFixed(3)} day)`
+                              : '',
+                            day.awayNote ? `Away note: ${day.awayNote}` : '',
                             day.reason ? `HR notes: ${day.reason}` : '',
                           ].filter(Boolean);
 
@@ -2335,6 +2378,18 @@ export default function MonthlyHrPage() {
                                 {statusShortCode(day.status)}
                               </div>
                               <div style={{ fontSize: 10 }}>{punchLabel}</div>
+                              {(Number(day.awayHours) || 0) > 0 && (
+                                <div
+                                  style={{
+                                    marginTop: 2,
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                    color: '#7c3aed',
+                                  }}
+                                >
+                                  Away {day.awayHours}h
+                                </div>
+                              )}
                               {((day.late && (day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late))) ||
                                 (isEarlyLike && (day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave)))) && (
                                 <div
@@ -2611,6 +2666,110 @@ export default function MonthlyHrPage() {
                       outline: 'none',
                     }}
                   />
+                </div>
+
+                {/* Away from workstation — hourly salary deduction */}
+                <div
+                  style={{
+                    marginTop: 4,
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    backgroundColor: '#faf5ff',
+                    border: '1px solid #e9d5ff',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#6b21a8' }}>
+                    Away from workstation (hourly deduction)
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>
+                    Employee marked attendance but was away from their seat. Enter hours away — salary
+                    is deducted proportionally (1 hour away = 1 hour of pay). Standard day:{' '}
+                    <strong>8 paid hours</strong> plus 1-hour break (break is not deducted from pay).
+                  </p>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 120px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600 }}>Hours away</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        value={editAwayHours}
+                        onChange={(e) => setEditAwayHours(e.target.value)}
+                        placeholder="0"
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          border: '1px solid #d8b4fe',
+                          backgroundColor: '#ffffff',
+                          fontSize: 13,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600 }}>Reported by (optional)</label>
+                      <input
+                        type="text"
+                        value={editAwayReportedBy}
+                        onChange={(e) => setEditAwayReportedBy(e.target.value)}
+                        placeholder="Team lead / supervisor"
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          border: '1px solid #d8b4fe',
+                          backgroundColor: '#ffffff',
+                          fontSize: 13,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600 }}>Away reason (optional)</label>
+                    <input
+                      type="text"
+                      value={editAwayNote}
+                      onChange={(e) => setEditAwayNote(e.target.value)}
+                      placeholder="e.g. Not on chair for 2 hours"
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #d8b4fe',
+                        backgroundColor: '#ffffff',
+                        fontSize: 13,
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                  {selected && Number(editAwayHours) > 0 && (() => {
+                    const paidH = selected.day.shiftHours || 8;
+                    const breakM = selected.day.breakMinutes ?? 60;
+                    const preview = previewAwayDeduction(
+                      selected.emp.monthlySalary,
+                      paidH,
+                      editAwayHours
+                    );
+                    return (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#5b21b6',
+                          backgroundColor: '#ede9fe',
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                        }}
+                      >
+                        <strong>{paidH}h paid</strong>
+                        {breakM > 0 ? ` (+ ${breakM}min break)` : ''} · Hourly rate ≈{' '}
+                        <strong>{formatCurrency(preview.hourly)} PKR</strong> · Deduction:{' '}
+                        <strong>{formatCurrency(preview.amount)} PKR</strong> ({preview.days.toFixed(3)}{' '}
+                        day)
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Late Excused - only show if there's a late violation */}

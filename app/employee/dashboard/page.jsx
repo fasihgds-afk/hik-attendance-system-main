@@ -691,6 +691,15 @@ function classifyDayForRow(day, colors, theme = 'dark') {
     };
   }
 
+  if ((Number(day.awayHours) || 0) > 0) {
+    return {
+      bg: theme === 'dark' ? 'rgba(168, 85, 247, 0.22)' : '#f3e8ff',
+      fg: theme === 'dark' ? '#c4b5fd' : '#6b21a8',
+      badge: `Away ${day.awayHours}h`,
+      tone: 'away',
+    };
+  }
+
   // No punches at all
   if (!day.checkIn && !day.checkOut) {
     if (day.status === "Holiday" || day.status === "Eid Holiday") {
@@ -768,6 +777,22 @@ function classifyDayForRow(day, colors, theme = 'dark') {
     badge: "On time", 
     tone: "ok" 
   };
+}
+
+function formatDayDeductionRemark(remarks) {
+  if (!remarks?.length) return '';
+  return remarks
+    .map((r) => {
+      const bits = [];
+      if (r.title) bits.push(r.title);
+      if (r.detail && r.detail !== r.title) bits.push(r.detail);
+      if (r.note) bits.push(r.note);
+      if (r.amount != null && r.amount > 0) {
+        bits.push(`Deduction: ${Number(r.amount).toLocaleString('en-PK')} PKR`);
+      }
+      return bits.join(' · ');
+    })
+    .join(' | ');
 }
 
 function renderEmployeeAvatar(emp, size = 88) {
@@ -1150,6 +1175,18 @@ export default function EmployeeDashboardPage() {
       (emp) => String(emp.empCode) === String(empCode)
     );
   }, [attendanceData, empCode]);
+
+  const deductionRemarksByDate = useMemo(() => {
+    const map = new Map();
+    for (const r of myRecord?.deductionRemarks ?? []) {
+      const key = String(r.date || '').slice(0, 10);
+      if (!key) continue;
+      const list = map.get(key) || [];
+      list.push(r);
+      map.set(key, list);
+    }
+    return map;
+  }, [myRecord]);
 
   // ---- DISPLAY FIELDS: ALWAYS TRUST myRecord FIRST ----
   const displayName =
@@ -2927,6 +2964,7 @@ export default function EmployeeDashboardPage() {
                     </>
                   )}
                 </div>
+
                 <div
                   style={{
                     marginTop: 14,
@@ -3056,13 +3094,24 @@ export default function EmployeeDashboardPage() {
                       >
                         Flags
                       </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Remark
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {!myRecord?.days || myRecord.days.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           style={{
                             padding: "9px 10px",
                             textAlign: "center",
@@ -3134,7 +3183,17 @@ export default function EmployeeDashboardPage() {
                           if (d.late) flags.push("Late");
                           if (d.earlyLeave || isPartial) flags.push("Early");
                           if (d.excused) flags.push("Excused");
+                          if ((Number(d.awayHours) || 0) > 0) {
+                            flags.push(`Away ${d.awayHours}h`);
+                          }
                         }
+
+                        const dateKey = String(d.date || '').slice(0, 10);
+                        const dayRemark =
+                          formatDayDeductionRemark(deductionRemarksByDate.get(dateKey)) ||
+                          d.awayNote ||
+                          d.reason ||
+                          '';
 
                         return (
                           <tr
@@ -3182,6 +3241,17 @@ export default function EmployeeDashboardPage() {
                               }}
                             >
                               {flags.length ? flags.join(", ") : "—"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: colors.text.tertiary,
+                                fontSize: 10.5,
+                                maxWidth: 160,
+                              }}
+                            >
+                              {dayRemark || "—"}
                             </td>
                           </tr>
                         );

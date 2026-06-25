@@ -41,6 +41,13 @@ const ShiftAttendanceSchema = new mongoose.Schema(
     /** Punches created from employee portal self-service (not device sync). */
     webSelfService: { type: Boolean, default: false },
 
+    /** HR-recorded: hours away from workstation during shift (proportional salary cut). */
+    awayHours: { type: Number, default: null, min: 0 },
+    awayNote: { type: String, default: null },
+    awayReportedBy: { type: String, default: null },
+    awayRecordedBy: { type: String, default: null },
+    awayRecordedAt: { type: Date, default: null },
+
     updatedAt: { type: Date, default: Date.now },
   },
   {

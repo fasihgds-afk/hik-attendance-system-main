@@ -62,6 +62,18 @@ const ShiftSchema = new mongoose.Schema(
     /** Grace minutes before graceEffectiveFrom when no per-row snapshot exists */
     priorCheckInGracePeriod: { type: Number },
     priorCheckOutGracePeriod: { type: Number },
+    /** Unpaid break within shift (minutes). Default 60 = 1 hour lunch. Not subtracted from paid hours. */
+    breakMinutes: {
+      type: Number,
+      default: 60,
+      min: 0,
+    },
+    /** Paid working hours per day for salary/hourly deduction (default 8). */
+    paidHoursPerDay: {
+      type: Number,
+      default: 8,
+      min: 1,
+    },
     isActive: {
       type: Boolean,
       default: true,
