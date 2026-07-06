@@ -366,6 +366,11 @@ export async function POST(req) {
     const prevSalary = Number(existing?.monthlySalary || 0);
     const nextSalary =
       update.monthlySalary != null ? Number(update.monthlySalary) : prevSalary;
+    const salaryEffectiveDate =
+      typeof body.salaryEffectiveDate === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(body.salaryEffectiveDate)
+        ? body.salaryEffectiveDate
+        : null;
     const salaryEffectiveMonth =
       typeof body.salaryEffectiveMonth === 'string' &&
       /^\d{4}-\d{2}$/.test(body.salaryEffectiveMonth)
@@ -374,8 +379,12 @@ export async function POST(req) {
 
     if (existing && update.monthlySalary != null && nextSalary !== prevSalary) {
       const now = new Date();
+      const effectiveDate =
+        salaryEffectiveDate ||
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const effectiveMonth =
         salaryEffectiveMonth ||
+        salaryEffectiveDate?.slice(0, 7) ||
         `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
       updateOps.$push = {
@@ -383,6 +392,7 @@ export async function POST(req) {
           previousAmount: prevSalary,
           amount: nextSalary,
           effectiveMonth,
+          effectiveDate,
           changedAt: now,
           changedBy: user.email || user.name || user.empCode || 'HR',
         },

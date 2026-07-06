@@ -30,6 +30,7 @@ export default function EmployeeForm({
     email: employee?.email || '',
     monthlySalary: employee?.monthlySalary || '',
     salaryEffectiveMonth: defaultSalaryMonth(),
+    salaryEffectiveDate: todayStr(),
     shift: employee?.shift || employee?.shiftId || '',
     effectiveFromDate: employee ? todayStr() : '',
     department: employee?.department || '',
@@ -108,6 +109,7 @@ export default function EmployeeForm({
         email: employee.email || '',
         monthlySalary: employee.monthlySalary || '',
         salaryEffectiveMonth: defaultSalaryMonth(),
+        salaryEffectiveDate: todayStr(),
         shift: employee.shift || employee.shiftId || '',
         effectiveFromDate: todayStr(),
         department: employee.department || '',
@@ -437,16 +439,16 @@ export default function EmployeeForm({
 
             {isEditMode && salaryChanged && (
               <div>
-                <label style={labelStyle}>Salary raise effective from</label>
+                <label style={labelStyle}>Salary raise effective from (date)</label>
                 <input
-                  type="month"
-                  value={formData.salaryEffectiveMonth}
-                  onChange={(e) => handleChange('salaryEffectiveMonth', e.target.value)}
+                  type="date"
+                  value={formData.salaryEffectiveDate}
+                  onChange={(e) => handleChange('salaryEffectiveDate', e.target.value)}
                   style={inputStyle}
                   required
                 />
                 <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, marginBottom: 0 }}>
-                  Month when the new gross salary starts (used on Salary Report).
+                  Exact date the new gross salary starts (used on Salary Report).
                 </p>
               </div>
             )}

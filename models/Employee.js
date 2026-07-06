@@ -19,6 +19,8 @@ const EmployeeSchema = new mongoose.Schema(
         amount: { type: Number, required: true },
         /** YYYY-MM when the new salary took effect */
         effectiveMonth: { type: String, required: true },
+        /** YYYY-MM-DD exact date HR selected */
+        effectiveDate: { type: String, default: '' },
         changedAt: { type: Date, default: Date.now },
         changedBy: { type: String, default: '' },
       },

@@ -392,9 +392,9 @@ export default function EmployeeShiftPage() {
         name: formData.name || undefined,
         email: formData.email || undefined,
         monthlySalary: formData.monthlySalary ? Number(formData.monthlySalary) : undefined,
-        salaryEffectiveMonth:
+        salaryEffectiveDate:
           String(formData.monthlySalary ?? '') !== String(editingEmployee?.monthlySalary ?? '')
-            ? formData.salaryEffectiveMonth
+            ? formData.salaryEffectiveDate
             : undefined,
         shift: formData.shift || '',
         department: (formData.department ?? '').trim(),
