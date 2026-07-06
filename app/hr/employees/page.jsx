@@ -225,6 +225,10 @@ export default function HrDashboardPage() {
     { id: "attendance", label: "Attendance" },
   ];
 
+  function openSalaryReport() {
+    router.push("/hr/salary-report");
+  }
+
   function openMonthlyAttendance() {
     router.push("/hr/attendance/monthly");
   }
@@ -2294,6 +2298,55 @@ export default function HrDashboardPage() {
                   }}
                 >
                   Open Monthly Attendance
+                </button>
+              </div>
+
+              {/* Salary report card */}
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                  background:
+                    "radial-gradient(circle at top left,#020617,#020617)",
+                  border: "1px solid rgba(168,85,247,0.85)",
+                  boxShadow: "0 16px 40px rgba(88,28,135,0.55)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    marginBottom: 6,
+                  }}
+                >
+                  Salary Report
+                </div>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: colors.text.muted,
+                    marginBottom: 10,
+                  }}
+                >
+                  View and download net salary (after deduction) by employee
+                  and month — PDF or Excel.
+                </p>
+                <button
+                  type="button"
+                  onClick={openSalaryReport}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: 999,
+                    border: "none",
+                    background:
+                      "linear-gradient(135deg,#a855f7,#6366f1)",
+                    color: "#ffffff",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Open Salary Report
                 </button>
               </div>
             </div>
