@@ -14,7 +14,7 @@ import Shift from '../../../../models/Shift';
 import { resolveGracePeriodsForCalendarDate } from '../../../../lib/shift/gracePeriods.js';
 
 import { getNextDateStr, classifyByTime } from './attendance/time-utils.js';
-import { getFirstAndLastPunchPerEmployee } from './attendance/punch-helpers.js';
+import { getFirstAndLastPunchPerEmployee, resolveCheckOutFromPunches } from './attendance/punch-helpers.js';
 import { ensureCheckInBeforeCheckOut } from './attendance/validation.js';
 import { getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
 
@@ -110,7 +110,7 @@ export async function POST(req) {
         )
         .lean()
         .maxTimeMS(2000),
-      getFirstAndLastPunchPerEmployee(AttendanceEvent, startLocal, endLocal, 5000),
+      getFirstAndLastPunchPerEmployee(AttendanceEvent, startLocal, endLocal, 5000, TZ),
     ]);
 
     const shiftByCode = new Map();
@@ -168,15 +168,36 @@ export async function POST(req) {
       if (existingRecord?.manuallyEdited) {
         if (existingRecord.checkIn) checkIn = new Date(existingRecord.checkIn);
         if (existingRecord.checkOut) checkOut = new Date(existingRecord.checkOut);
-        if (!checkIn && punches?.firstPunch) checkIn = punches.firstPunch;
-        if (!checkOut && punches?.count > 1) {
-          checkOut = ensureCheckInBeforeCheckOut(checkIn, punches.lastPunch) || null;
-        }
-        totalPunches = checkIn && checkOut ? 2 : checkIn ? 1 : 0;
+        // Drop checkout that is before check-in (stale/wrong night-shift data).
+        if (checkIn && checkOut && checkOut <= checkIn) checkOut = null;
+        if (!checkIn && punches?.firstPunch && !punches.checkoutOnly) checkIn = punches.firstPunch;
+        const punchOut = punches ? resolveCheckOutFromPunches(checkIn, punches) : null;
+        if (punchOut) checkOut = punchOut;
+        totalPunches = checkIn && checkOut ? 2 : checkIn ? 1 : checkOut ? 1 : 0;
       } else if (punches) {
-        checkIn = punches.firstPunch || null;
-        checkOut = punches.count > 1 ? punches.lastPunch : null;
-        totalPunches = punches.count;
+        if (punches.checkoutOnly) {
+          checkOut = punches.lastPunch || null;
+          totalPunches = checkOut ? 1 : 0;
+          // Night shift: evening check-in may be missing from device; keep stored check-in if valid.
+          if (!checkIn && existingRecord?.checkIn) {
+            const storedIn = new Date(existingRecord.checkIn);
+            if (!isNaN(storedIn.getTime()) && checkOut && storedIn < checkOut) {
+              checkIn = storedIn;
+              totalPunches = 2;
+            }
+          }
+        } else {
+          checkIn = punches.firstPunch || null;
+          checkOut = punches.count > 1 ? punches.lastPunch : null;
+          totalPunches = punches.count;
+        }
+        if (!checkOut && checkIn) {
+          const derived = resolveCheckOutFromPunches(checkIn, punches);
+          if (derived) {
+            checkOut = derived;
+            if (totalPunches < 2) totalPunches = 2;
+          }
+        }
       }
 
       if (!existingRecord?.manuallyEdited) {
@@ -245,13 +266,11 @@ export async function POST(req) {
       };
 
       if (preserveManuallyEdited) {
-        // Preserve manual status/reason fields. For attendance punches, only auto-fill
-        // missing values from freshly fetched punches.
+        // Preserve manual status/reason fields. Use recomputed check-in/out (device punches win over invalid stored times).
         const existingCheckIn = existing.checkIn ?? null;
-        const existingCheckOut = existing.checkOut ?? null;
-        update.checkIn = existingCheckIn || item.checkIn || null;
-        update.checkOut = existingCheckOut || item.checkOut || null;
-        update.totalPunches = update.checkIn && update.checkOut ? 2 : update.checkIn ? 1 : 0;
+        update.checkIn = item.checkIn || existingCheckIn || null;
+        update.checkOut = item.checkOut || null;
+        update.totalPunches = update.checkIn && update.checkOut ? 2 : update.checkIn ? 1 : update.checkOut ? 1 : 0;
         update.attendanceStatus = existing.attendanceStatus;
         update.reason = existing.reason ?? '';
         update.leaveType = existing.leaveType ?? null;

@@ -489,14 +489,14 @@ export async function GET(req) {
       Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
       isEmployeeViewer
         ? Employee.find({ empCode: myEmpCode })
-            .select('empCode name department designation shift shiftId monthlySalary saturdayGroup')
+            .select('empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots saturdayGroup')
             .lean()
             .maxTimeMS(1500)
         : fetchEmployeesForMonthlySheet(Employee, ShiftAttendance, {
             monthStartDate,
             monthEndDate,
             monthRelation,
-            projection: 'empCode name department designation shift shiftId monthlySalary saturdayGroup',
+            projection: 'empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots saturdayGroup',
             maxTimeMS: 2500,
           }),
       Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
@@ -1294,6 +1294,22 @@ export async function GET(req) {
 
 
       const grossSalary = emp.monthlySalary || 0;
+
+      const snapshotRaw =
+        emp.monthlySalarySnapshots?.[monthPrefix] ??
+        (typeof emp.monthlySalarySnapshots?.get === 'function'
+          ? emp.monthlySalarySnapshots.get(monthPrefix)
+          : undefined);
+      let recordedMonthlySalary = grossSalary;
+      if (snapshotRaw != null && Number.isFinite(Number(snapshotRaw))) {
+        recordedMonthlySalary = Number(snapshotRaw);
+      } else {
+        Employee.updateOne(
+          { empCode: emp.empCode, [`monthlySalarySnapshots.${monthPrefix}`]: { $exists: false } },
+          { $set: { [`monthlySalarySnapshots.${monthPrefix}`]: grossSalary } }
+        ).catch(() => {});
+      }
+
       // Working days per month, controlled by CompanySettings.workingDaysMode:
       //  - 'legacy' (default): daysInMonth - 6 (preserves historical behavior)
       //  - 'actual': daysInMonth minus this employee's real weekend/off days
@@ -1349,7 +1365,8 @@ export async function GET(req) {
         department: emp.department || '',
         designation: emp.designation || '',
         shift: dynamicShift,
-        monthlySalary: grossSalary, // GROSS
+        monthlySalary: grossSalary, // GROSS (current)
+        recordedMonthlySalary, // GROSS locked when month was first opened
         netSalary: Number(netSalary.toFixed(2)), // NET after deduction
         salaryDeductAmount: Number(salaryDeductAmount.toFixed(2)),
         lateCount,

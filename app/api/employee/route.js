@@ -352,16 +352,53 @@ export async function POST(req) {
     // Execute update: employees can only update existing record; HR can create/update
     const upsertAllowed = user.role === 'HR' || user.role === 'ADMIN';
 
-    const existing = await Employee.findOne({ empCode }).select('status empCode').lean().maxTimeMS(1500);
+    const existing = await Employee.findOne({ empCode })
+      .select('status empCode monthlySalary salaryHistory')
+      .lean()
+      .maxTimeMS(1500);
     if (existing && !isEmployeeActive(existing)) {
       throw new NotFoundError(
         `Employee ${empCode} is archived. Restore from Former Employees before editing.`
       );
     }
 
+    const updateOps = { $set: update };
+    const prevSalary = Number(existing?.monthlySalary || 0);
+    const nextSalary =
+      update.monthlySalary != null ? Number(update.monthlySalary) : prevSalary;
+    const salaryEffectiveMonth =
+      typeof body.salaryEffectiveMonth === 'string' &&
+      /^\d{4}-\d{2}$/.test(body.salaryEffectiveMonth)
+        ? body.salaryEffectiveMonth
+        : null;
+
+    if (existing && update.monthlySalary != null && nextSalary !== prevSalary) {
+      const now = new Date();
+      const effectiveMonth =
+        salaryEffectiveMonth ||
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      updateOps.$push = {
+        salaryHistory: {
+          previousAmount: prevSalary,
+          amount: nextSalary,
+          effectiveMonth,
+          changedAt: now,
+          changedBy: user.email || user.name || user.empCode || 'HR',
+        },
+      };
+
+      const [yearStr] = effectiveMonth.split('-');
+      for (let m = 1; m <= 12; m += 1) {
+        const ym = `${yearStr}-${String(m).padStart(2, '0')}`;
+        updateOps.$set[`monthlySalarySnapshots.${ym}`] =
+          ym < effectiveMonth ? prevSalary : nextSalary;
+      }
+    }
+
     const employee = await Employee.findOneAndUpdate(
       { empCode },
-      { $set: update },
+      updateOps,
       { new: true, upsert: upsertAllowed, setDefaultsOnInsert: upsertAllowed }
     ).lean();
 

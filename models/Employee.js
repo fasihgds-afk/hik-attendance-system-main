@@ -12,6 +12,25 @@ const EmployeeSchema = new mongoose.Schema(
     email: String,
     monthlySalary: Number,
 
+    /** HR salary increases — used by salary report to highlight raises by month. */
+    salaryHistory: [
+      {
+        previousAmount: { type: Number, default: 0 },
+        amount: { type: Number, required: true },
+        /** YYYY-MM when the new salary took effect */
+        effectiveMonth: { type: String, required: true },
+        changedAt: { type: Date, default: Date.now },
+        changedBy: { type: String, default: '' },
+      },
+    ],
+
+    /** First-recorded gross salary per month (YYYY-MM) for historical comparison. */
+    monthlySalarySnapshots: {
+      type: Map,
+      of: Number,
+      default: undefined,
+    },
+
     // NEW: alternate Saturday grouping
     // A → off on 1st, 3rd Saturday
     // B → off on 2nd, 4th Saturday

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 // OPTIMIZATION: Minimal field selection for list views (excludes heavy fields like profileImageUrl, cnic)
 // Removed: profileImageUrl (large), cnic (not needed for list), phoneNumber (not needed for stats)
-const EMPLOYEE_LIST_FIELDS = 'empCode name email monthlySalary shift shiftId department designation saturdayGroup';
+const EMPLOYEE_LIST_FIELDS = 'empCode name email monthlySalary salaryHistory shift shiftId department designation saturdayGroup';
 
 export async function GET(req) {
   const startTime = Date.now();

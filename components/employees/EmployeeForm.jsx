@@ -19,11 +19,17 @@ export default function EmployeeForm({
   loading = false,
 }) {
   const todayStr = () => new Date().toISOString().slice(0, 10);
+  const defaultSalaryMonth = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   const [formData, setFormData] = useState({
     empCode: employee?.empCode || '',
     name: employee?.name || '',
     email: employee?.email || '',
     monthlySalary: employee?.monthlySalary || '',
+    salaryEffectiveMonth: defaultSalaryMonth(),
     shift: employee?.shift || employee?.shiftId || '',
     effectiveFromDate: employee ? todayStr() : '',
     department: employee?.department || '',
@@ -79,6 +85,11 @@ export default function EmployeeForm({
     reader.readAsDataURL(file);
   };
 
+  const isEditMode = !!employee;
+  const salaryChanged =
+    isEditMode &&
+    String(formData.monthlySalary ?? '') !== String(employee?.monthlySalary ?? '');
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.empCode.trim()) {
@@ -96,6 +107,7 @@ export default function EmployeeForm({
         name: employee.name || '',
         email: employee.email || '',
         monthlySalary: employee.monthlySalary || '',
+        salaryEffectiveMonth: defaultSalaryMonth(),
         shift: employee.shift || employee.shiftId || '',
         effectiveFromDate: todayStr(),
         department: employee.department || '',
@@ -139,8 +151,6 @@ export default function EmployeeForm({
       setImagePreview('');
     }
   };
-
-  const isEditMode = !!employee;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -424,6 +434,22 @@ export default function EmployeeForm({
                 style={inputStyle}
               />
             </div>
+
+            {isEditMode && salaryChanged && (
+              <div>
+                <label style={labelStyle}>Salary raise effective from</label>
+                <input
+                  type="month"
+                  value={formData.salaryEffectiveMonth}
+                  onChange={(e) => handleChange('salaryEffectiveMonth', e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+                <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, marginBottom: 0 }}>
+                  Month when the new gross salary starts (used on Salary Report).
+                </p>
+              </div>
+            )}
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label

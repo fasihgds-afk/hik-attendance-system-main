@@ -43,6 +43,133 @@ function getMonthsInYear(year) {
   return months;
 }
 
+function buildGrossByMonth(months, currentGross, salaryHistory, apiGrossByMonth) {
+  const sorted = [...(salaryHistory || [])].sort((a, b) =>
+    String(a.effectiveMonth).localeCompare(String(b.effectiveMonth))
+  );
+  const result = {};
+
+  months.forEach((month) => {
+    let gross = Number(currentGross) || 0;
+    const applicable = sorted.filter((h) => String(h.effectiveMonth) <= month);
+    const upcoming = sorted.find((h) => String(h.effectiveMonth) > month);
+
+    if (applicable.length > 0) {
+      gross = Number(applicable[applicable.length - 1].amount);
+    } else if (upcoming) {
+      gross = Number(upcoming.previousAmount) || gross;
+    }
+
+    const fromApi = Number(apiGrossByMonth[month]);
+    if (Number.isFinite(fromApi) && fromApi > 0) {
+      gross = fromApi;
+    }
+
+    result[month] = gross;
+  });
+
+  return result;
+}
+
+function buildRaiseInfo(months, grossByMonth, salaryHistory = []) {
+  const raisedMonths = [];
+  const raiseDetails = {};
+  const monthSet = new Set(months);
+
+  (salaryHistory || []).forEach((entry) => {
+    if (
+      entry?.effectiveMonth &&
+      monthSet.has(entry.effectiveMonth) &&
+      Number(entry.amount) > Number(entry.previousAmount || 0)
+    ) {
+      raisedMonths.push(entry.effectiveMonth);
+      raiseDetails[entry.effectiveMonth] = {
+        from: Number(entry.previousAmount || 0),
+        to: Number(entry.amount),
+      };
+    }
+  });
+
+  for (let i = 1; i < months.length; i += 1) {
+    const prev = months[i - 1];
+    const cur = months[i];
+    const prevG = Number(grossByMonth[prev]);
+    const curG = Number(grossByMonth[cur]);
+    if (prevG > 0 && curG > prevG && !raiseDetails[cur]) {
+      raisedMonths.push(cur);
+      raiseDetails[cur] = { from: prevG, to: curG };
+    }
+  }
+
+  return {
+    hasSalaryRaise: raisedMonths.length > 0,
+    raisedMonths: [...new Set(raisedMonths)],
+    raiseDetails,
+  };
+}
+
+function SalaryRaiseBadge({ children, variant = 'raise', title }) {
+  const variants = {
+    raise: {
+      background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+      color: '#92400e',
+      border: '1px solid #f59e0b',
+      boxShadow: '0 1px 4px rgba(245, 158, 11, 0.35)',
+    },
+    raised: {
+      background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)',
+      color: '#166534',
+      border: '1px solid #22c55e',
+      boxShadow: '0 1px 4px rgba(34, 197, 94, 0.35)',
+    },
+    month: {
+      background: 'linear-gradient(135deg, #ffedd5, #fed7aa)',
+      color: '#9a3412',
+      border: '1px solid #f97316',
+      boxShadow: '0 1px 4px rgba(249, 115, 22, 0.35)',
+    },
+    stable: {
+      background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)',
+      color: '#475569',
+      border: '1px solid #94a3b8',
+      boxShadow: '0 1px 3px rgba(148, 163, 184, 0.3)',
+    },
+    gross: {
+      background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)',
+      color: '#1e40af',
+      border: '1px solid #3b82f6',
+      boxShadow: '0 1px 4px rgba(59, 130, 246, 0.35)',
+    },
+  };
+  const v = variants[variant] || variants.raise;
+
+  return (
+    <span
+      title={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        borderRadius: 999,
+        padding: '2px 7px',
+        lineHeight: 1.3,
+        whiteSpace: 'nowrap',
+        ...v,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+const RAISE_ROW_BG = 'rgba(34, 197, 94, 0.14)';
+const RAISE_CELL_BG = 'rgba(34, 197, 94, 0.28)';
+const RAISE_EXCEL_FILL = 'FFBBF7D0';
+
 async function fetchAllEmployees() {
   const all = [];
   let page = 1;
@@ -209,13 +336,17 @@ export default function HrSalaryReportPage() {
       );
 
       const salaryMap = new Map();
+      const grossMap = new Map();
       const metaMap = new Map();
 
       monthResults.forEach(({ month, employees }) => {
         employees.forEach((emp) => {
           const code = String(emp.empCode);
           if (!salaryMap.has(code)) salaryMap.set(code, {});
+          if (!grossMap.has(code)) grossMap.set(code, {});
           salaryMap.get(code)[month] = emp.netSalary ?? 0;
+          grossMap.get(code)[month] =
+            emp.recordedMonthlySalary ?? emp.monthlySalary ?? 0;
           if (!metaMap.has(code)) {
             metaMap.set(code, {
               empCode: emp.empCode,
@@ -262,7 +393,21 @@ export default function HrSalaryReportPage() {
 
       const rows = codes.map((code) => {
         const meta = metaMap.get(code) || { empCode: code, name: '', department: '' };
+        const empOpt = employeeOptions.find((e) => String(e.empCode) === code);
         const monthSalaries = salaryMap.get(code) || {};
+        const monthGrossSalaries = grossMap.get(code) || {};
+        const grossSalary = empOpt?.monthlySalary ?? null;
+        const grossByMonth = buildGrossByMonth(
+          months,
+          grossSalary,
+          empOpt?.salaryHistory,
+          monthGrossSalaries
+        );
+        const { hasSalaryRaise, raisedMonths, raiseDetails } = buildRaiseInfo(
+          months,
+          grossByMonth,
+          empOpt?.salaryHistory
+        );
         let total = 0;
         months.forEach((m) => {
           const val = Number(monthSalaries[m]);
@@ -272,7 +417,12 @@ export default function HrSalaryReportPage() {
           empCode: meta.empCode,
           name: meta.name,
           department: meta.department,
+          grossSalary,
           monthSalaries,
+          monthGrossSalaries,
+          hasSalaryRaise,
+          raisedMonths,
+          raiseDetails,
           total,
         };
       });
@@ -304,12 +454,14 @@ export default function HrSalaryReportPage() {
         { header: 'Emp Code', key: 'empCode', width: 12 },
         { header: 'Employee Name', key: 'name', width: 28 },
         { header: 'Department', key: 'department', width: 18 },
+        { header: 'Gross Salary / Month', key: 'grossSalary', width: 18 },
+        { header: 'Salary Raised?', key: 'salaryRaised', width: 14 },
         ...reportMonths.map((m) => ({
           header: `${monthLabel(m)} (Net)`,
           key: m,
           width: 14,
         })),
-        { header: 'Total', key: 'total', width: 14 },
+        { header: 'Total Net', key: 'total', width: 14 },
       ];
       sheet.columns = columns;
 
@@ -327,18 +479,29 @@ export default function HrSalaryReportPage() {
           empCode: row.empCode,
           name: row.name,
           department: row.department,
+          grossSalary: row.grossSalary ?? '',
+          salaryRaised: row.hasSalaryRaise ? 'Yes' : 'No',
           total: row.total,
         };
         reportMonths.forEach((m) => {
-          rowData[m] = row.monthSalaries[m] ?? '';
+          const isRaise = Array.isArray(row.raisedMonths) && row.raisedMonths.includes(m);
+          const detail = row.raiseDetails?.[m];
+          let val = row.monthSalaries[m] ?? '';
+          if (isRaise && detail) {
+            val = `${val} [↑ ${detail.from} → ${detail.to}]`;
+          } else if (isRaise) {
+            val = `${val} [RAISE]`;
+          }
+          rowData[m] = val;
         });
         const excelRow = sheet.addRow(rowData);
-        if (idx % 2 === 1) {
+        const rowFill = row.hasSalaryRaise ? RAISE_EXCEL_FILL : idx % 2 === 1 ? 'FFF3F4F6' : null;
+        if (rowFill) {
           excelRow.eachCell((cell) => {
             cell.fill = {
               type: 'pattern',
               pattern: 'solid',
-              fgColor: { argb: 'FFF3F4F6' },
+              fgColor: { argb: rowFill },
             };
           });
         }
@@ -348,7 +511,17 @@ export default function HrSalaryReportPage() {
             cell.numFmt = '#,##0';
             cell.alignment = { horizontal: 'right' };
           }
+          if (row.raisedMonths?.includes?.(m)) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FF86EFAC' },
+            };
+            cell.font = { bold: true };
+          }
         });
+        excelRow.getCell('grossSalary').numFmt = '#,##0';
+        excelRow.getCell('grossSalary').alignment = { horizontal: 'right' };
         excelRow.getCell('total').numFmt = '#,##0';
         excelRow.getCell('total').alignment = { horizontal: 'right' };
       });
@@ -454,7 +627,7 @@ export default function HrSalaryReportPage() {
               Salary Report
             </h1>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '4px 0 0' }}>
-              Net salary paid to employees (after deductions)
+              Net salary paid (after deductions) · gross salary column · raise highlights
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -701,6 +874,52 @@ export default function HrSalaryReportPage() {
           )}
 
           {hasReport && (
+            <div
+              style={{
+                padding: '10px 16px',
+                fontSize: 12,
+                color: colors.text.secondary,
+                borderBottom: `1px solid ${colors.border.default}`,
+                display: 'flex',
+                gap: 16,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+              }}
+            >
+              <span>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 14,
+                    height: 14,
+                    borderRadius: 3,
+                    background: RAISE_ROW_BG,
+                    border: '1px solid #22c55e',
+                    verticalAlign: 'middle',
+                    marginRight: 6,
+                  }}
+                />
+                Raise is shown only when gross salary changed in Employee Manager (with effective month)
+              </span>
+              <span>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 14,
+                    height: 14,
+                    borderRadius: 3,
+                    background: RAISE_CELL_BG,
+                    border: '1px solid #f97316',
+                    verticalAlign: 'middle',
+                    marginRight: 6,
+                  }}
+                />
+                Orange badge = month gross went up (e.g. 48,000 → 52,000)
+              </span>
+            </div>
+          )}
+
+          {hasReport && (
             <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 320px)' }}>
               <div
                 ref={printRef}
@@ -720,6 +939,13 @@ export default function HrSalaryReportPage() {
                     {reportMonths.length > 1 && (
                       <th style={thStyle}>Department</th>
                     )}
+                    <th style={{ ...thStyle, textAlign: 'right' }}>
+                      Gross Salary
+                      <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.9 }}>/ Month</div>
+                    </th>
+                    {reportMonths.length > 1 && (
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Status</th>
+                    )}
                     {reportMonths.map((m) => (
                       <th key={m} style={{ ...thStyle, textAlign: 'right' }}>
                         {monthLabel(m)}
@@ -732,7 +958,13 @@ export default function HrSalaryReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {reportRows.map((row, idx) => (
+                  {reportRows.map((row, idx) => {
+                    const rowBg = row.hasSalaryRaise
+                      ? RAISE_ROW_BG
+                      : idx % 2 === 0
+                        ? colors.background.table.row
+                        : colors.background.tertiary;
+                    return (
                     <tr key={row.empCode}>
                       <td
                         style={{
@@ -740,7 +972,7 @@ export default function HrSalaryReportPage() {
                           position: 'sticky',
                           left: 0,
                           zIndex: 1,
-                          backgroundColor: idx % 2 === 0 ? colors.background.table.row : colors.background.tertiary,
+                          backgroundColor: rowBg,
                           fontWeight: 600,
                         }}
                       >
@@ -752,27 +984,81 @@ export default function HrSalaryReportPage() {
                           position: 'sticky',
                           left: 72,
                           zIndex: 1,
-                          backgroundColor: idx % 2 === 0 ? colors.background.table.row : colors.background.tertiary,
+                          backgroundColor: rowBg,
                           fontWeight: 600,
                         }}
                       >
-                        {row.name}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {row.name}
+                          {row.hasSalaryRaise && (
+                            <SalaryRaiseBadge variant="raised" title="Salary raised in this period">
+                              ↑ Salary Raised
+                            </SalaryRaiseBadge>
+                          )}
+                        </span>
                       </td>
                       {reportMonths.length > 1 && (
-                        <td style={tdStyle}>{row.department || '-'}</td>
+                        <td style={{ ...tdStyle, backgroundColor: rowBg }}>{row.department || '-'}</td>
                       )}
-                      {reportMonths.map((m) => (
-                        <td key={m} style={{ ...tdStyle, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {row.monthSalaries[m] != null ? formatCurrency(row.monthSalaries[m]) : '-'}
-                        </td>
-                      ))}
+                      <td
+                        style={{
+                          ...tdStyle,
+                          textAlign: 'right',
+                          fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums',
+                          backgroundColor: rowBg,
+                        }}
+                      >
+                        {row.grossSalary != null ? formatCurrency(row.grossSalary) : '-'}
+                      </td>
                       {reportMonths.length > 1 && (
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', backgroundColor: rowBg }}>
+                          {row.hasSalaryRaise ? (
+                            <SalaryRaiseBadge variant="raised">↑ Raised</SalaryRaiseBadge>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: 11 }}>—</span>
+                          )}
+                        </td>
+                      )}
+                      {reportMonths.map((m) => {
+                        const isRaiseMonth = Array.isArray(row.raisedMonths) && row.raisedMonths.includes(m);
+                        const detail = row.raiseDetails?.[m];
+                        return (
+                        <td
+                          key={m}
+                          style={{
+                            ...tdStyle,
+                            textAlign: 'right',
+                            fontVariantNumeric: 'tabular-nums',
+                            backgroundColor: isRaiseMonth ? RAISE_CELL_BG : rowBg,
+                            fontWeight: isRaiseMonth ? 700 : 400,
+                            color: isRaiseMonth ? '#15803d' : tdStyle.color,
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                            <span>
+                              {row.monthSalaries[m] != null ? formatCurrency(row.monthSalaries[m]) : '-'}
+                            </span>
+                            {isRaiseMonth && detail && (
+                              <SalaryRaiseBadge
+                                variant="month"
+                                title={`Gross salary raised from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)}`}
+                              >
+                                ↑ {formatCurrency(detail.from)} → {formatCurrency(detail.to)}
+                              </SalaryRaiseBadge>
+                            )}
+                          </div>
+                        </td>
+                        );
+                      })}
+                      {reportMonths.length > 1 && (
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', backgroundColor: rowBg }}>
                           {formatCurrency(row.total)}
                         </td>
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               </div>
