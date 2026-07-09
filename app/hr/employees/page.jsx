@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
-import { getGlossPillStyles, getTabStyles, getAccentPanelStyles } from "@/lib/theme/styles";
+import { getGlossPillStyles, getTabStyles, getAccentPanelStyles, spinnerRingStyle } from "@/lib/theme/styles";
 import { HrPageShell, HrHeaderActions, HrHeaderBadge, GlassCard } from "@/components/glass";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/components/ui/AutoLogoutWarning";
@@ -805,9 +805,8 @@ export default function HrDashboardPage() {
                   display: "inline-block",
                   width: 40,
                   height: 40,
-                  border: `4px solid ${colors.border.default}`,
-                  borderTopColor: colors.primary[500],
                   borderRadius: "50%",
+                  ...spinnerRingStyle(colors.border.default, colors.primary[500], '4px'),
                   animation: "spin 1s linear infinite",
                   marginBottom: 12,
                 }} />

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
+import { spinnerRingStyle } from '@/lib/theme/styles';
 import { calculateAwayDeductionDays, calculateAwayDeductionAmount } from '@/lib/calculations/awayDeduction';
 import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
 
@@ -1333,8 +1334,7 @@ export default function MonthlyHrPage() {
               width: 16,
               height: 16,
               borderRadius: '999px',
-              border: '2px solid rgba(88,211,77,0.3)',
-              borderTopColor: '#58D34D',
+              ...spinnerRingStyle('rgba(88,211,77,0.3)', '#58D34D'),
               animation: 'spin 0.7s linear infinite',
             }}
           />
@@ -3011,8 +3011,7 @@ export default function MonthlyHrPage() {
                       width: 15,
                       height: 15,
                       borderRadius: '999px',
-                      border: '2px solid rgba(255,255,255,0.4)',
-                      borderTopColor: '#ffffff',
+                      ...spinnerRingStyle('rgba(255,255,255,0.4)', '#ffffff'),
                       animation: 'spin 0.7s linear infinite',
                     }}
                   />

@@ -2,51 +2,39 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import {
-  AppShell,
-  GlassCard,
-  GlassInput,
-  GlassButton,
-} from "@/components/glass";
+import { AppShell, GlassCard } from "@/components/glass";
 
 function LoginInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { theme, colors } = useTheme();
 
-  // 🔒 Lock employee login on UI
-  const employeeLoginLocked = false; // change to false if you want to re-enable employee login
+  const employeeLoginLocked = false;
 
-  // mode: "HR" or "EMPLOYEE"
   const initialModeFromUrl = searchParams.get("role");
   const [mode, setMode] = useState(
     initialModeFromUrl === "hr"
       ? "HR"
       : initialModeFromUrl === "employee"
-      ? "EMPLOYEE"
-      : "EMPLOYEE"
+        ? "EMPLOYEE"
+        : "EMPLOYEE"
   );
 
   const [hrEmail, setHrEmail] = useState("");
   const [hrPassword, setHrPassword] = useState("");
-
   const [empCode, setEmpCode] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // If employee login is locked and mode is EMPLOYEE, force back to HR
   useEffect(() => {
     if (employeeLoginLocked && mode === "EMPLOYEE") {
       setMode("HR");
     }
   }, [employeeLoginLocked, mode]);
 
-  // ---------------- HR LOGIN SUBMIT ----------------
   async function handleHrSubmit(e) {
     e.preventDefault();
     setErrorMsg("");
@@ -67,11 +55,7 @@ function LoginInner() {
         return;
       }
 
-      // On Vercel, session cookies may take a moment to propagate
-      // Use a short delay then redirect - the middleware will handle auth check
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Force a full page navigation to ensure cookies are sent
+      await new Promise((resolve) => setTimeout(resolve, 300));
       window.location.href = "/hr/employees";
     } catch (err) {
       console.error("HR login error", err);
@@ -80,12 +64,10 @@ function LoginInner() {
     }
   }
 
-  // ---------------- EMPLOYEE LOGIN SUBMIT (empCode only) ----------------
   async function handleEmployeeSubmit(e) {
     e.preventDefault();
     setErrorMsg("");
 
-    // Block if locked
     if (employeeLoginLocked) {
       setErrorMsg("Employee login is currently locked. Please contact HR.");
       return;
@@ -127,11 +109,7 @@ function LoginInner() {
         return;
       }
 
-      // On Vercel, session cookies may take a moment to propagate
-      // Use a short delay then redirect - the middleware will handle auth check
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Force a full page navigation to ensure cookies are sent
+      await new Promise((resolve) => setTimeout(resolve, 300));
       window.location.href = "/employee/dashboard";
     } catch (err) {
       console.error("Employee login error", err);
@@ -141,7 +119,15 @@ function LoginInner() {
   }
 
   const isDark = theme === "dark";
-  const gdsGradient = colors.gradient.header;
+
+  // Original GDS login gradient (navy → blue → green accent)
+  const leftGradient = isDark
+    ? "linear-gradient(135deg, #0F162A 0%, #0c225c 52%, #0f5ba5 78%, rgba(34, 197, 94, 0.45) 100%)"
+    : "linear-gradient(135deg, #0a2c54 0%, #0f5ba5 55%, #13a8e5 82%, rgba(34, 197, 94, 0.35) 100%)";
+
+  const submitGradient = isDark
+    ? "linear-gradient(135deg, #0a2c54 0%, #0f5ba5 50%, #22c55e 100%)"
+    : "linear-gradient(135deg, #0f5ba5 0%, #0ea5e9 50%, #22c55e 100%)";
 
   const labelStyle = {
     fontSize: 12,
@@ -151,483 +137,321 @@ function LoginInner() {
     fontWeight: 600,
   };
 
+  const inputStyle = {
+    padding: "10px 13px",
+    borderRadius: 12,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.input.border,
+    backgroundColor: colors.input.background,
+    fontSize: 14,
+    outline: "none",
+    color: colors.input.color,
+    width: "100%",
+    boxSizing: "border-box",
+    transition: "all 0.2s ease",
+  };
+
+  const formShellStyle = {
+    padding: "14px 16px 16px",
+    borderRadius: 18,
+    background: isDark
+      ? "rgba(12, 28, 52, 0.55)"
+      : "rgba(255, 255, 255, 0.72)",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border.default,
+    boxShadow: colors.card.shadow,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    WebkitBackdropFilter: "blur(12px)",
+    backdropFilter: "blur(12px)",
+  };
+
   return (
     <AppShell>
-      <div
-        className="login-page-wrapper"
-        style={{
-          minHeight: "100vh",
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
-          fontFamily:
-            '-apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif',
-        }}
-      >
-      <style jsx>{`
-        @media (max-width: 768px) {
-          .login-page-wrapper {
-            padding: 0 !important;
-            align-items: flex-start !important;
-            padding-top: 20px !important;
-          }
-          .login-container {
-            width: 100% !important;
-            max-width: 100% !important;
-            margin-right: 0 !important;
-            padding: 0 16px !important;
-          }
-          .login-card {
-            flex-direction: column !important;
-            border-radius: 20px !important;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
-          }
-          .login-left-panel {
-            display: none !important;
-          }
-          .login-right-panel {
-            flex: 1 1 100% !important;
-            padding: 28px 24px 24px !important;
-          }
-          .login-form-title {
-            font-size: 22px !important;
-            margin-bottom: 20px !important;
-          }
-          .login-toggle-buttons {
-            margin-bottom: 20px !important;
-          }
-          .login-toggle-buttons button {
-            padding: 10px 16px !important;
-            font-size: 14px !important;
-          }
-          .login-form {
-            padding: 20px !important;
-          }
-          .login-form label {
-            font-size: 11px !important;
-            margin-bottom: 8px !important;
-          }
-          .login-form input {
-            padding: 12px 14px !important;
-            font-size: 16px !important;
-            min-height: 48px !important;
-          }
-          .login-submit-button {
-            padding: 14px 20px !important;
-            font-size: 14px !important;
-            min-height: 48px !important;
-            margin-top: 16px !important;
-          }
-          .login-copyright {
-            margin-top: 24px !important;
-            font-size: 10px !important;
-          }
-        }
-        @media (max-width: 480px) {
-          .login-page-wrapper {
-            padding-top: 10px !important;
-          }
-          .login-right-panel {
-            padding: 24px 20px 20px !important;
-          }
-          .login-form-title {
-            font-size: 20px !important;
-          }
-          .login-form {
-            padding: 16px !important;
-          }
-        }
-      `}</style>
+      <div className="login-page-wrapper">
+        <div className="login-theme-toggle">
+          <ThemeToggle />
+        </div>
 
-      <div style={{ position: "fixed", top: 20, right: 20, zIndex: 1000 }}>
-        <ThemeToggle />
-      </div>
+        <div className="login-container">
+          <GlassCard className="login-card" padding={0} borderRadius={30}>
+            {/* LEFT PANEL — brand (same layout as original) */}
+            <div className="login-left-panel" style={{ background: leftGradient }}>
+              <div className="login-left-orb login-left-orb--1" style={{ background: leftGradient }} />
+              <div className="login-left-orb login-left-orb--2" style={{ background: leftGradient }} />
+              <div className="login-left-orb login-left-orb--3" style={{ background: leftGradient }} />
 
-      <div
-        className="login-container"
-        style={{ width: "80%", maxWidth: 850, marginRight: "350px" }}
-      >
-        <GlassCard
-          className="login-card"
-          padding={0}
-          borderRadius={30}
-          style={{
-            display: "flex",
-            overflow: "hidden",
-          }}
-        >
-          {/* LEFT PANEL */}
-          <div
-            className="login-left-panel"
-            style={{
-              flex: "1 1 50%",
-              position: "relative",
-              padding: "32px 36px",
-              background: gdsGradient,
-              color: "#f9fafb",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 70,
-                right: 70,
-                width: 120,
-                height: 120,
-                borderRadius: "50%",
-                background: gdsGradient,
-                opacity: 0.9,
-                boxShadow: "0 20px 52px rgba(0, 0, 0, 0.7)",
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                bottom: 40,
-                left: 60,
-                width: 95,
-                height: 95,
-                borderRadius: "50%",
-                background: gdsGradient,
-                opacity: 0.95,
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                bottom: 78,
-                right: 70,
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                background: gdsGradient,
-                opacity: 0.95,
-              }}
-            />
-
-            <div style={{ position: "relative", zIndex: 1, maxWidth: 380 }}>
-              <div
-                style={{
-                  width: 180,
-                  height: 180,
-                  borderRadius: "50%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 24,
-                  overflow: "hidden",
-                  border: `2px solid ${colors.secondary[500]}`,
-                  boxShadow: "0 18px 38px rgba(0, 0, 0, 0.85)",
-                }}
-              >
-                <img
-                  src="/gds.png"
-                  alt="Global Digital Solutions"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              </div>
-
-              <p
-                style={{
-                  margin: 0,
-                  marginBottom: 20,
-                  fontSize: 13,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  opacity: 0.9,
-                }}
-              >
-                Sign in to your account
-              </p>
-
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  opacity: 0.96,
-                }}
-              >
-                Manage attendance, monitor shifts and keep your team on time.
-                Log in with your company credentials to access the GDS
-                Attendance Control Center.
-              </p>
-            </div>
-
-            <div
-              style={{
-                position: "relative",
-                zIndex: 1,
-                marginTop: 32,
-                fontSize: 12,
-                opacity: 0.9,
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>Global Digital Solutions</div>
-              <div>Centralized Attendance &amp; HR Portal</div>
-            </div>
-          </div>
-
-          {/* RIGHT PANEL – FORMS */}
-          <div
-            className="login-right-panel"
-            style={{
-              flex: "1 1 50%",
-              padding: "30px 36px 28px",
-              background: colors.glass.panelBg,
-              WebkitBackdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
-              backdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div className="login-form-title" style={{ marginBottom: 16 }}>
-              <div
-                style={{
-                  fontSize: 24,
-                  fontWeight: 700,
-                  color: colors.glass.text,
-                  letterSpacing: 0.5,
-                }}
-              >
-                Login Your Account
-              </div>
-            </div>
-
-            {/* HR / EMPLOYEE TOGGLE */}
-            <div
-              className="login-toggle-buttons"
-              style={{
-                display: "flex",
-                gap: 10,
-                marginBottom: 14,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setMode("HR")}
-                style={{
-                  flex: 1,
-                  padding: "9px 10px",
-                  borderRadius: 999,
-                  border:
-                    mode === "HR"
-                      ? `2px solid ${colors.primary[500]}`
-                      : `2px solid ${colors.border.default}`,
-                  backgroundColor:
-                    mode === "HR"
-                      ? `${colors.primary[500]}15`
-                      : "transparent",
-                  color: colors.glass.text,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                HR
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!employeeLoginLocked) setMode("EMPLOYEE");
-                }}
-                disabled={employeeLoginLocked}
-                style={{
-                  flex: 1,
-                  padding: "9px 10px",
-                  borderRadius: 999,
-                  border:
-                    mode === "EMPLOYEE"
-                      ? `2px solid ${colors.primary[500]}`
-                      : `2px solid ${colors.border.default}`,
-                  backgroundColor:
-                    mode === "EMPLOYEE"
-                      ? `${colors.primary[500]}15`
-                      : "transparent",
-                  color: colors.glass.text,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: employeeLoginLocked ? "not-allowed" : "pointer",
-                  opacity: employeeLoginLocked ? 0.4 : 1,
-                  transition: "all 0.2s ease",
-                }}
-              >
-                Employee
-              </button>
-            </div>
-
-            {/* ERROR MESSAGE */}
-            {errorMsg && (
-              <div
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 10,
-                  backgroundColor: isDark ? "#7f1d1d" : "#fee2e2",
-                  border: `1px solid ${isDark ? "#991b1b" : "#fecaca"}`,
-                  fontSize: 12,
-                  color: isDark ? "#fca5a5" : "#b91c1c",
-                  marginBottom: 10,
-                }}
-              >
-                {errorMsg}
-              </div>
-            )}
-
-            {/* FORMS */}
-            {mode === "HR" ? (
-              // HR FORM
-              <form
-                className="login-form"
-                onSubmit={handleHrSubmit}
-                style={{
-                  padding: "14px 16px 16px",
-                  borderRadius: 18,
-                  border: `1px solid ${colors.glass.border}`,
-                  background: isDark
-                    ? "rgba(15, 23, 42, 0.45)"
-                    : "rgba(255, 255, 255, 0.55)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
+              <div className="login-left-content">
                 <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  <label style={labelStyle}>EMAIL ADDRESS</label>
-                  <GlassInput
-                    type="email"
-                    value={hrEmail}
-                    onChange={(e) => setHrEmail(e.target.value)}
-                    required
-                    placeholder="hr@globaldigitalsolutions.com"
-                    style={{ borderRadius: 12 }}
-                  />
-                </div>
-
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  <label style={labelStyle}>PASSWORD</label>
-                  <GlassInput
-                    type="password"
-                    value={hrPassword}
-                    onChange={(e) => setHrPassword(e.target.value)}
-                    required
-                    placeholder="Enter your password"
-                    style={{ borderRadius: 12 }}
-                  />
-                </div>
-
-                <GlassButton
-                  type="submit"
-                  className="login-submit-button"
-                  disabled={loading}
                   style={{
-                    marginTop: 8,
-                    width: "100%",
-                    borderRadius: 999,
-                    letterSpacing: 1.5,
-                    textTransform: "uppercase",
-                    opacity: loading ? 0.75 : 1,
+                    width: 180,
+                    height: 180,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 24,
+                    overflow: "hidden",
+                    border: `2px solid ${colors.secondary[500]}`,
+                    boxShadow: "0 18px 38px rgba(0, 0, 0, 0.85)",
                   }}
                 >
-                  {loading ? "SIGNING IN..." : "SIGN IN"}
-                </GlassButton>
-              </form>
-            ) : employeeLoginLocked ? (
-              // EMPLOYEE LOGIN LOCKED MESSAGE
-              <div
-                style={{
-                  padding: "14px 16px 16px",
-                  borderRadius: 18,
-                  backgroundColor: isDark ? "#7f1d1d" : "#fef2f2",
-                  border: `1px solid ${isDark ? "#991b1b" : "#fecaca"}`,
-                  boxShadow: colors.card.shadow,
-                  fontSize: 13,
-                  color: isDark ? "#fca5a5" : "#991b1b",
-                }}
-              >
-                Employee login is currently locked by administration.
-                <br />
-                Please contact HR if you believe this is a mistake.
-              </div>
-            ) : (
-              <form
-                onSubmit={handleEmployeeSubmit}
-                style={{
-                  padding: "14px 16px 16px",
-                  borderRadius: 18,
-                  border: `1px solid ${colors.glass.border}`,
-                  background: isDark
-                    ? "rgba(15, 23, 42, 0.45)"
-                    : "rgba(255, 255, 255, 0.55)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
-                  <label style={labelStyle}>Employee Code</label>
-                  <GlassInput
-                    value={empCode}
-                    onChange={(e) => setEmpCode(e.target.value)}
-                    required
-                    placeholder="e.g. 00082"
-                    style={{ borderRadius: 12 }}
+                  <img
+                    src="/gds.png"
+                    alt="Global Digital Solutions"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
                   />
                 </div>
 
-                <GlassButton
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    marginTop: 8,
-                    width: "100%",
-                    borderRadius: 999,
-                    letterSpacing: 2,
-                    textTransform: "uppercase",
-                    opacity: loading ? 0.75 : 1,
-                  }}
-                >
-                  {loading ? "Checking..." : "Sign In"}
-                </GlassButton>
-              </form>
-            )}
+                <p className="login-left-kicker">Sign in to your account</p>
+                <p className="login-left-desc">
+                  Manage attendance, monitor shifts and keep your team on time.
+                  Log in with your company credentials to access the GDS
+                  Attendance Control Center.
+                </p>
+              </div>
 
+              <div className="login-left-footer">
+                <div style={{ fontWeight: 600 }}>Global Digital Solutions</div>
+                <div>Centralized Attendance &amp; HR Portal</div>
+              </div>
+            </div>
+
+            {/* RIGHT PANEL — forms (same layout as original) */}
             <div
-              className="login-copyright"
+              className="login-right-panel"
               style={{
-                marginTop: 16,
-                fontSize: 11,
-                color: colors.text.tertiary,
-                textAlign: "center",
+                background: isDark ? colors.background.card : colors.glass.panelBg,
+                color: colors.text.primary,
               }}
             >
-              © 2025 Global Digital Solutions Internal Use Only
+              <div className="login-form-title">
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: colors.text.primary,
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  Login Your Account
+                </div>
+              </div>
+
+              <div className="login-toggle-buttons">
+                <button
+                  type="button"
+                  onClick={() => setMode("HR")}
+                  style={{
+                    flex: 1,
+                    padding: "9px 10px",
+                    borderRadius: 999,
+                    borderWidth: "2px",
+                    borderStyle: "solid",
+                    borderColor:
+                      mode === "HR" ? colors.primary[500] : colors.border.default,
+                    backgroundColor:
+                      mode === "HR" ? `${colors.primary[500]}15` : "transparent",
+                    color: colors.text.primary,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  HR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!employeeLoginLocked) setMode("EMPLOYEE");
+                  }}
+                  disabled={employeeLoginLocked}
+                  style={{
+                    flex: 1,
+                    padding: "9px 10px",
+                    borderRadius: 999,
+                    borderWidth: "2px",
+                    borderStyle: "solid",
+                    borderColor:
+                      mode === "EMPLOYEE"
+                        ? colors.primary[500]
+                        : colors.border.default,
+                    backgroundColor:
+                      mode === "EMPLOYEE"
+                        ? `${colors.primary[500]}15`
+                        : "transparent",
+                    color: colors.text.primary,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: employeeLoginLocked ? "not-allowed" : "pointer",
+                    opacity: employeeLoginLocked ? 0.4 : 1,
+                  }}
+                >
+                  Employee
+                </button>
+              </div>
+
+              {errorMsg && (
+                <div className="login-error">{errorMsg}</div>
+              )}
+
+              {mode === "HR" ? (
+                <form className="login-form" onSubmit={handleHrSubmit} style={formShellStyle}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={labelStyle}>EMAIL ADDRESS</label>
+                    <input
+                      type="email"
+                      value={hrEmail}
+                      onChange={(e) => setHrEmail(e.target.value)}
+                      required
+                      placeholder="hr@globaldigitalsolutions.com"
+                      style={inputStyle}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = colors.primary[500];
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = colors.input.border;
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={labelStyle}>PASSWORD</label>
+                    <input
+                      type="password"
+                      value={hrPassword}
+                      onChange={(e) => setHrPassword(e.target.value)}
+                      required
+                      placeholder="Enter your password"
+                      style={inputStyle}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = colors.primary[500];
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = colors.input.border;
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="login-submit-button"
+                    disabled={loading}
+                    style={{
+                      marginTop: 8,
+                      padding: "11px 16px",
+                      borderRadius: 999,
+                      border: "none",
+                      width: "100%",
+                      background: submitGradient,
+                      color: "#ffffff",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      letterSpacing: 1.5,
+                      textTransform: "uppercase",
+                      cursor: loading ? "default" : "pointer",
+                      boxShadow: `0 16px 36px ${colors.primary[500]}55`,
+                      opacity: loading ? 0.75 : 1,
+                    }}
+                  >
+                    {loading ? "SIGNING IN..." : "SIGN IN"}
+                  </button>
+                </form>
+              ) : employeeLoginLocked ? (
+                <div className="login-form login-locked" style={formShellStyle}>
+                  Employee login is currently locked by administration.
+                  <br />
+                  Please contact HR if you believe this is a mistake.
+                </div>
+              ) : (
+                <form
+                  className="login-form"
+                  onSubmit={handleEmployeeSubmit}
+                  style={formShellStyle}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={labelStyle}>Employee Code</label>
+                    <input
+                      value={empCode}
+                      onChange={(e) => setEmpCode(e.target.value)}
+                      required
+                      placeholder="e.g. 00082"
+                      style={inputStyle}
+                      onFocus={(e) => {
+                        e.currentTarget.style.borderColor = colors.primary[500];
+                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.borderColor = colors.input.border;
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="login-submit-button"
+                    disabled={loading}
+                    style={{
+                      marginTop: 8,
+                      padding: "11px 16px",
+                      borderRadius: 999,
+                      border: "none",
+                      width: "100%",
+                      background: submitGradient,
+                      color: "#ffffff",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      letterSpacing: 2,
+                      textTransform: "uppercase",
+                      cursor: loading ? "default" : "pointer",
+                      boxShadow: `0 16px 36px ${colors.primary[500]}55`,
+                      opacity: loading ? 0.75 : 1,
+                    }}
+                  >
+                    {loading ? "Checking..." : "Sign In"}
+                  </button>
+                </form>
+              )}
+
+              <div className="login-copyright">
+                © 2025 Global Digital Solutions Internal Use Only
+              </div>
             </div>
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </div>
       </div>
-    </div>
     </AppShell>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div></div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#94a3b8",
+          }}
+        >
+          Loading...
+        </div>
+      }
+    >
       <LoginInner />
     </Suspense>
   );

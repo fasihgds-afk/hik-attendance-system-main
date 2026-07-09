@@ -171,7 +171,9 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   width: 100%;
+  min-width: 0;
   position: relative;
 }
 
@@ -308,6 +310,14 @@ body {
 }
 
 /* ==================== LAPTOP & DESKTOP RESPONSIVE UTILITIES ==================== */
+
+/* Full-width page shell on all screen sizes */
+.hr-page-container,
+.container-responsive {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
 
 /* Base container-responsive style - uses percentage width on larger screens */
 @media (min-width: 1024px) {
@@ -590,6 +600,11 @@ body {
 }
 
 /* Glass card responsive inner padding (GlassCard content wrapper) */
+.hr-glass-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .hr-glass-card__body {
   box-sizing: border-box;
 }
@@ -617,6 +632,8 @@ body {
 .hr-global-header {
   position: relative;
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .hr-global-header__accent {
@@ -651,8 +668,17 @@ body {
   min-width: 0;
 }
 
+.hr-global-header__subrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
 .hr-global-header__meta {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .hr-header-badge {
@@ -705,6 +731,15 @@ body {
   flex-shrink: 0;
 }
 
+.hr-theme-toggle--compact {
+  min-width: 34px;
+  min-height: 34px;
+}
+
+.hr-theme-toggle--compact svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
 /* Large desktop — single row, spacious */
 @media (min-width: 1441px) {
   .hr-global-header__logo {
@@ -727,21 +762,24 @@ body {
   }
 }
 
-/* Standard laptop / desktop */
+/* Standard laptop / desktop — single row, compact toolbar */
 @media (min-width: 1281px) {
   .hr-global-header__row {
     flex-wrap: nowrap;
+    align-items: center;
   }
 
   .hr-global-header__brand {
     flex: 1 1 auto;
     min-width: 0;
+    max-width: 42%;
   }
 
   .hr-global-header__toolbar {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     flex-wrap: nowrap !important;
-    max-width: min(68vw, 980px);
+    min-width: 0;
+    justify-content: flex-end;
     align-items: center;
   }
 
@@ -749,50 +787,138 @@ body {
     flex-wrap: nowrap;
     flex: 1 1 auto;
     min-width: 0;
+    justify-content: flex-end;
   }
 }
 
-/* Small laptop / tablet landscape */
-@media (min-width: 1024px) and (max-width: 1280px) {
-  .hr-global-header__logo {
-    width: 72px !important;
-    height: 72px !important;
-  }
-
-  .hr-global-header__title {
-    font-size: 20px !important;
+/* Laptop screens (1024–1440) — compact header, all buttons on one row */
+@media (min-width: 1024px) and (max-width: 1440px) {
+  .hr-global-header {
+    padding: 12px 16px !important;
   }
 
   .hr-global-header__row {
-    flex-direction: column;
-    align-items: stretch;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 12px 14px;
+  }
+
+  .hr-global-header__brand {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 38%;
+    gap: 12px !important;
+  }
+
+  .hr-global-header__logo {
+    width: 58px !important;
+    height: 58px !important;
+    border-radius: 14px !important;
+  }
+
+  .hr-global-header__title {
+    font-size: 17px !important;
+    line-height: 1.15 !important;
+  }
+
+  .hr-global-header__subtitle {
+    font-size: 11px !important;
+    margin-top: 0 !important;
+    opacity: 0.9;
+    line-height: 1.35 !important;
+  }
+
+  .hr-global-header__subrow {
+    margin-top: 4px !important;
+    gap: 6px 10px !important;
+  }
+
+  .hr-header-badge {
+    font-size: 10px !important;
+    padding: 3px 8px !important;
+    gap: 5px !important;
+    border-radius: 8px !important;
+  }
+
+  .hr-header-badge__icon {
+    width: 11px !important;
+    height: 11px !important;
   }
 
   .hr-global-header__toolbar {
-    width: 100%;
-    padding: 10px 12px;
-    border-radius: 14px;
-    background: rgba(10, 44, 84, 0.42);
-    border: 1px solid rgba(14, 165, 233, 0.22);
-    box-sizing: border-box;
-    justify-content: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap !important;
   }
 
   .hr-header-actions {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    justify-content: flex-end;
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .hr-header-actions::-webkit-scrollbar {
+    display: none;
   }
 
   .hr-header-actions > button,
-  .hr-header-actions > .hr-header-actions__group {
-    flex: 0 1 auto;
-    min-width: 0;
+  .hr-header-actions > .hr-header-actions__group > button {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    min-height: 32px !important;
+    gap: 5px !important;
+    border-radius: 8px !important;
+    flex-shrink: 0;
   }
 
-  .hr-header-actions > .hr-header-actions__group > button {
-    flex: 0 1 auto;
-    min-width: 0;
+  .hr-header-actions > button svg,
+  .hr-header-actions > .hr-header-actions__group > button svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .hr-header-theme {
+    flex-shrink: 0;
+  }
+
+  .hr-page-container {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-top: 18px !important;
+  }
+}
+
+/* Tighter laptops — truncate long subtitle instead of hiding */
+@media (min-width: 1024px) and (max-width: 1180px) {
+  .hr-global-header__brand {
+    max-width: 34%;
+  }
+
+  .hr-global-header__subtitle {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hr-global-header__subrow {
+    margin-top: 2px !important;
   }
 }
 
@@ -820,6 +946,13 @@ body {
     flex-direction: column;
     align-items: stretch;
     gap: 14px;
+  }
+
+  .hr-global-header__subrow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 4px !important;
   }
 
   .hr-global-header__brand {
@@ -1101,4 +1234,234 @@ body {
 [data-theme="dark"] tr.row-hover:hover td {
   background-color: var(--theme-row-hover, rgba(20, 42, 72, 0.95)) !important;
   color: var(--theme-text-secondary, #e2e8f0) !important;
+}
+
+/* ==================== LOGIN PAGE (split card + gloss morphism) ==================== */
+
+.login-page-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.login-theme-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 50;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(10, 28, 52, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] .login-theme-toggle {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(14, 165, 233, 0.25);
+  box-shadow: 0 8px 24px rgba(15, 91, 165, 0.15);
+}
+
+.login-container {
+  width: min(92vw, 900px);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* GlassCard wraps panels in __body — flex must be on __body, not outer card */
+.login-card.hr-glass-card {
+  overflow: hidden;
+  width: 100%;
+}
+
+.login-card .hr-glass-card__body {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  min-height: min(560px, calc(100vh - 80px));
+  padding: 0 !important;
+}
+
+.login-left-panel,
+.login-right-panel {
+  flex: 1 1 50%;
+  min-width: 0;
+  position: relative;
+}
+
+.login-left-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 36px;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.login-left-orb {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.35;
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.login-left-orb--1 {
+  width: 120px;
+  height: 120px;
+  top: 12%;
+  right: 8%;
+}
+
+.login-left-orb--2 {
+  width: 80px;
+  height: 80px;
+  bottom: 28%;
+  left: 6%;
+}
+
+.login-left-orb--3 {
+  width: 56px;
+  height: 56px;
+  top: 42%;
+  left: 38%;
+}
+
+.login-left-content {
+  position: relative;
+  z-index: 2;
+}
+
+.login-left-kicker {
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.login-left-desc {
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 320px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.login-left-footer {
+  position: relative;
+  z-index: 2;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.login-right-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 36px 32px 28px;
+  gap: 14px;
+}
+
+.login-form-title {
+  margin-bottom: 4px;
+}
+
+.login-toggle-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.login-error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+[data-theme="light"] .login-error {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.login-form {
+  width: 100%;
+}
+
+.login-locked {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--theme-text-secondary, #94a3b8);
+}
+
+.login-copyright {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--theme-text-muted, #64748b);
+}
+
+.login-submit-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.login-submit-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+@media (max-width: 900px) {
+  .login-card .hr-glass-card__body {
+    flex-direction: column !important;
+    min-height: auto;
+  }
+
+  .login-left-panel {
+    padding: 28px 24px;
+    min-height: 220px;
+  }
+
+  .login-left-content > div:first-child {
+    width: 120px !important;
+    height: 120px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .login-right-panel {
+    padding: 24px 20px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-page-wrapper {
+    padding: 16px 12px 24px;
+  }
+
+  .login-theme-toggle {
+    top: 12px;
+    right: 12px;
+  }
+
+  .login-left-kicker {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+  }
+
+  .login-left-desc {
+    font-size: 13px;
+  }
 }

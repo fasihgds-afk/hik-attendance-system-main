@@ -50,12 +50,16 @@ export default function PageHeader({
             <div className="daily-header-title hr-global-header__title" style={headerStyles.title}>
               {title}
             </div>
-            {subtitle ? (
-              <div className="daily-header-subtitle hr-global-header__subtitle" style={headerStyles.subtitle}>
-                {subtitle}
+            {(subtitle || meta) ? (
+              <div className="hr-global-header__subrow">
+                {subtitle ? (
+                  <div className="daily-header-subtitle hr-global-header__subtitle" style={headerStyles.subtitle}>
+                    {subtitle}
+                  </div>
+                ) : null}
+                {meta ? <div className="hr-global-header__meta">{meta}</div> : null}
               </div>
             ) : null}
-            {meta ? <div className="hr-global-header__meta">{meta}</div> : null}
           </div>
         </div>
 

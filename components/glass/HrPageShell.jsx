@@ -32,6 +32,7 @@ export default function HrPageShell({
             'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           margin: '0 auto',
           width: '100%',
+          maxWidth: '100%',
           boxSizing: 'border-box',
           ...contentStyle,
         }}

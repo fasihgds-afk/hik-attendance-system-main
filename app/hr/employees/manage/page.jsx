@@ -12,6 +12,7 @@ import Toast from '../../../../components/common/Toast';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
+import { spinnerRingStyle } from '@/lib/theme/styles';
 
 export default function EmployeeShiftPage() {
   const router = useRouter();
@@ -595,8 +596,7 @@ export default function EmployeeShiftPage() {
                 width: 16,
                 height: 16,
                 borderRadius: '999px',
-                border: '2px solid rgba(191,219,254,0.6)',
-                borderTopColor: '#ffffff',
+                ...spinnerRingStyle('rgba(191,219,254,0.6)', '#ffffff'),
                 animation: 'spin 0.7s linear infinite',
               }}
             />

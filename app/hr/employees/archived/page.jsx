@@ -11,6 +11,7 @@ import Modal from '../../../../components/ui/Modal';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
+import { spinnerRingStyle } from '@/lib/theme/styles';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -130,8 +131,7 @@ export default function FormerEmployeesPage() {
                 width: 16,
                 height: 16,
                 borderRadius: '999px',
-                border: '2px solid rgba(191,219,254,0.6)',
-                borderTopColor: '#ffffff',
+                ...spinnerRingStyle('rgba(191,219,254,0.6)', '#ffffff'),
                 animation: 'spin 0.7s linear infinite',
               }}
             />

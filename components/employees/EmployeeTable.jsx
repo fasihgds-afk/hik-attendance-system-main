@@ -7,7 +7,7 @@
  */
 
 import { useTheme } from '@/lib/theme/ThemeContext';
-import { getTableStyles } from '@/lib/theme/styles';
+import { getTableStyles, spinnerRingStyle } from '@/lib/theme/styles';
 import EmployeeRow from './EmployeeRow';
 
 export default function EmployeeTable({
@@ -56,9 +56,8 @@ export default function EmployeeTable({
                     style={{
                       width: 20,
                       height: 20,
-                      border: `3px solid ${colors.border.default}`,
-                      borderTopColor: colors.primary[500],
                       borderRadius: '50%',
+                      ...spinnerRingStyle(colors.border.default, colors.primary[500], '3px'),
                       animation: 'spin 0.8s linear infinite',
                     }}
                   />

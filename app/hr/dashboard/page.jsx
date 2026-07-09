@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import { getTableStyles } from '@/lib/theme/styles';
+import { getTableStyles, getGlossPillStyles, spinnerRingStyle } from '@/lib/theme/styles';
 import {
   HrPageShell,
   HrHeaderActions,
@@ -16,7 +16,6 @@ import {
   GlassInput,
   GlassButton,
 } from '@/components/glass';
-import { getGlossPillStyles } from '@/lib/theme/styles';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -582,8 +581,7 @@ export default function HrDashboardPage() {
                 width: 16,
                 height: 16,
                 borderRadius: '999px',
-                border: `2px solid rgba(14, 165, 233, 0.3)`,
-                borderTopColor: colors.primary[500],
+                ...spinnerRingStyle('rgba(14, 165, 233, 0.3)', colors.primary[500]),
                 animation: 'spin 0.7s linear infinite',
               }}
             />
