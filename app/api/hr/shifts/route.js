@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
 import Shift, { mergeGraceFromBody } from '../../../../models/Shift';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
@@ -15,7 +15,7 @@ export const revalidate = 60;
 // GET /api/hr/shifts - Get all shifts
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'view');
     await connectDB();
     
     const { searchParams } = new URL(req.url);
@@ -46,7 +46,7 @@ export async function GET(req) {
 // PATCH /api/hr/shifts - Bulk update shifts (e.g., activate all)
 export async function PATCH(req) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'update');
     await connectDB();
 
     const body = await req.json();
@@ -82,7 +82,7 @@ export async function PATCH(req) {
 // POST /api/hr/shifts - Create a new shift
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'create');
     await connectDB();
 
     const body = await req.json();

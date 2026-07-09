@@ -5,10 +5,11 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
-import ThemeToggle from "@/components/ui/ThemeToggle";
+import { getGlossPillStyles, getTabStyles, getAccentPanelStyles } from "@/lib/theme/styles";
+import { HrPageShell, HrHeaderActions, HrHeaderBadge, GlassCard } from "@/components/glass";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/components/ui/AutoLogoutWarning";
-import RegisterUserModal from "@/components/users/RegisterUserModal";
+import { sessionHasPermission } from "@/lib/auth/permissionClient";
 
 export default function HrDashboardPage() {
   const router = useRouter();
@@ -16,8 +17,22 @@ export default function HrDashboardPage() {
   const { colors, theme } = useTheme(); // Theme colors and current theme mode
   const [tab, setTab] = useState("overview"); // 'overview' | 'employees' | 'attendance'
 
-  // Treat HR as admin (you can later add ADMIN role)
-  const isAdmin = session?.user?.role === "HR";
+  const can = (moduleKey, action = "view") => sessionHasPermission(session, moduleKey, action);
+  const canRegisterUsers = can("users", "create") || can("users", "view");
+  const canViewEmployees = can("employees");
+  const canViewArchived = can("archivedEmployees");
+  const canViewShifts = can("shifts");
+  const canViewPortal = can("portalAccess");
+  const canViewDepartments = can("departments");
+  const canViewSettings = can("companySettings");
+  const canViewViolations = can("violationRules");
+  const canViewDaily = can("dailyAttendance");
+  const canViewMonthly = can("monthlyAttendance");
+  const canViewSalary = can("salaryReport");
+  const canViewLeaves = can("leaves");
+  const canViewLeavePolicy = can("leavePolicy");
+  const canViewComplaints = can("complaints");
+  const canViewAttendanceTab = canViewDaily || canViewMonthly || canViewSalary;
 
   // Auto logout after 30 minutes of inactivity (with 5 minute warning)
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
@@ -51,7 +66,6 @@ export default function HrDashboardPage() {
   const [totalEmployees, setTotalEmployees] = useState(0); // Total from API meta
   const [statsLoading, setStatsLoading] = useState(false); // Start as false - no loading initially
   const [statsError, setStatsError] = useState("");
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false); // Track if data has been loaded
   
   // Leave statistics state
@@ -221,8 +235,10 @@ export default function HrDashboardPage() {
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "employees", label: "Employees" },
-    { id: "attendance", label: "Attendance" },
+    ...(canViewEmployees || canViewArchived || canRegisterUsers
+      ? [{ id: "employees", label: "Employees" }]
+      : []),
+    ...(canViewAttendanceTab ? [{ id: "attendance", label: "Attendance" }] : []),
   ];
 
   function openSalaryReport() {
@@ -273,213 +289,64 @@ export default function HrDashboardPage() {
     router.push("/hr/complaints");
   }
 
-  function openRegisterModal() {
-    setShowRegisterModal(true);
-  }
-
-  function closeRegisterModal() {
-    setShowRegisterModal(false);
-  }
-
-  function handleRegisterSuccess() {
-    // Optionally refresh data or show a toast
-    // You can add a toast notification here if needed
+  function openUsersPage() {
+    router.push("/hr/users");
   }
 
   /** Overview hub cards — same visual language as stats row (kicker, headline, icon, one CTA) */
   const hub = useMemo(() => {
     const isDark = theme === "dark";
-    const shD = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-    const shL = "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)";
+    const glassBg = colors.glass.panelBg;
+    const brandCyanRgb = "14, 165, 233";
+    const labelColor = isDark ? "#bae6fd" : colors.primary[700];
+    const subLabelColor = isDark ? "#e2e8f0" : colors.text.secondary;
+    const bodyColor = isDark ? "#cbd5e1" : colors.text.secondary;
+
+    const hubBorderColor = colors.glass.border;
+    const hubHoverBorderColor = `rgba(${brandCyanRgb}, 0.42)`;
+    const hubShadow = colors.glass.shadow;
+    const hubHoverShadow = isDark
+      ? `0 12px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06)`
+      : `0 12px 28px rgba(10, 44, 84, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.85)`;
+    const hubIconStyle = isDark
+      ? {
+          bg: `linear-gradient(135deg, rgba(10, 44, 84, 0.72), rgba(6, 21, 37, 0.82))`,
+          border: `rgba(${brandCyanRgb}, 0.35)`,
+          stroke: colors.primary[400],
+        }
+      : {
+          bg: `linear-gradient(135deg, rgba(224, 242, 254, 0.95), rgba(186, 230, 253, 0.88))`,
+          border: `rgba(${brandCyanRgb}, 0.28)`,
+          stroke: colors.primary[700],
+        };
+    const hubBtnStyle = {
+      background: `linear-gradient(135deg, ${colors.primary[700]}, ${colors.primary[500]})`,
+      color: "#ffffff",
+    };
+
+    const hubVariant = {
+      borderColor: hubBorderColor,
+      boxShadow: hubShadow,
+      hoverBorderColor: hubHoverBorderColor,
+      hoverShadow: hubHoverShadow,
+      background: glassBg,
+      kickerColor: labelColor,
+      headlineColor: colors.text.primary,
+      hintColor: subLabelColor,
+      descColor: bodyColor,
+      icon: hubIconStyle,
+      btn: hubBtnStyle,
+    };
 
     const variants = {
-      employees: {
-        border: `1px solid rgba(59, 130, 246, 0.28)`,
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(59, 130, 246, 0.5)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(59, 130, 246, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(59, 130, 246, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: colors.gradient.card,
-        kickerColor: colors.text.tertiary,
-        headlineColor: colors.text.primary,
-        hintColor: colors.text.muted,
-        descColor: colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.1))",
-          border: "1px solid rgba(59, 130, 246, 0.35)",
-          stroke: "#60a5fa",
-        },
-        btn: { background: colors.primary[600], color: "#ffffff" },
-      },
-      register: {
-        border: "1px solid rgba(251, 146, 60, 0.4)",
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(253, 186, 116, 0.65)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(234, 88, 12, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(234, 88, 12, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? "linear-gradient(135deg, #7c2d12 0%, #9a3412 100%)"
-          : "linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)",
-        kickerColor: isDark ? "#fdba74" : "#c2410c",
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#fdba74" : "#ea580c",
-        descColor: isDark ? "rgba(255, 255, 255, 0.85)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(251, 146, 60, 0.35), rgba(251, 146, 60, 0.12))",
-          border: "1px solid rgba(253, 186, 116, 0.45)",
-          stroke: "#fb923c",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#ea580c",
-          color: isDark ? "#7c2d12" : "#ffffff",
-        },
-      },
-      shift: {
-        border: `1px solid rgba(99, 102, 241, 0.35)`,
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(129, 140, 248, 0.55)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(99, 102, 241, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? `linear-gradient(135deg, ${colors.primary[900]} 0%, ${colors.primary[800]} 100%)`
-          : `linear-gradient(135deg, ${colors.primary[100]} 0%, ${colors.primary[200]} 100%)`,
-        kickerColor: isDark ? colors.primary[300] : colors.primary[700],
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#a5b4fc" : colors.primary[700],
-        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(99, 102, 241, 0.32), rgba(99, 102, 241, 0.14))",
-          border: "1px solid rgba(129, 140, 248, 0.45)",
-          stroke: "#a5b4fc",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : colors.primary[700],
-          color: isDark ? colors.primary[900] : "#ffffff",
-        },
-      },
-      attendance: {
-        border: `1px solid rgba(34, 197, 94, 0.35)`,
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(74, 222, 128, 0.55)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(34, 197, 94, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? `linear-gradient(135deg, ${colors.secondary[900]} 0%, ${colors.secondary[800]} 100%)`
-          : `linear-gradient(135deg, ${colors.secondary[100]} 0%, ${colors.secondary[200]} 100%)`,
-        kickerColor: isDark ? colors.secondary[300] : colors.secondary[700],
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#86efac" : colors.secondary[700],
-        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(34, 197, 94, 0.32), rgba(34, 197, 94, 0.14))",
-          border: "1px solid rgba(74, 222, 128, 0.45)",
-          stroke: "#4ade80",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : colors.secondary[700],
-          color: isDark ? "#14532d" : "#ffffff",
-        },
-      },
-      leave: {
-        border: "1px solid rgba(45, 212, 191, 0.35)",
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(45, 212, 191, 0.55)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(20, 184, 166, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(20, 184, 166, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? "linear-gradient(135deg, #134e4a 0%, #115e59 100%)"
-          : "linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)",
-        kickerColor: isDark ? "#5eead4" : "#0f766e",
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#99f6e4" : "#0d9488",
-        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(20, 184, 166, 0.3), rgba(20, 184, 166, 0.12))",
-          border: "1px solid rgba(45, 212, 191, 0.4)",
-          stroke: "#2dd4bf",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#0f766e",
-          color: isDark ? "#134e4a" : "#ffffff",
-        },
-      },
-      settings: {
-        border: "1px solid rgba(100, 116, 139, 0.4)",
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(148, 163, 184, 0.65)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(71, 85, 105, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(100, 116, 139, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? "linear-gradient(135deg, #1e293b 0%, #334155 100%)"
-          : "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)",
-        kickerColor: isDark ? "#94a3b8" : "#475569",
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#cbd5e1" : "#64748b",
-        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(100, 116, 139, 0.32), rgba(100, 116, 139, 0.14))",
-          border: "1px solid rgba(148, 163, 184, 0.45)",
-          stroke: "#94a3b8",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#475569",
-          color: isDark ? "#1e293b" : "#ffffff",
-        },
-      },
-      portal: {
-        border: "1px solid rgba(244, 63, 94, 0.35)",
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(251, 113, 133, 0.55)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(244, 63, 94, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(244, 63, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? "linear-gradient(135deg, #881337 0%, #9f1239 100%)"
-          : "linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%)",
-        kickerColor: isDark ? "#fda4af" : "#be123c",
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#fecdd3" : "#e11d48",
-        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(244, 63, 94, 0.32), rgba(244, 63, 94, 0.14))",
-          border: "1px solid rgba(251, 113, 133, 0.45)",
-          stroke: "#fb7185",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#e11d48",
-          color: isDark ? "#881337" : "#ffffff",
-        },
-      },
-      complaints: {
-        border: "1px solid rgba(167, 139, 250, 0.35)",
-        boxShadow: isDark ? shD : shL,
-        hoverBorder: "1px solid rgba(196, 181, 253, 0.55)",
-        hoverShadow: isDark
-          ? "0 12px 32px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-          : "0 12px 28px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-        background: isDark
-          ? "linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%)"
-          : "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)",
-        kickerColor: isDark ? "#d8b4fe" : "#6d28d9",
-        headlineColor: colors.text.primary,
-        hintColor: isDark ? "#c4b5fd" : "#5b21b6",
-        descColor: isDark ? "rgba(255, 255, 255, 0.82)" : colors.text.secondary,
-        icon: {
-          bg: "linear-gradient(135deg, rgba(139, 92, 246, 0.32), rgba(139, 92, 246, 0.14))",
-          border: "1px solid rgba(167, 139, 250, 0.45)",
-          stroke: "#c4b5fd",
-        },
-        btn: {
-          background: isDark ? "rgba(255, 255, 255, 0.92)" : "#6d28d9",
-          color: isDark ? "#4c1d95" : "#ffffff",
-        },
-      },
+      employees: hubVariant,
+      register: hubVariant,
+      shift: hubVariant,
+      attendance: hubVariant,
+      leave: hubVariant,
+      settings: hubVariant,
+      portal: hubVariant,
+      complaints: hubVariant,
     };
 
     const card = (key) => {
@@ -488,8 +355,12 @@ export default function HrDashboardPage() {
         borderRadius: 14,
         padding: "16px 18px",
         background: v.background,
-        border: v.border,
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: v.borderColor,
         boxShadow: v.boxShadow,
+        WebkitBackdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
+        backdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
         position: "relative",
         overflow: "hidden",
         transition: "transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease",
@@ -507,12 +378,12 @@ export default function HrDashboardPage() {
         onMouseEnter: (e) => {
           e.currentTarget.style.transform = "translateY(-4px)";
           e.currentTarget.style.boxShadow = v.hoverShadow;
-          e.currentTarget.style.border = v.hoverBorder;
+          e.currentTarget.style.borderColor = v.hoverBorderColor;
         },
         onMouseLeave: (e) => {
           e.currentTarget.style.transform = "translateY(0)";
           e.currentTarget.style.boxShadow = v.boxShadow;
-          e.currentTarget.style.border = v.border;
+          e.currentTarget.style.borderColor = v.borderColor;
         },
       };
     };
@@ -527,12 +398,12 @@ export default function HrDashboardPage() {
     const kicker = (key) => {
       const v = variants[key];
       return {
-        fontSize: 10,
+        fontSize: 11,
         textTransform: "uppercase",
         letterSpacing: "0.1em",
         color: v.kickerColor,
         marginBottom: 6,
-        fontWeight: 600,
+        fontWeight: 700,
       };
     };
     const headline = (key) => {
@@ -549,17 +420,17 @@ export default function HrDashboardPage() {
     const hint = (key) => {
       const v = variants[key];
       return {
-        fontSize: 11,
+        fontSize: 12,
         color: v.hintColor,
         marginTop: 6,
-        fontWeight: 500,
+        fontWeight: 600,
       };
     };
     const desc = (key) => {
       const v = variants[key];
       return {
-        fontSize: 12,
-        lineHeight: 1.5,
+        fontSize: 13,
+        lineHeight: 1.55,
         color: v.descColor,
         margin: "10px 0 0 0",
         flex: "1 1 auto",
@@ -576,7 +447,9 @@ export default function HrDashboardPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        border: ic.border,
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: ic.border,
         flexShrink: 0,
       };
     };
@@ -608,7 +481,7 @@ export default function HrDashboardPage() {
         justifyContent: "center",
         gap: 6,
         transition: "filter 0.15s ease, transform 0.15s ease",
-        boxShadow: isDark ? "0 4px 14px rgba(0,0,0,0.2)" : "0 2px 8px rgba(15,23,42,0.08)",
+        boxShadow: isDark ? "0 4px 14px rgba(14, 165, 233, 0.22)" : "0 2px 8px rgba(15,23,42,0.08)",
       };
     };
 
@@ -628,22 +501,86 @@ export default function HrDashboardPage() {
     };
   }, [colors, theme]);
 
-  const headerActionBtn = {
-    padding: "8px 14px",
-    borderRadius: 10,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: 7,
-    minHeight: 40,
-    transition: "all 0.2s",
-    whiteSpace: "nowrap",
-  };
+  const glassSurface = useMemo(
+    () => ({
+      background: colors.glass.panelBg,
+      border: `1px solid ${colors.glass.border}`,
+      boxShadow: colors.glass.shadow,
+      WebkitBackdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
+      backdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
+    }),
+    [colors]
+  );
+
+  const overviewInsightsPanel = useMemo(
+    () => ({
+      ...glassSurface,
+      borderRadius: 18,
+      overflow: "hidden",
+      marginBottom: 24,
+      position: "relative",
+    }),
+    [glassSurface]
+  );
+
+  const glossPill = (variant = "neutral") => getGlossPillStyles(colors, variant);
+
+  const tabPanel = (accent) => getAccentPanelStyles(colors, accent);
+
+  const tabMutedText = colors.text.secondary;
+
+  const headerMeta = session?.user ? (
+    <HrHeaderBadge>
+      {session.user.email} · {session.user.role}
+    </HrHeaderBadge>
+  ) : null;
+
+  const headerActions = (
+    <HrHeaderActions>
+      {canViewDepartments && (
+        <button type="button" onClick={openDepartmentPolicies} style={glossPill("neutral")}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          Departments
+        </button>
+      )}
+      {canViewViolations && (
+        <button type="button" onClick={openViolationRules} style={glossPill("warm")}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          Violation Rules
+        </button>
+      )}
+      <button type="button" onClick={openCompanySettings} style={glossPill("slate")}>
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Company Settings
+      </button>
+      <button type="button" onClick={openPortalAccess} style={glossPill("rose")}>
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        Portal Access
+      </button>
+      <button type="button" onClick={handleLogout} style={glossPill("neutral")}>
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
 
   return (
-    <>
+    <HrPageShell
+      subtitle="HR & Attendance Management Dashboard"
+      meta={headerMeta}
+      actions={headerActions}
+    >
       <style jsx>{`
           /* Hub: 1 col phone → 2 col tablet → 3 col laptop/desktop; equal row heights */
           .overview-action-grid {
@@ -668,62 +605,54 @@ export default function HrDashboardPage() {
             width: 100%;
             justify-self: center;
           }
-          .header-text-stack {
-            min-width: 0;
+          .overview-metrics-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
-          .header-buttons {
+          .overview-metric {
+            padding: 22px 24px;
+            border-right: 1px solid rgba(14, 165, 233, 0.15);
+          }
+          .overview-metric:last-child {
+            border-right: none;
+          }
+          .overview-dept-block {
+            padding: 20px 24px 24px;
+          }
+          .overview-dept-chips {
+            display: flex;
             flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+          }
+          .overview-dept-chip {
+            display: inline-flex;
             align-items: center;
-            justify-content: flex-end;
-            gap: 6px;
-            flex: 0 0 auto;
-            align-self: center;
-            min-width: 0;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #e2e8f0;
+            background: rgba(15, 55, 95, 0.58);
+            border: 1px solid rgba(14, 165, 233, 0.38);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
           }
-          .header-buttons > button {
-            flex: 0 0 auto;
-          }
-          .header-buttons button svg {
-            width: 18px !important;
-            height: 18px !important;
-            flex-shrink: 0;
-          }
-          @media (min-width: 1024px) {
-            .header-buttons {
-              gap: 8px !important;
-            }
-            .header-buttons button {
-              padding: 9px 16px !important;
-              font-size: 14px !important;
-              min-height: 44px !important;
-            }
-            .header-buttons button svg {
-              width: 20px !important;
-              height: 20px !important;
-            }
-          }
-          @media (min-width: 1440px) {
-            .header-buttons button {
-              padding: 10px 18px !important;
-              font-size: 15px !important;
-              min-height: 46px !important;
-            }
-            .header-buttons button svg {
-              width: 21px !important;
-              height: 21px !important;
-            }
+          .overview-dept-chip strong {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 26px;
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #ffffff;
+            background: rgba(8, 18, 36, 0.7);
+            border: 1px solid rgba(14, 165, 233, 0.3);
           }
           @media (max-width: 1280px) {
-            .header-container {
-              padding: 16px 20px !important;
-            }
-            .header-brand-row {
-              gap: 12px !important;
-            }
-            .header-buttons {
-              justify-content: flex-end !important;
-              gap: 8px !important;
-            }
             .stats-grid {
               grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)) !important;
             }
@@ -731,9 +660,6 @@ export default function HrDashboardPage() {
               flex-direction: column !important;
               align-items: flex-start !important;
               gap: 10px !important;
-            }
-            .main-container {
-              padding: 18px 16px 24px !important;
             }
             .tabs-container {
               flex-wrap: wrap !important;
@@ -753,397 +679,32 @@ export default function HrDashboardPage() {
               justify-self: stretch !important;
             }
           }
-        @media (max-width: 768px) {
-          .header-brand-row {
-            flex-direction: column !important;
-            align-items: stretch !important;
+          @media (max-width: 768px) {
+            .tabs-container {
+              flex-wrap: wrap !important;
+              gap: 8px !important;
+            }
+            .tab-button {
+              flex: 1 1 auto !important;
+              min-width: 100px !important;
+              font-size: 12px !important;
+              padding: 8px 12px !important;
+            }
+            .stats-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
+            }
+            .card-content {
+              padding: 16px !important;
+            }
           }
-          .header-buttons {
-            justify-content: flex-start !important;
-            width: 100% !important;
-            align-self: stretch !important;
+          @media (min-width: 1024px) and (max-width: 1366px) {
+            .card-content {
+              padding: 18px !important;
+            }
           }
-          .header-logo {
-            width: 60px !important;
-            height: 60px !important;
-          }
-          .header-title {
-            font-size: 18px !important;
-          }
-          .header-subtitle {
-            font-size: 11px !important;
-          }
-          .header-buttons button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: 120px !important;
-            justify-content: center !important;
-          }
-          .main-container {
-            padding: 16px !important;
-          }
-          .tabs-container {
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-          }
-          .tab-button {
-            flex: 1 1 auto !important;
-            min-width: 100px !important;
-            font-size: 12px !important;
-            padding: 8px 12px !important;
-          }
-          .stats-grid {
-            grid-template-columns: 1fr !important;
-            gap: 12px !important;
-          }
-          .card-content {
-            padding: 16px !important;
-          }
-        }
-        @media (max-width: 480px) {
-          .main-container {
-            padding: 12px !important;
-          }
-          .header-title {
-            font-size: 16px !important;
-          }
-        }
-        
-        /* Laptop & Desktop Responsive Styles */
-        @media (min-width: 1024px) and (max-width: 1366px) {
-          .main-container {
-            padding: 20px 24px !important;
-          }
-          .header-container {
-            padding: 16px 20px !important;
-          }
-          .header-logo {
-            width: 56px !important;
-            height: 56px !important;
-          }
-          .header-title {
-            font-size: 19px !important;
-          }
-          .header-buttons {
-            flex-wrap: wrap !important;
-          }
-          .card-content {
-            padding: 18px !important;
-          }
-        }
-        
-        @media (min-width: 1367px) and (max-width: 1440px) {
-          .main-container {
-            padding: 22px 26px !important;
-          }
-        }
-        
-        @media (min-width: 1441px) and (max-width: 1920px) {
-          .main-container {
-            padding: 24px 28px !important;
-          }
-        }
-        
-        @media (min-width: 1921px) {
-          .main-container {
-            padding: 28px 32px !important;
-          }
-          .header-title {
-            font-size: 24px !important;
-          }
-          .header-logo {
-            width: 72px !important;
-            height: 72px !important;
-          }
-        }
       `}</style>
-      <div
-        className="main-container"
-        style={{
-          minHeight: "100vh",
-          width: "100%",
-          maxWidth: "100%",
-          marginLeft: 0,
-          marginRight: 0,
-          boxSizing: "border-box",
-          padding: "24px 28px 32px",
-          background: colors.gradient.overlay,
-          color: colors.text.primary,
-          fontFamily:
-            'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        }}
-      >
-      {/* 🔹 ENHANCED PROFESSIONAL HEADER */}
-      <div className="container-responsive" style={{ margin: "0 auto 24px auto", width: '100%' }}>
-        <div
-          className="header-container"
-            style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            padding: "18px 22px",
-            borderRadius: 20,
-            background: colors.gradient.header,
-            color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-            boxShadow: theme === 'dark' 
-              ? "0 20px 50px rgba(19, 168, 229, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3)"
-              : "0 20px 50px rgba(59, 130, 246, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)",
-            border: `1px solid ${colors.border.default}`,
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          {/* Background Pattern */}
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundImage: "radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%)",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            className="header-brand-row"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              width: "100%",
-              position: "relative",
-              zIndex: 1,
-              minWidth: 0,
-            }}
-          >
-            <div
-              className="header-logo"
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 14,
-                overflow: "hidden",
-                backgroundColor: "rgba(255, 255, 255, 0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                boxShadow: "0 6px 14px rgba(0, 0, 0, 0.2)",
-                border: "2px solid rgba(255, 255, 255, 0.2)",
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            </div>
-            <div
-              className="header-text-stack"
-              style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}
-            >
-                <div
-                  className="header-title"
-                  style={{
-                    fontSize: 22,
-                    fontWeight: 800,
-                    letterSpacing: 0.4,
-                    margin: 0,
-                    lineHeight: 1.2,
-                    textShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
-                  }}
-                >
-                  Global Digital Solutions
-                </div>
-              <div
-                className="header-subtitle"
-                style={{
-                  fontSize: 13,
-                  opacity: 0.95,
-                  fontWeight: 500,
-                  margin: 0,
-                }}
-              >
-                HR &amp; Attendance Management Dashboard
-              </div>
-              {session?.user && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 12,
-                    color: "rgba(255, 255, 255, 0.9)",
-                    backgroundColor: "rgba(255, 255, 255, 0.1)",
-                    padding: "4px 10px",
-                    borderRadius: 12,
-                    width: "fit-content",
-                    border: "1px solid rgba(255, 255, 255, 0.15)",
-                  }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.8 }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  <span>{session.user.email}</span>
-                  <span style={{ opacity: 0.6 }}>•</span>
-                  <span style={{ fontWeight: 600 }}>{session.user.role}</span>
-                </div>
-              )}
-            </div>
-            <div
-              className="header-buttons"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                position: "relative",
-                zIndex: 1,
-              }}
-            >
-              <button
-                type="button"
-                onClick={openDepartmentPolicies}
-                style={{
-                  ...headerActionBtn,
-                  border: "1px solid rgba(255, 255, 255, 0.28)",
-                  backgroundColor: "rgba(255, 255, 255, 0.14)",
-                  color: "#ffffff",
-                  backdropFilter: "blur(8px)",
-                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.24)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.14)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                Departments
-              </button>
 
-              <button
-                type="button"
-                onClick={openViolationRules}
-                style={{
-                  ...headerActionBtn,
-                  border: "1px solid rgba(245, 158, 11, 0.45)",
-                  backgroundColor: "rgba(245, 158, 11, 0.18)",
-                  color: "#ffffff",
-                  backdropFilter: "blur(8px)",
-                  boxShadow: "0 2px 8px rgba(245, 158, 11, 0.2)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.28)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.18)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                Violation Rules
-              </button>
-
-              <button
-                type="button"
-                onClick={openCompanySettings}
-                style={{
-                  ...headerActionBtn,
-                  border: "1px solid rgba(148, 163, 184, 0.45)",
-                  backgroundColor: "rgba(100, 116, 139, 0.22)",
-                  color: "#ffffff",
-                  backdropFilter: "blur(8px)",
-                  boxShadow: "0 2px 8px rgba(100, 116, 139, 0.25)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(100, 116, 139, 0.32)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(100, 116, 139, 0.22)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Company Settings
-              </button>
-
-              <button
-                type="button"
-                onClick={openPortalAccess}
-                style={{
-                  ...headerActionBtn,
-                  border: "1px solid rgba(251, 113, 133, 0.45)",
-                  backgroundColor: "rgba(244, 63, 94, 0.22)",
-                  color: "#ffffff",
-                  backdropFilter: "blur(8px)",
-                  boxShadow: "0 2px 8px rgba(244, 63, 94, 0.25)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(244, 63, 94, 0.32)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(244, 63, 94, 0.22)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Portal Access
-              </button>
-
-              <ThemeToggle />
-              <button
-                type="button"
-                onClick={handleLogout}
-                style={{
-                  ...headerActionBtn,
-                  border: "1px solid rgba(255, 255, 255, 0.28)",
-                  backgroundColor: "rgba(255, 255, 255, 0.14)",
-                  color: "#ffffff",
-                  backdropFilter: "blur(8px)",
-                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.24)";
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.14)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }}
-              >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Auto Logout Warning */}
       {showWarning && (
         <AutoLogoutWarning
           isOpen={showWarning}
@@ -1153,37 +714,25 @@ export default function HrDashboardPage() {
         />
       )}
 
-      {/* Register User Modal */}
-      <RegisterUserModal
-        isOpen={showRegisterModal}
-        onClose={closeRegisterModal}
-        onSuccess={handleRegisterSuccess}
-      />
-
       {/* MAIN CARD */}
-      <div
+      <GlassCard
           className="container-responsive"
+          padding="16px 20px 20px"
+          borderRadius={24}
           style={{
-          width: '100%',
-          margin: "0 auto",
-          borderRadius: 16,
-          background: colors.background.card,
-          boxShadow: theme === 'dark' 
-            ? "0 20px 60px rgba(15,23,42,0.9)"
-            : "0 20px 60px rgba(0,0,0,0.08)",
-          padding: "16px 20px 20px",
-          border: `1px solid ${colors.border.default}`,
-        }}
-      >
+            width: '100%',
+            margin: "0 auto",
+          }}
+        >
         {/* ENHANCED TABS */}
         <div
-          className="tabs-container"
+          className="tabs-container hr-tab-bar"
           style={{
             display: "flex",
             gap: 8,
             marginBottom: 20,
             paddingBottom: 12,
-            borderBottom: `2px solid ${colors.border.default}`,
+            borderBottom: `1px solid ${colors.glass.border}`,
             position: "relative",
           }}
         >
@@ -1193,32 +742,7 @@ export default function HrDashboardPage() {
               type="button"
               className="tab-button"
               onClick={() => setTab(t.id)}
-              style={{
-                padding: "12px 24px",
-                borderRadius: 12,
-                border: "none",
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 600,
-                backgroundColor: tab === t.id ? `${colors.primary[500]}20` : "transparent",
-                color: tab === t.id ? colors.primary[500] : colors.text.muted,
-                position: "relative",
-                transition: "all 0.2s",
-                borderBottom: tab === t.id ? `2px solid ${colors.primary[500]}` : "2px solid transparent",
-                marginBottom: "-14px",
-              }}
-              onMouseEnter={(e) => {
-                if (tab !== t.id) {
-                  e.currentTarget.style.backgroundColor = colors.background.hover;
-                  e.currentTarget.style.color = colors.text.secondary;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (tab !== t.id) {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.color = colors.text.muted;
-                }
-              }}
+              style={getTabStyles(colors, tab === t.id)}
             >
               {t.label}
             </button>
@@ -1228,12 +752,13 @@ export default function HrDashboardPage() {
         {/* TAB CONTENT – your existing content unchanged */}
         {tab === "overview" && (
           <div style={{ padding: "14px 4px 4px" }}>
-            <h2 style={{ fontSize: 18, marginBottom: 6, color: colors.text.primary }}>Overview</h2>
+            <h2 style={{ fontSize: 18, marginBottom: 6, color: colors.text.primary, fontWeight: 700 }}>Overview</h2>
             <p
               style={{
                 fontSize: 13,
-                color: colors.text.muted,
+                color: colors.text.secondary,
                 marginBottom: 14,
+                lineHeight: 1.6,
               }}
             >
               Live snapshot of your workforce – headcount, departments and quick
@@ -1290,440 +815,112 @@ export default function HrDashboardPage() {
               </div>
             )}
 
-            {/* ENHANCED STATS CARDS - Only show when data is loaded */}
+            {/* Overview insights — unified metrics + departments */}
             {dataLoaded && !statsLoading && (
-            <div
-              className="stats-grid"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                gap: 16,
-                marginBottom: 24,
-              }}
-            >
-              {/* Total Employees */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "20px 24px",
-                  background: colors.gradient.card,
-                  border: `1px solid ${colors.primary[500]}33`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  position: "relative",
-                  overflow: "hidden",
-                  transition: "all 0.3s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.4)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.2)";
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div>
+            <div className="overview-insights" style={overviewInsightsPanel}>
+              <div aria-hidden="true" style={{ height: 3, background: colors.gradient.primary }} />
+              <div className="overview-metrics-strip">
+                {[
+                  {
+                    label: 'Total Employees',
+                    value: stats.totalEmployees,
+                    foot: (
+                      <>
+                        <span style={{ color: colors.secondary[400], fontWeight: 700 }}>Active</span>
+                        {' '}workforce
+                      </>
+                    ),
+                  },
+                  {
+                    label: 'Departments',
+                    value: stats.totalDepartments,
+                    foot: 'Organizational units',
+                  },
+                  {
+                    label: 'Active Employees',
+                    value: stats.activeEmployees,
+                    foot: 'Currently working',
+                  },
+                ].map((metric) => (
+                  <div key={metric.label} className="overview-metric">
                     <div
                       style={{
                         fontSize: 11,
-                        textTransform: "uppercase",
-                        letterSpacing: 1.5,
-                        color: colors.text.tertiary,
-                        marginBottom: 8,
-                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: 1.4,
+                        color: theme === 'dark' ? '#bae6fd' : colors.primary[700],
+                        fontWeight: 700,
+                        marginBottom: 10,
                       }}
                     >
-                      Total Employees
+                      {metric.label}
                     </div>
                     <div
                       style={{
-                        fontSize: 36,
+                        fontSize: 40,
                         fontWeight: 800,
                         color: colors.text.primary,
                         lineHeight: 1,
                         marginBottom: 8,
                       }}
                     >
-                      {statsLoading ? (
-                        <span style={{ fontSize: 24, color: colors.text.muted }}>⋯</span>
-                      ) : (
-                        stats.totalEmployees
-                      )}
+                      {metric.value}
                     </div>
+                    <div style={{ fontSize: 13, color: colors.text.secondary }}>{metric.foot}</div>
                   </div>
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
-                      background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(59, 130, 246, 0.3)",
-                    }}
-                  >
-                    <svg width="24" height="24" fill="none" stroke="#3b82f6" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: colors.text.muted,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <span style={{ color: colors.success, fontWeight: 600 }}>Active</span>
-                  <span>workforce</span>
-                </div>
+                ))}
               </div>
-
-              {/* Departments */}
               <div
-                style={{
-                  borderRadius: 16,
-                  padding: "20px 24px",
-                  background: theme === 'dark' 
-                    ? `linear-gradient(135deg, ${colors.primary[900]} 0%, ${colors.primary[800]} 100%)`
-                    : `linear-gradient(135deg, ${colors.primary[100]} 0%, ${colors.primary[200]} 100%)`,
-                  border: `1px solid ${colors.primary[500]}33`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  position: "relative",
-                  overflow: "hidden",
-                  transition: "all 0.3s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.3)";
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        textTransform: "uppercase",
-                        letterSpacing: 1.5,
-                        color: theme === 'dark' ? colors.primary[300] : colors.primary[700],
-                        marginBottom: 8,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Departments
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 36,
-                        fontWeight: 800,
-                        color: colors.text.primary,
-                        lineHeight: 1,
-                        marginBottom: 8,
-                      }}
-                    >
-                      {statsLoading ? (
-                        <span style={{ fontSize: 24, color: "#6366f1" }}>⋯</span>
-                      ) : (
-                        stats.totalDepartments
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
-                      background: "linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(99, 102, 241, 0.15))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(99, 102, 241, 0.4)",
-                    }}
-                  >
-                    <svg width="24" height="24" fill="none" stroke="#818cf8" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#a5b4fc",
-                  }}
-                >
-                  Organizational units
-                </div>
-              </div>
-
-              {/* Active Employees */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "20px 24px",
-                  background: theme === 'dark' 
-                    ? `linear-gradient(135deg, ${colors.secondary[900]} 0%, ${colors.secondary[800]} 100%)`
-                    : `linear-gradient(135deg, ${colors.secondary[100]} 0%, ${colors.secondary[200]} 100%)`,
-                  border: `1px solid ${colors.success}33`,
-                  boxShadow: theme === 'dark' 
-                    ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                    : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-                  position: "relative",
-                  overflow: "hidden",
-                  transition: "all 0.3s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = "0 12px 32px rgba(34, 197, 94, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.3)";
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        textTransform: "uppercase",
-                        letterSpacing: 1.5,
-                        color: theme === 'dark' ? colors.secondary[300] : colors.secondary[700],
-                        marginBottom: 8,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Active Employees
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 36,
-                        fontWeight: 800,
-                        color: colors.text.primary,
-                        lineHeight: 1,
-                        marginBottom: 8,
-                      }}
-                    >
-                      {statsLoading ? (
-                        <span style={{ fontSize: 24, color: "#22c55e" }}>⋯</span>
-                      ) : (
-                        stats.activeEmployees
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
-                      background: "linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(34, 197, 94, 0.15))",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "1px solid rgba(34, 197, 94, 0.4)",
-                    }}
-                  >
-                    <svg width="24" height="24" fill="none" stroke="#4ade80" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#86efac",
-                  }}
-                >
-                  Currently working
-                </div>
-              </div>
-            </div>
-            )}
-
-            {/* ENHANCED Employees by department - Only show when data is loaded */}
-            {dataLoaded && !statsLoading && (
-            <div
-              style={{
-                borderRadius: 16,
-                padding: "24px",
-                background: colors.gradient.card,
-                border: `1px solid ${colors.border.default}`,
-                marginBottom: 24,
-                boxShadow: theme === 'dark' 
-                  ? "0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)"
-                  : "0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9)",
-              }}
-            >
-              <div
-                className="dept-section-header"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 8,
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-                    <div
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        background: "linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1))",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        border: "1px solid rgba(59, 130, 246, 0.3)",
-                      }}
-                    >
-                      <svg width="20" height="20" fill="none" stroke="#3b82f6" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3
-                        style={{
-                          fontSize: 16,
-                          fontWeight: 700,
-                          marginBottom: 4,
-                          color: colors.text.primary,
-                        }}
-                      >
-                        Employees by Department
-                      </h3>
-                      <p
-                        style={{
-                          fontSize: 13,
-                          color: colors.text.muted,
-                        }}
-                      >
-                        Organizational distribution across departments
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
+                aria-hidden="true"
+                style={{ height: 1, margin: '0 20px', background: 'rgba(14, 165, 233, 0.15)' }}
+              />
+              <div className="overview-dept-block">
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: colors.text.primary }}>
+                  Employees by Department
+                </h3>
+                <p style={{ fontSize: 13, color: colors.text.secondary, margin: '6px 0 0' }}>
+                  Organizational distribution across departments
+                </p>
                 {statsError && (
                   <div
                     style={{
+                      marginTop: 10,
                       fontSize: 11,
-                      color: "#fecaca",
-                      backgroundColor: "rgba(127,29,29,0.3)",
-                      padding: "4px 8px",
+                      color: '#fecaca',
+                      backgroundColor: 'rgba(127,29,29,0.3)',
+                      padding: '4px 8px',
                       borderRadius: 999,
-                      border: "1px solid rgba(248,113,113,0.7)",
+                      border: '1px solid rgba(248,113,113,0.7)',
+                      width: 'fit-content',
                     }}
                   >
                     {statsError}
                   </div>
                 )}
+                {stats.departmentCounts.length === 0 ? (
+                  <div style={{ fontSize: 13, color: colors.text.secondary, marginTop: 14 }}>
+                    No employees found yet. Add some from the Employee Manager.
+                  </div>
+                ) : (
+                  <div className="overview-dept-chips">
+                    {stats.departmentCounts.map((dept) => (
+                      <span key={dept.name} className="overview-dept-chip">
+                        {dept.name}
+                        <strong>{dept.count}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {statsLoading ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: colors.text.muted,
-                  }}
-                >
-                  Loading department breakdown…
-                </div>
-              ) : stats.departmentCounts.length === 0 ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: colors.text.muted,
-                  }}
-                >
-                  No employees found yet. Add some from the Employee Manager.
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  {stats.departmentCounts.map((dept, idx) => {
-                    const deptChipPalette = [
-                      { bg: "rgba(59, 130, 246, 0.15)", border: "rgba(59, 130, 246, 0.3)", text: "#3b82f6", badge: "rgba(59, 130, 246, 0.2)" },
-                      { bg: "rgba(34, 197, 94, 0.15)", border: "rgba(34, 197, 94, 0.3)", text: "#22c55e", badge: "rgba(34, 197, 94, 0.2)" },
-                      { bg: "rgba(251, 191, 36, 0.15)", border: "rgba(251, 191, 36, 0.3)", text: "#fbbf24", badge: "rgba(251, 191, 36, 0.2)" },
-                      { bg: "rgba(239, 68, 68, 0.15)", border: "rgba(239, 68, 68, 0.3)", text: "#ef4444", badge: "rgba(239, 68, 68, 0.2)" },
-                      { bg: "rgba(168, 85, 247, 0.15)", border: "rgba(168, 85, 247, 0.3)", text: "#a855f7", badge: "rgba(168, 85, 247, 0.2)" },
-                    ];
-                    const chip = deptChipPalette[idx % deptChipPalette.length];
-                    return (
-                      <div
-                        key={dept.name}
-                        style={{
-                          padding: "10px 16px",
-                          borderRadius: 12,
-                          border: `1px solid ${chip.border}`,
-                          backgroundColor: chip.bg,
-                          fontSize: 13,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          fontWeight: 500,
-                          color: colors.text.primary,
-                          transition: "all 0.2s",
-                          cursor: "default",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow = `0 4px 12px ${chip.badge}`;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow = "none";
-                        }}
-                      >
-                        <span style={{ color: chip.text, fontWeight: 600 }}>{dept.name}</span>
-                        <span
-                          style={{
-                            padding: "4px 10px",
-                            borderRadius: 8,
-                            backgroundColor: chip.badge,
-                            color: chip.text,
-                            fontWeight: 700,
-                            fontSize: 12,
-                            border: `1px solid ${chip.border}`,
-                          }}
-                        >
-                          {dept.count}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
             )}
 
-            {/* Overview hub cards — stats-style tiles, one CTA each */}
-            <div className="overview-action-grid">
+            {/* Overview hub — same glass theme as metrics panel above */}
+            <div className="overview-hub-panel" style={{ ...overviewInsightsPanel, marginTop: 4 }}>
+              <div aria-hidden="true" style={{ height: 3, background: colors.gradient.primary }} />
+              <div className="overview-action-grid" style={{ padding: 16 }}>
+{(canViewEmployees || canViewArchived) && (
+              <>
               {/* EMPLOYEES */}
               <div style={hub.card("employees")} {...hub.hoverProps("employees")}>
                 <div style={hub.topRow}>
@@ -1742,6 +939,7 @@ export default function HrDashboardPage() {
                   Add, edit, and manage employee profiles. Update salaries, shifts, departments, and personal information.
                 </p>
                 <div style={hub.actionsCol}>
+{canViewEmployees && (
                   <button
                     type="button"
                     onClick={openEmployeesManage}
@@ -1760,6 +958,8 @@ export default function HrDashboardPage() {
                     </svg>
                     Open Manager
                   </button>
+                  )}
+                  {canViewArchived && (
                   <button
                     type="button"
                     onClick={openFormerEmployees}
@@ -1779,10 +979,14 @@ export default function HrDashboardPage() {
                   >
                     Former Employees
                   </button>
+                  )}
                 </div>
               </div>
+              </>
+              )}
 
-              {isAdmin && (
+
+              {canRegisterUsers && (
                 <div style={hub.card("register")} {...hub.hoverProps("register")}>
                   <div style={hub.topRow}>
                     <div style={{ minWidth: 0 }}>
@@ -1797,12 +1001,12 @@ export default function HrDashboardPage() {
                     </div>
                   </div>
                   <p style={hub.desc("register")}>
-                    Create a new user with email and role. They can sign in after you complete onboarding from the employee manager if needed.
+                    Open the users page to create portal logins, set module permissions, and manage existing HR accounts.
                   </p>
                   <div style={hub.actionsCol}>
                     <button
                       type="button"
-                      onClick={openRegisterModal}
+                      onClick={openUsersPage}
                       style={hub.btn("register")}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.filter = "brightness(1.06)";
@@ -1816,12 +1020,14 @@ export default function HrDashboardPage() {
                       <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
-                      Register user
+                      Open Users Page
                     </button>
                   </div>
                 </div>
               )}
 
+{canViewShifts && (
+              <>
               {/* SHIFT MANAGEMENT */}
               <div style={hub.card("shift")} {...hub.hoverProps("shift")}>
                 <div style={hub.topRow}>
@@ -1860,7 +1066,12 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+
+              {canViewPortal && (
+              <>
               {/* EMPLOYEE PORTAL ACCESS */}
               <div style={hub.card("portal")} {...hub.hoverProps("portal")}>
                 <div style={hub.topRow}>
@@ -1896,7 +1107,12 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+
+              {canViewSettings && (
+              <>
               {/* COMPANY SETTINGS */}
               <div style={hub.card("settings")} {...hub.hoverProps("settings")}>
                 <div style={hub.topRow}>
@@ -1933,7 +1149,12 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+
+              {canViewAttendanceTab && (
+              <>
               {/* ATTENDANCE */}
               <div style={hub.card("attendance")} {...hub.hoverProps("attendance")}>
                 <div style={hub.topRow}>
@@ -1972,7 +1193,12 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+
+              {(canViewLeaves || canViewLeavePolicy) && (
+              <>
               {/* LEAVE MANAGEMENT */}
               <div style={hub.card("leave")} {...hub.hoverProps("leave")}>
                 <div style={hub.topRow}>
@@ -2011,10 +1237,15 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+
+              {canViewComplaints && (
+              <>
               {/* COMPLAINTS — centered span only when 5 tiles (no register card) */}
               <div
-                className={isAdmin ? undefined : "overview-hub-card-span"}
+                className={canRegisterUsers ? undefined : "overview-hub-card-span"}
                 style={hub.card("complaints")}
                 {...hub.hoverProps("complaints")}
               >
@@ -2054,18 +1285,21 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              </>
+              )}
 
+            </div>
             </div>
           </div>
         )}
 
         {tab === "employees" && (
           <div style={{ padding: "14px 4px 4px" }}>
-            <h2 style={{ fontSize: 18, marginBottom: 6 }}>Employees</h2>
+            <h2 style={{ fontSize: 18, marginBottom: 6, color: colors.text.primary }}>Employees</h2>
             <p
               style={{
                 fontSize: 13,
-                color: "#9ca3af",
+                color: tabMutedText,
                 marginBottom: 14,
               }}
             >
@@ -2080,29 +1314,19 @@ export default function HrDashboardPage() {
                 gap: 14,
               }}
             >
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                  background: "radial-gradient(circle at top, #020617, #020617)",
-                  border: "1px solid rgba(37,99,235,0.85)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 600 }}>
+              <div style={tabPanel(theme === 'dark' ? 'rgba(37,99,235,0.55)' : 'rgba(37,99,235,0.28)')}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: colors.text.primary }}>
                   Employee Shift Management
                 </div>
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                <div style={{ fontSize: 12, color: tabMutedText }}>
                   Add employees, edit full profiles, shift assignments, salary details, and secure bank details.
                 </div>
 
                 <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {isAdmin && (
+                  {canRegisterUsers && (
                     <button
                       type="button"
-                      onClick={openRegisterModal}
+                      onClick={openUsersPage}
                       style={{
                         padding: "8px 16px",
                         borderRadius: 999,
@@ -2114,10 +1338,11 @@ export default function HrDashboardPage() {
                         cursor: "pointer",
                       }}
                     >
-                      + Register New User
+                      + Manage Portal Users
                     </button>
                   )}
 
+                  {canViewEmployees && (
                   <button
                     type="button"
                     onClick={openEmployeesManage}
@@ -2134,24 +1359,16 @@ export default function HrDashboardPage() {
                   >
                     Open Employee Manager
                   </button>
+                  )}
                 </div>
               </div>
 
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                  background: "radial-gradient(circle at top, #0b1a33, #020617)",
-                  border: "1px solid rgba(16,185,129,0.65)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {canViewEmployees && (
+              <div style={tabPanel(theme === 'dark' ? 'rgba(16,185,129,0.55)' : 'rgba(16,185,129,0.28)')}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: colors.text.primary }}>
                   Employee Directory (Read-Only)
                 </div>
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                <div style={{ fontSize: 12, color: tabMutedText }}>
                   Fast lookup page for HR with basic employee information only. No edit controls, cleaner for quick checks.
                 </div>
                 <div style={{ marginTop: 6 }}>
@@ -2173,19 +1390,20 @@ export default function HrDashboardPage() {
                   </button>
                 </div>
               </div>
+              )}
             </div>
           </div>
         )}
 
         {tab === "attendance" && (
           <div style={{ padding: "14px 4px 4px" }}>
-            <h2 style={{ fontSize: 18, marginBottom: 6 }}>
+            <h2 style={{ fontSize: 18, marginBottom: 6, color: colors.text.primary }}>
               Attendance Center
             </h2>
             <p
               style={{
                 fontSize: 13,
-                color: "#9ca3af",
+                color: tabMutedText,
                 marginBottom: 14,
               }}
             >
@@ -2203,21 +1421,14 @@ export default function HrDashboardPage() {
               }}
             >
               {/* Daily attendance card */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                  background:
-                    "radial-gradient(circle at top left,#020617,#020617)",
-                  border: "1px solid rgba(34,197,94,0.8)",
-                  boxShadow: "0 16px 40px rgba(6,95,70,0.7)",
-                }}
-              >
+              {canViewDaily && (
+              <div style={tabPanel(theme === 'dark' ? 'rgba(34,197,94,0.55)' : 'rgba(34,197,94,0.28)')}>
                 <div
                   style={{
                     fontSize: 15,
                     fontWeight: 700,
                     marginBottom: 6,
+                    color: colors.text.primary,
                   }}
                 >
                   Daily Attendance
@@ -2225,7 +1436,7 @@ export default function HrDashboardPage() {
                 <p
                   style={{
                     fontSize: 12,
-                    color: colors.text.muted,
+                    color: colors.text.secondary,
                     marginBottom: 10,
                   }}
                 >
@@ -2250,23 +1461,17 @@ export default function HrDashboardPage() {
                   Open Daily Attendance
                 </button>
               </div>
+              )}
 
               {/* Monthly attendance card */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                  background:
-                    "radial-gradient(circle at top left,#020617,#020617)",
-                  border: "1px solid rgba(59,130,246,0.85)",
-                  boxShadow: "0 16px 40px rgba(30,64,175,0.6)",
-                }}
-              >
+              {canViewMonthly && (
+              <div style={tabPanel(theme === 'dark' ? 'rgba(14,165,233,0.5)' : 'rgba(14,165,233,0.28)')}>
                 <div
                   style={{
                     fontSize: 15,
                     fontWeight: 700,
                     marginBottom: 6,
+                    color: colors.text.primary,
                   }}
                 >
                   Monthly Attendance
@@ -2274,7 +1479,7 @@ export default function HrDashboardPage() {
                 <p
                   style={{
                     fontSize: 12,
-                    color: colors.text.muted,
+                    color: colors.text.secondary,
                     marginBottom: 10,
                   }}
                 >
@@ -2290,8 +1495,8 @@ export default function HrDashboardPage() {
                     borderRadius: 999,
                     border: "none",
                     background:
-                      "linear-gradient(135deg,#3b82f6,#22c55e)",
-                    color: "#020617",
+                      `linear-gradient(135deg, ${colors.primary[500]}, ${colors.secondary[500]})`,
+                    color: "#ffffff",
                     fontSize: 13,
                     fontWeight: 700,
                     cursor: "pointer",
@@ -2300,23 +1505,17 @@ export default function HrDashboardPage() {
                   Open Monthly Attendance
                 </button>
               </div>
+              )}
 
               {/* Salary report card */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "16px 18px",
-                  background:
-                    "radial-gradient(circle at top left,#020617,#020617)",
-                  border: "1px solid rgba(168,85,247,0.85)",
-                  boxShadow: "0 16px 40px rgba(88,28,135,0.55)",
-                }}
-              >
+              {canViewSalary && (
+              <div style={tabPanel(theme === 'dark' ? 'rgba(168,85,247,0.55)' : 'rgba(168,85,247,0.28)')}>
                 <div
                   style={{
                     fontSize: 15,
                     fontWeight: 700,
                     marginBottom: 6,
+                    color: colors.text.primary,
                   }}
                 >
                   Salary Report
@@ -2324,7 +1523,7 @@ export default function HrDashboardPage() {
                 <p
                   style={{
                     fontSize: 12,
-                    color: colors.text.muted,
+                    color: colors.text.secondary,
                     marginBottom: 10,
                   }}
                 >
@@ -2349,11 +1548,11 @@ export default function HrDashboardPage() {
                   Open Salary Report
                 </button>
               </div>
+              )}
             </div>
           </div>
         )}
-      </div>
-    </div>
-    </>
+      </GlassCard>
+    </HrPageShell>
   );
 }

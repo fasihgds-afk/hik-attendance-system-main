@@ -3,7 +3,7 @@
 import { connectDB } from '../../../../lib/db';
 import Department from '../../../../models/Department';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -44,7 +44,7 @@ const DEPT_SELECT = 'name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode s
 // GET /api/hr/departments - List all departments (name, saturdayPolicy, fifthSaturdayPolicy)
 export async function GET() {
   try {
-    await requireHR();
+    await requirePermission('departments', 'view');
     await connectDB();
     const departments = await Department.find()
       .select(DEPT_SELECT)
@@ -61,7 +61,7 @@ export async function GET() {
 // POST /api/hr/departments - Create department (name required, saturdayPolicy/fifthSaturdayPolicy optional)
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('departments', 'create');
     await connectDB();
     const body = await req.json();
     const name = (body.name || '').trim();
@@ -97,7 +97,7 @@ export async function POST(req) {
 // PATCH /api/hr/departments - Update saturdayPolicy/fifthSaturdayPolicy by name
 export async function PATCH(req) {
   try {
-    await requireHR();
+    await requirePermission('departments', 'update');
     await connectDB();
     const body = await req.json();
     const name = (body.name || '').trim();

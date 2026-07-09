@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const STATUS_LABELS = {
   open: 'Open',
@@ -25,7 +26,7 @@ function formatDate(d) {
 export default function HrComplaintsPage() {
   const { colors, theme } = useTheme();
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { session, status, canView, canUpdate } = usePermissions('complaints');
 
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
     inactivityTime: 30 * 60 * 1000,
@@ -46,7 +47,8 @@ export default function HrComplaintsPage() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    if (status === 'unauthenticated' || (session && session.user?.role !== 'HR')) {
+    const role = String(session?.user?.role || '').toUpperCase();
+    if (status === 'unauthenticated' || (session && !['HR', 'ADMIN'].includes(role))) {
       router.replace('/login?role=hr');
       return;
     }
@@ -78,25 +80,27 @@ export default function HrComplaintsPage() {
     }
   }
 
-  useEffect(() => {
-    if (session?.user?.role === 'HR') loadComplaints();
-  }, [session?.user?.role, filterStatus, filterPeriod, searchQuery]);
+  const isHrPortal = ['HR', 'ADMIN'].includes(String(session?.user?.role || '').toUpperCase());
 
   useEffect(() => {
-    if (session?.user?.role !== 'HR') return;
+    if (isHrPortal && canView) loadComplaints();
+  }, [isHrPortal, canView, filterStatus, filterPeriod, searchQuery]);
+
+  useEffect(() => {
+    if (!isHrPortal || !canView) return;
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') loadComplaints(true);
     }, 45000);
     return () => clearInterval(interval);
-  }, [session?.user?.role, filterStatus, filterPeriod, searchQuery]);
+  }, [isHrPortal, canView, filterStatus, filterPeriod, searchQuery]);
 
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === 'visible' && session?.user?.role === 'HR') loadComplaints(true);
+      if (document.visibilityState === 'visible' && isHrPortal && canView) loadComplaints(true);
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [session?.user?.role, filterStatus, filterPeriod, searchQuery]);
+  }, [isHrPortal, canView, filterStatus, filterPeriod, searchQuery]);
 
   useEffect(() => {
     const id = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('id');
@@ -129,7 +133,7 @@ export default function HrComplaintsPage() {
 
   async function handleSaveResponse(e) {
     e.preventDefault();
-    if (!viewId) return;
+    if (!viewId || !canUpdate) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/hr/complaints/${viewId}`, {
@@ -168,7 +172,6 @@ export default function HrComplaintsPage() {
     }
   };
 
-  const bgPage = colors.background?.page ?? colors.background?.default ?? colors.background?.secondary;
   const bgCard = colors.background?.card ?? colors.background?.tertiary;
   const border = colors.border?.default;
   const textPrimary = colors.text?.primary;
@@ -176,56 +179,62 @@ export default function HrComplaintsPage() {
   const primary = typeof colors.primary === 'object' ? colors.primary?.[500] : colors.primary;
   const successColor = colors.success ?? (typeof colors.secondary === 'object' ? colors.secondary?.[600] : colors.secondary) ?? '#22c55e';
 
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const pageSubtitle = canUpdate
+    ? 'View and respond to employee complaints'
+    : 'View employee complaints (read only)';
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/dashboard')} className="complaints-button" style={glossPill('neutral')}>
+        Dashboard
+      </button>
+      <button type="button" onClick={handleLogout} className="complaints-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
   if (status === 'loading') {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bgPage }}>
-        <span style={{ color: textSecondary, fontSize: 14 }}>Loading...</span>
-      </div>
+      <HrPageShell subtitle={pageSubtitle} actions={headerActions}>
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
+          <div style={{ padding: 40, textAlign: 'center', color: textSecondary, fontSize: 14 }}>
+            Loading...
+          </div>
+        </GlassCard>
+      </HrPageShell>
+    );
+  }
+
+  if (status === 'authenticated' && !canView) {
+    return (
+      <HrPageShell subtitle={pageSubtitle} actions={headerActions}>
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}>
+            <p style={{ fontSize: 15, color: textPrimary, margin: 0 }}>You do not have permission to view complaints.</p>
+            <button type="button" onClick={() => router.push('/hr/employees')} style={glossPill('neutral')}>
+              Back to HR Hub
+            </button>
+          </div>
+        </GlassCard>
+      </HrPageShell>
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px', maxWidth: '100%', margin: 0, background: bgPage, color: textPrimary }}>
-      {/* Header – professional bar */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 32,
-          padding: '20px 24px',
-          borderRadius: 16,
-          background: colors.gradient?.primary ?? (typeof colors.primary === 'object' ? `linear-gradient(135deg, ${colors.primary?.[500]} 0%, ${colors.primary?.[700]} 100%)` : `linear-gradient(135deg, ${primary} 0%, ${primary} 100%)`),
-          border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'}`,
-          boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(37, 99, 235, 0.2)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📋</div>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>Complaint Management</h1>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '2px 0 0', fontWeight: 400 }}>View and respond to employee complaints</p>
-          </div>
+    <HrPageShell subtitle={pageSubtitle} actions={headerActions}>
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
+      {!canUpdate && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: theme === 'dark' ? 'rgba(148,163,184,0.1)' : 'rgba(148,163,184,0.12)', color: textSecondary, fontSize: 13 }}>
+          View only — you can open complaints, but cannot change status or send responses.
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ThemeToggle />
-          <button
-            type="button"
-            onClick={() => router.push('/hr/dashboard')}
-            style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)'; }}
-          >
-            Dashboard
-          </button>
-          <button type="button" onClick={handleLogout} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {/* Filters – card style */}
-      <div style={{ marginBottom: 24, padding: '16px 20px', borderRadius: 16, border: `1px solid ${border}`, background: bgCard, boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.06)' }}>
+      )}
+      <div style={{ marginBottom: 24, padding: '16px 20px', borderRadius: 16, border: `1px solid ${border}`, background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)' }}>
         <p style={{ fontSize: 12, fontWeight: 700, color: textSecondary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filters</p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <select
@@ -257,8 +266,8 @@ export default function HrComplaintsPage() {
         </div>
       </div>
 
-      {/* Table – card */}
-      <div style={{ borderRadius: 16, border: `1px solid ${border}`, overflow: 'hidden', background: bgCard, boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.06)' }}>
+      {/* Table */}
+      <div style={{ borderRadius: 16, border: `1px solid ${border}`, overflow: 'hidden', background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)' }}>
         {loading && !complaints.length ? (
           <div style={{ padding: 48, textAlign: 'center', color: textSecondary, fontSize: 14 }}>Loading complaints...</div>
         ) : complaints.length === 0 ? (
@@ -308,7 +317,7 @@ export default function HrComplaintsPage() {
                       onMouseEnter={(e) => { e.currentTarget.style.background = `${primary}15`; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                     >
-                      View / Respond
+                      {canUpdate ? 'View / Respond' : 'View'}
                     </button>
                   </td>
                 </tr>
@@ -317,6 +326,7 @@ export default function HrComplaintsPage() {
           </table>
         )}
       </div>
+      </GlassCard>
 
       {/* View / Respond modal – professional hierarchy */}
       {viewId && (
@@ -324,7 +334,9 @@ export default function HrComplaintsPage() {
           <div style={{ background: bgCard, borderRadius: 20, padding: 28, minWidth: 480, maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${border}`, boxShadow: theme === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.12)' }} onClick={(e) => e.stopPropagation()}>
             {detail ? (
               <>
-                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: textPrimary, paddingBottom: 16, borderBottom: `2px solid ${border}`, letterSpacing: '-0.02em' }}>Complaint – View & Respond</h2>
+                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: textPrimary, paddingBottom: 16, borderBottom: `2px solid ${border}`, letterSpacing: '-0.02em' }}>
+                  {canUpdate ? 'Complaint – View & Respond' : 'Complaint – View'}
+                </h2>
 
                 <div style={{ marginBottom: 24 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Employee</p>
@@ -337,52 +349,65 @@ export default function HrComplaintsPage() {
                   <p style={{ fontSize: 14, color: textPrimary, whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{detail.description}</p>
                 </div>
 
-                <form onSubmit={handleSaveResponse}>
-                  <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 8, color: textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label>
-                    <select
-                      value={respondForm.status}
-                      onChange={(e) => setRespondForm({ ...respondForm, status: e.target.value })}
-                      style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14 }}
-                    >
-                      {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ marginBottom: 20, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50` }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: successColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Remarks (visible to employee)</label>
-                    <p style={{ fontSize: 12, color: textSecondary, marginBottom: 12, lineHeight: 1.4 }}>This reply will be shown to the employee on their Complaints page.</p>
-                    <textarea
-                      value={respondForm.hrResponse}
-                      onChange={(e) => setRespondForm({ ...respondForm, hrResponse: e.target.value })}
-                      placeholder="Your reply to the employee..."
-                      rows={4}
-                      style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#fff'), color: textPrimary, fontSize: 14, resize: 'vertical', outline: 'none' }}
-                    />
-                  </div>
-                  <div style={{ marginBottom: 24, padding: 20, borderRadius: 16, background: theme === 'dark' ? 'rgba(100, 116, 139, 0.1)' : 'rgba(100, 116, 139, 0.06)', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Internal note (HR only)</label>
-                    <p style={{ fontSize: 12, color: textSecondary, marginBottom: 12, lineHeight: 1.4 }}>Not visible to the employee.</p>
-                    <textarea
-                      value={respondForm.internalNote}
-                      onChange={(e) => setRespondForm({ ...respondForm, internalNote: e.target.value })}
-                      placeholder="Internal notes..."
-                      rows={2}
-                      style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#fff'), color: textPrimary, fontSize: 14, resize: 'vertical', outline: 'none' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-                    <button type="button" onClick={() => { setViewId(null); setDetail(null); }} style={{ padding: '12px 24px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>Close</button>
-                    <button type="submit" disabled={saving} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: primary, color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: `0 2px 12px ${primary}40`, transition: 'opacity 0.2s' }}>{saving ? 'Saving...' : 'Save response'}</button>
-                  </div>
-                </form>
-
                 {detail.hrResponse && (
-                  <div style={{ marginTop: 24, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50`, borderLeft: `4px solid ${successColor}` }}>
+                  <div style={{ marginBottom: 24, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50`, borderLeft: `4px solid ${successColor}` }}>
                     <p style={{ fontSize: 12, fontWeight: 700, color: successColor, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current remarks (visible to employee)</p>
                     <p style={{ fontSize: 14, color: textPrimary, whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{detail.hrResponse}</p>
                     {detail.hrRespondedAt && <p style={{ fontSize: 12, color: textSecondary, marginTop: 10 }}>Responded on {formatDate(detail.hrRespondedAt)}</p>}
+                  </div>
+                )}
+
+                {canUpdate ? (
+                  <form onSubmit={handleSaveResponse}>
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 8, color: textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label>
+                      <select
+                        value={respondForm.status}
+                        onChange={(e) => setRespondForm({ ...respondForm, status: e.target.value })}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14 }}
+                      >
+                        {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 20, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50` }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: successColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Remarks (visible to employee)</label>
+                      <p style={{ fontSize: 12, color: textSecondary, marginBottom: 12, lineHeight: 1.4 }}>This reply will be shown to the employee on their Complaints page.</p>
+                      <textarea
+                        value={respondForm.hrResponse}
+                        onChange={(e) => setRespondForm({ ...respondForm, hrResponse: e.target.value })}
+                        placeholder="Your reply to the employee..."
+                        rows={4}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#fff'), color: textPrimary, fontSize: 14, resize: 'vertical', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 24, padding: 20, borderRadius: 16, background: theme === 'dark' ? 'rgba(100, 116, 139, 0.1)' : 'rgba(100, 116, 139, 0.06)', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Internal note (HR only)</label>
+                      <p style={{ fontSize: 12, color: textSecondary, marginBottom: 12, lineHeight: 1.4 }}>Not visible to the employee.</p>
+                      <textarea
+                        value={respondForm.internalNote}
+                        onChange={(e) => setRespondForm({ ...respondForm, internalNote: e.target.value })}
+                        placeholder="Internal notes..."
+                        rows={2}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#fff'), color: textPrimary, fontSize: 14, resize: 'vertical', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                      <button type="button" onClick={() => { setViewId(null); setDetail(null); }} style={{ padding: '12px 24px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>Close</button>
+                      <button type="submit" disabled={saving} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: primary, color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: `0 2px 12px ${primary}40`, transition: 'opacity 0.2s' }}>{saving ? 'Saving...' : 'Save response'}</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <p style={{ fontSize: 13, color: textSecondary, margin: 0 }}>
+                      View only — you can read this complaint but cannot change status or send a response.
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="button" onClick={() => { setViewId(null); setDetail(null); }} style={{ padding: '12px 24px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                        Close
+                      </button>
+                    </div>
                   </div>
                 )}
               </>
@@ -399,6 +424,6 @@ export default function HrComplaintsPage() {
         </div>
       )}
       {showWarning && <AutoLogoutWarning timeRemaining={timeRemaining} onStayLoggedIn={handleStayLoggedIn} onLogout={autoLogout} />}
-    </div>
+    </HrPageShell>
   );
 }

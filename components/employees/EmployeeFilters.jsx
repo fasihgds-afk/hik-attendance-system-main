@@ -1,47 +1,29 @@
+'use client';
+
 /**
  * Employee Filters Component
- * 
+ *
  * Search and filter controls for employee list
  */
 
-const inputStyle = {
-  padding: '10px 14px',
-  paddingLeft: '38px',
-  borderRadius: 8,
-  border: '1px solid #d1d5db',
-  backgroundColor: '#ffffff',
-  color: '#1f2937',
-  fontSize: 14,
-  outline: 'none',
-  transition: 'all 0.2s',
-  minWidth: 280,
-  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-};
+import { useTheme } from '@/lib/theme/ThemeContext';
+import { getInputStyles } from '@/lib/theme/styles';
 
-const selectStyle = {
-  padding: '10px 14px',
-  borderRadius: 8,
-  border: '1px solid #d1d5db',
-  backgroundColor: '#ffffff',
-  color: '#1f2937',
-  fontSize: 14,
-  outline: 'none',
-  transition: 'all 0.2s',
-  minWidth: 200,
-  cursor: 'pointer',
-  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
-};
+export default function EmployeeFilters({ searchQuery, onSearchChange }) {
+  const { colors } = useTheme();
+  const inputStyles = getInputStyles(colors);
 
-export default function EmployeeFilters({
-  searchQuery,
-  onSearchChange,
-}) {
+  const fieldStyle = {
+    ...inputStyles.base,
+    paddingLeft: '38px',
+    minWidth: 280,
+    boxShadow: 'none',
+  };
+
   return (
-    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+    <div className="hr-controls-row" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
-        <label
-          style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}
-        >
+        <label style={{ fontSize: 12, fontWeight: 600, color: colors.text.secondary, marginBottom: 4 }}>
           Search Employees
         </label>
         <div style={{ position: 'relative' }}>
@@ -53,7 +35,7 @@ export default function EmployeeFilters({
               transform: 'translateY(-50%)',
               width: 18,
               height: 18,
-              color: '#9ca3af',
+              color: colors.text.muted,
               pointerEvents: 'none',
             }}
             fill="none"
@@ -64,17 +46,16 @@ export default function EmployeeFilters({
           </svg>
           <input
             type="text"
-            style={inputStyle}
+            style={fieldStyle}
             placeholder="Search by name, code, or email..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             onFocus={(e) => {
-              e.currentTarget.style.borderColor = '#3b82f6';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+              Object.assign(e.currentTarget.style, inputStyles.focus);
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = '#d1d5db';
-              e.currentTarget.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+              e.currentTarget.style.borderColor = colors.border.input;
+              e.currentTarget.style.boxShadow = 'none';
             }}
           />
         </div>
@@ -82,4 +63,3 @@ export default function EmployeeFilters({
     </div>
   );
 }
-

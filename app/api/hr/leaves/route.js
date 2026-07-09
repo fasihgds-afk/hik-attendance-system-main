@@ -9,7 +9,7 @@ import { mergeActiveFilter } from '../../../../lib/employees/activeFilter';
 import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -37,6 +37,7 @@ function getQuarterAllocationsWithCarry(leavesPerQuarter, q1Taken, q2Taken, q3Ta
 // GET /api/hr/leaves?year=YYYY&empCode=XXX - List leave status by quarter for the year
 export async function GET(req) {
   try {
+    await requirePermission('leaves', 'view');
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -133,7 +134,7 @@ export async function GET(req) {
 // POST /api/hr/leaves - Mark paid leave (quarter-based; limit from LeavePolicy)
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('leaves', 'create');
     await connectDB();
 
     const policy = await getLeavePolicy();
@@ -222,7 +223,7 @@ export async function POST(req) {
 // DELETE /api/hr/leaves?empCode=XXX&date=YYYY-MM-DD - Remove paid leave
 export async function DELETE(req) {
   try {
-    await requireHR();
+    await requirePermission('leaves', 'delete');
     await connectDB();
 
     const { searchParams } = new URL(req.url);

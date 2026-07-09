@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles, AppShell } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const STATUS_FILTERS = [
   { id: 'all', label: 'All' },
@@ -17,6 +18,7 @@ const STATUS_FILTERS = [
 export default function HrPortalAccessPage() {
   const router = useRouter();
   const { colors, theme } = useTheme();
+  const { canUpdate } = usePermissions('portalAccess');
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState(null);
@@ -130,16 +132,25 @@ export default function HrPortalAccessPage() {
     }
   };
 
-  const pageBg = theme === 'dark' ? '#0a0a23' : (colors.gradient?.overlay ?? colors.background?.default);
-  const headerGradient = theme === 'dark'
-    ? 'linear-gradient(90deg, #0a2c54 0%, #0f5ba5 35%, #13a8e5 100%)'
-    : (colors.gradient?.header ?? colors.background?.card);
   const cardBg = theme === 'dark' ? '#1e293b' : (colors.background?.card ?? '#ffffff');
   const cardShadow = theme === 'dark' ? '0 20px 60px rgba(0,0,0,0.5)' : '0 20px 60px rgba(0,0,0,0.08)';
   const mutedText = theme === 'dark' ? '#94a3b8' : colors.text?.secondary;
   const inputBorder = theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default;
   const inputBg = theme === 'dark' ? '#0f172a' : (colors.background?.input ?? colors.background?.card);
   const rowHover = theme === 'dark' ? 'rgba(30, 41, 59, 0.6)' : 'rgba(248, 250, 252, 0.9)';
+
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions className="pa-header-actions">
+      <button type="button" className="pa-button" onClick={() => router.push('/hr/employees')} style={glossPill('neutral')}>
+        ← HR Home
+      </button>
+      <button type="button" className="pa-button" onClick={handleLogout} style={glossPill('rose')}>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
 
   const navBtn = {
     padding: '10px 18px',
@@ -168,32 +179,27 @@ export default function HrPortalAccessPage() {
 
   if (!mounted) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#0a0a23',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#94a3b8',
-          fontSize: 14,
-        }}
-      >
-        Loading...
-      </div>
+      <AppShell>
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#94a3b8',
+            fontSize: 14,
+          }}
+        >
+          Loading...
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: pageBg,
-        color: colors.text?.primary,
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        boxSizing: 'border-box',
-      }}
+    <HrPageShell
+      subtitle="Allow or block employees from signing in to the employee portal"
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -236,76 +242,14 @@ export default function HrPortalAccessPage() {
         </div>
       )}
 
-      <div className="container-responsive" style={{ margin: '0 auto', width: '100%', maxWidth: '100%' }}>
         <div
-          className="pa-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 28px',
-            borderRadius: 20,
-            background: headerGradient,
-            color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-            boxShadow: theme === 'dark'
-              ? '0 20px 50px rgba(19, 168, 229, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3)'
-              : '0 20px 50px rgba(59, 130, 246, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)',
-            border: `1px solid ${colors.border?.default}`,
-            marginBottom: 24,
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 16,
-                overflow: 'hidden',
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(59, 130, 246, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                border: `2px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : colors.border?.default}`,
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 0.5, marginBottom: 4 }}>
-                Employee Portal Access
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.95, fontWeight: 500 }}>
-                Allow or block employees from signing in to the employee portal
-              </div>
-            </div>
-          </div>
-
-          <div className="pa-header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ThemeToggle compact />
-            <button type="button" style={navBtn} onClick={() => router.push('/hr/employees')}>
-              ← HR Home
-            </button>
-            <button type="button" style={navBtn} onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
-        </div>
-
-        <div
-          className="pa-stats"
+          className="pa-stats hr-stat-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 14,
             marginBottom: 20,
+            marginTop: 18,
           }}
         >
           <div style={statCard('#3b82f6')}>
@@ -328,25 +272,17 @@ export default function HrPortalAccessPage() {
           </div>
         </div>
 
+        <GlassCard padding={20}>
         <div
           style={{
-            borderRadius: 20,
-            padding: '20px 24px 24px',
-            background: cardBg,
-            border: `1px solid ${colors.border?.default}`,
-            boxShadow: cardShadow,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 12,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 18,
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 12,
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 18,
-            }}
-          >
             <div>
               <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Access control</h2>
               <p style={{ margin: '6px 0 0', fontSize: 13, color: mutedText }}>
@@ -459,27 +395,31 @@ export default function HrPortalAccessPage() {
                           </span>
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => togglePortalAccess(emp, !enabled)}
-                            style={{
-                              padding: '8px 16px',
-                              borderRadius: 10,
-                              border: 'none',
-                              fontWeight: 700,
-                              fontSize: 12,
-                              cursor: busy ? 'wait' : 'pointer',
-                              opacity: busy ? 0.7 : 1,
-                              background: enabled
-                                ? 'linear-gradient(135deg, #ef4444, #dc2626)'
-                                : 'linear-gradient(135deg, #22c55e, #16a34a)',
-                              color: '#fff',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                            }}
-                          >
-                            {busy ? 'Saving...' : enabled ? 'Block portal' : 'Activate portal'}
-                          </button>
+                          {canUpdate ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => togglePortalAccess(emp, !enabled)}
+                              style={{
+                                padding: '8px 16px',
+                                borderRadius: 10,
+                                border: 'none',
+                                fontWeight: 700,
+                                fontSize: 12,
+                                cursor: busy ? 'wait' : 'pointer',
+                                opacity: busy ? 0.7 : 1,
+                                background: enabled
+                                  ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                                  : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                                color: '#fff',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                              }}
+                            >
+                              {busy ? 'Saving...' : enabled ? 'Block portal' : 'Activate portal'}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: 12, color: '#94a3b8' }}>—</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -523,8 +463,7 @@ export default function HrPortalAccessPage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </div>
+        </GlassCard>
+    </HrPageShell>
   );
 }

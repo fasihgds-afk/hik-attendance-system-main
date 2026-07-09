@@ -4,7 +4,8 @@
 // MONTHLY ATTENDANCE API - VIOLATION FORMULA QUICK REFERENCE
 // =============================================================================
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR, requireAuth } from '../../../../lib/auth/requireAuth';
+import { requirePermission, requireAuth } from '../../../../lib/auth/requireAuth';
+import { hasPermission } from '../../../../lib/auth/permissions';
 
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 //
@@ -413,6 +414,16 @@ function _normalizeStatus_DEPRECATED(rawStatus, { isWeekendOff } = {}) {
 export async function GET(req) {
   try {
     const { user } = await requireAuth();
+    const role = String(user?.role || '').toUpperCase();
+    if (['HR', 'ADMIN'].includes(role)) {
+      const canViewMonthly = hasPermission(user, 'monthlyAttendance', 'view');
+      const canViewSalary = hasPermission(user, 'salaryReport', 'view');
+      if (!canViewMonthly && !canViewSalary) {
+        const err = new Error('Missing permission: monthlyAttendance.view');
+        err.code = 'FORBIDDEN_PERMISSION';
+        throw err;
+      }
+    }
     const { searchParams } = new URL(req.url);
     let month = searchParams.get('month');
 
@@ -1462,7 +1473,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   try {
-    const { user } = await requireHR();
+    const { user } = await requirePermission('monthlyAttendance', 'update');
     await connectDB();
 
     const body = await req.json();

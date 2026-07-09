@@ -4,15 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const DEFAULT_POLICY = { leavesPerQuarter: 6, allowCarryForward: false, carryForwardMax: 0 };
 
 export default function HrLeavePolicyPage() {
   const { colors, theme } = useTheme();
   const router = useRouter();
+  const { canUpdate } = usePermissions('leavePolicy');
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
     inactivityTime: 30 * 60 * 1000,
     warningTime: 5 * 60 * 1000,
@@ -100,94 +102,31 @@ export default function HrLeavePolicyPage() {
     }
   };
 
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '20px 24px',
-        background: colors.background?.page ?? colors.background?.default,
-        color: colors.text?.primary,
-      }}
-    >
-      {/* Header - same style as HR Leaves */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 24,
-          padding: '16px 20px',
-          borderRadius: 16,
-          background: colors.gradient?.primary ?? colors.primary,
-          border: `1px solid ${colors.border?.default}`,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#ffffff', margin: 0 }}>
-            Leave Policy
-          </h1>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <ThemeToggle />
-          <button
-            onClick={() => router.push('/hr/leaves')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Leaves
-          </button>
-          <button
-            onClick={() => router.push('/hr/dashboard')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
 
-      {/* Card */}
-      <div
-        style={{
-          maxWidth: 560,
-          margin: '0 auto',
-          borderRadius: 12,
-          border: `1px solid ${colors.border?.table ?? colors.border?.default}`,
-          background: colors.background?.card ?? colors.background?.default,
-          padding: 24,
-        }}
-      >
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/leaves')} className="leave-policy-button" style={glossPill('slate')}>
+        Leaves
+      </button>
+      <button type="button" onClick={() => router.push('/hr/dashboard')} className="leave-policy-button" style={glossPill('neutral')}>
+        Dashboard
+      </button>
+      <button type="button" onClick={handleLogout} className="leave-policy-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
+  return (
+    <HrPageShell
+      subtitle="Leave Policy"
+      actions={headerActions}
+    >
+      <GlassCard style={{ marginTop: 18, maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }} padding={24}>
         <p style={{ fontSize: 13, color: colors.text?.secondary, marginBottom: 20 }}>
           Configure paid leave rules. Changes apply to new leave marking and to how balances are shown. Existing quarter records keep their allocated value; new quarters use the current policy.
         </p>
@@ -206,6 +145,7 @@ export default function HrLeavePolicyPage() {
                 min={1}
                 max={31}
                 value={policy.leavesPerQuarter}
+                disabled={!canUpdate}
                 onChange={(e) => setPolicy({ ...policy, leavesPerQuarter: e.target.value })}
                 style={{
                   width: '100%',
@@ -216,6 +156,7 @@ export default function HrLeavePolicyPage() {
                   background: colors.background?.input ?? colors.background?.card,
                   color: colors.text?.primary,
                   fontSize: 14,
+                  opacity: canUpdate ? 1 : 0.7,
                 }}
               />
               <span style={{ marginLeft: 10, fontSize: 12, color: colors.text?.secondary }}>
@@ -224,10 +165,11 @@ export default function HrLeavePolicyPage() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: canUpdate ? 'pointer' : 'default' }}>
                 <input
                   type="checkbox"
                   checked={policy.allowCarryForward}
+                  disabled={!canUpdate}
                   onChange={(e) => setPolicy({ ...policy, allowCarryForward: e.target.checked })}
                 />
                 <span style={{ fontSize: 13, fontWeight: 600, color: colors.text?.primary }}>
@@ -249,6 +191,7 @@ export default function HrLeavePolicyPage() {
                   min={0}
                   max={10}
                   value={policy.carryForwardMax}
+                  disabled={!canUpdate}
                   onChange={(e) => setPolicy({ ...policy, carryForwardMax: e.target.value })}
                   style={{
                     width: '100%',
@@ -259,29 +202,38 @@ export default function HrLeavePolicyPage() {
                     background: colors.background?.input ?? colors.background?.card,
                     color: colors.text?.primary,
                     fontSize: 14,
+                    opacity: canUpdate ? 1 : 0.7,
                   }}
                 />
               </div>
             )}
 
+            {!canUpdate && (
+              <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 8 }}>
+                View only — you cannot change this module.
+              </p>
+            )}
+
             <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-              <button
-                type="submit"
-                disabled={saving}
-                style={{
-                  padding: '10px 24px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: colors.primary,
-                  color: '#ffffff',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  opacity: saving ? 0.6 : 1,
-                }}
-              >
-                {saving ? 'Saving...' : 'Save policy'}
-              </button>
+              {canUpdate && (
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{
+                    padding: '10px 24px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: colors.primary,
+                    color: '#ffffff',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    opacity: saving ? 0.6 : 1,
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save policy'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => router.push('/hr/leaves')}
@@ -295,12 +247,12 @@ export default function HrLeavePolicyPage() {
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                {canUpdate ? 'Cancel' : 'Back'}
               </button>
             </div>
           </form>
         )}
-      </div>
+      </GlassCard>
 
       {toast.text && (
         <div
@@ -328,6 +280,6 @@ export default function HrLeavePolicyPage() {
           onLogout={autoLogout}
         />
       )}
-    </div>
+    </HrPageShell>
   );
 }

@@ -1,7 +1,7 @@
 // app/api/hr/employee-shifts/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import Employee from '../../../../models/Employee';
 import Shift from '../../../../models/Shift';
 import EmployeeShiftHistory from '../../../../models/EmployeeShiftHistory';
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 // Get shift for an employee on a specific date (considering history)
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('employeeShifts', 'view');
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -109,7 +109,7 @@ export async function GET(req) {
 // POST /api/hr/employee-shifts - Assign or change employee shift
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('employeeShifts', 'create');
     await connectDB();
 
     const body = await req.json();

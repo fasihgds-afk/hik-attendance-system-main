@@ -5,13 +5,15 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export default function HrLeavesPage() {
   const { colors, theme } = useTheme();
   const router = useRouter();
+  const { canCreate, canDelete } = usePermissions('leaves');
 
   // Auto logout
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
@@ -322,84 +324,31 @@ export default function HrLeavesPage() {
     backgroundColor: colors.background.table.row,
   };
 
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '20px 24px',
-        background: colors.background.page,
-        color: colors.text.primary,
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 24,
-          padding: '16px 20px',
-          borderRadius: 16,
-          background: colors.gradient.primary,
-          border: `1px solid ${colors.border.default}`,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#ffffff', margin: 0 }}>
-            Paid Leave Management
-          </h1>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <ThemeToggle />
-          <button
-            onClick={() => router.push('/hr/leave-policy')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Leave Policy
-          </button>
-          <button
-            onClick={() => router.push('/hr/dashboard')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(255,255,255,0.1)',
-              color: '#ffffff',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
 
-      {/* Controls */}
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/leave-policy')} className="leaves-button" style={glossPill('slate')}>
+        Leave Policy
+      </button>
+      <button type="button" onClick={() => router.push('/hr/dashboard')} className="leaves-button" style={glossPill('neutral')}>
+        Dashboard
+      </button>
+      <button type="button" onClick={handleLogout} className="leaves-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
+  return (
+    <HrPageShell
+      subtitle="Paid Leave Management"
+      actions={headerActions}
+    >
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
       <div
         style={{
           display: 'flex',
@@ -479,21 +428,23 @@ export default function HrLeavesPage() {
             ))}
           </div>
         </div>
-        <button
-          onClick={() => setShowMarkLeaveModal(true)}
-          style={{
-            padding: '10px 20px',
-            borderRadius: 8,
-            border: 'none',
-            background: colors.primary,
-            color: '#ffffff',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          + Mark Leave
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowMarkLeaveModal(true)}
+            style={{
+              padding: '10px 20px',
+              borderRadius: 8,
+              border: 'none',
+              background: colors.primary,
+              color: '#ffffff',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            + Mark Leave
+          </button>
+        )}
       </div>
 
       {/* Leave Summary Cards */}
@@ -582,19 +533,19 @@ export default function HrLeavesPage() {
               <th style={thStyle}>Q2 (Apr–Jun)</th>
               <th style={thStyle}>Q3 (Jul–Sep)</th>
               <th style={thStyle}>Q4 (Oct–Dec)</th>
-              <th style={thStyle}>Actions</th>
+              {canCreate && <th style={thStyle}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', padding: '40px' }}>
+                <td colSpan={canCreate ? 8 : 7} style={{ ...tdStyle, textAlign: 'center', padding: '40px' }}>
                   Loading...
                 </td>
               </tr>
             ) : filteredLeaves.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', padding: '40px' }}>
+                <td colSpan={canCreate ? 8 : 7} style={{ ...tdStyle, textAlign: 'center', padding: '40px' }}>
                   No leave records found
                 </td>
               </tr>
@@ -621,32 +572,35 @@ export default function HrLeavesPage() {
                   <td style={tdStyle}>
                     <QuarterUsageCell leave={leave} quarter="q4" quarterLabel="Q4 (Oct–Dec)" />
                   </td>
-                  <td style={tdStyle}>
-                    <button
-                      onClick={() => {
-                        setMarkLeaveData({ empCode: leave.empCode, date: '', reason: '' });
-                        setShowMarkLeaveModal(true);
-                      }}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        border: `1px solid ${colors.primary}`,
-                        background: 'transparent',
-                        color: colors.primary,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        marginRight: 8,
-                      }}
-                    >
-                      Mark Leave
-                    </button>
-                  </td>
+                  {canCreate && (
+                    <td style={tdStyle}>
+                      <button
+                        onClick={() => {
+                          setMarkLeaveData({ empCode: leave.empCode, date: '', reason: '' });
+                          setShowMarkLeaveModal(true);
+                        }}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          border: `1px solid ${colors.primary}`,
+                          background: 'transparent',
+                          color: colors.primary,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          marginRight: 8,
+                        }}
+                      >
+                        Mark Leave
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+      </GlassCard>
 
       {/* View leave dates modal (to see which dates are counted and remove wrong one) */}
       {viewDatesFor && (
@@ -680,7 +634,8 @@ export default function HrLeavesPage() {
               Leave dates – {viewDatesFor.employeeName} ({viewDatesFor.empCode})
             </h3>
             <p style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 12 }}>
-              {viewDatesFor.quarterLabel} – {viewDatesFor.dates.length} day(s). Remove the date that was marked by mistake.
+              {viewDatesFor.quarterLabel} – {viewDatesFor.dates.length} day(s).
+              {canDelete ? ' Remove the date that was marked by mistake.' : ''}
             </p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 240, overflowY: 'auto' }}>
               {viewDatesFor.dates.map((date) => (
@@ -695,21 +650,23 @@ export default function HrLeavesPage() {
                   }}
                 >
                   <span style={{ fontSize: 13, color: colors.text.primary }}>{date}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveLeave(viewDatesFor.empCode, date, () => setViewDatesFor(null))}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: 12,
-                      color: '#b91c1c',
-                      background: 'rgba(239,68,68,0.1)',
-                      border: '1px solid rgba(239,68,68,0.4)',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Remove
-                  </button>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLeave(viewDatesFor.empCode, date, () => setViewDatesFor(null))}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        color: '#b91c1c',
+                        background: 'rgba(239,68,68,0.1)',
+                        border: '1px solid rgba(239,68,68,0.4)',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -735,7 +692,7 @@ export default function HrLeavesPage() {
       )}
 
       {/* Mark Leave Modal */}
-      {showMarkLeaveModal && (
+      {canCreate && showMarkLeaveModal && (
         <div
           style={{
             position: 'fixed',
@@ -890,6 +847,6 @@ export default function HrLeavesPage() {
           onLogout={autoLogout}
         />
       )}
-    </div>
+    </HrPageShell>
   );
 }

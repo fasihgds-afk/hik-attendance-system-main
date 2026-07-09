@@ -1,7 +1,7 @@
 // next-app/app/api/hr/violation-rules/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import ViolationRules from '../../../../models/ViolationRules';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -16,7 +16,7 @@ export const revalidate = 60;
 // Returns the active violation rules configuration
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('violationRules', 'view');
     await connectDB();
 
     // OPTIMIZATION: Get the active rules with minimal fields, fast timeout
@@ -68,7 +68,7 @@ export async function GET(req) {
 // Creates or updates violation rules (deactivates old active rules)
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('violationRules', 'create');
     await connectDB();
 
     const body = await req.json();
@@ -139,7 +139,7 @@ export async function POST(req) {
 // Updates the active violation rules
 export async function PUT(req) {
   try {
-    await requireHR();
+    await requirePermission('violationRules', 'update');
     await connectDB();
     const body = await req.json();
     const {

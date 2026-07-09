@@ -10,10 +10,15 @@ import EmployeeForm from '../../../../components/employees/EmployeeForm';
 import Modal from '../../../../components/ui/Modal';
 import Toast from '../../../../components/common/Toast';
 import { useTheme } from '@/lib/theme/ThemeContext';
+import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 
 export default function EmployeeShiftPage() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+  const { canCreate, canUpdate, canDelete } = usePermissions('employees');
+  const canViewBankDetails = useModulePermission('bankDetails', 'view');
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -557,39 +562,88 @@ export default function EmployeeShiftPage() {
 
   // ------------------------------------------------------------------------
 
+  const isDark = theme === 'dark';
+
+  const headerActions = (
+    <HrHeaderActions className="manage-header-buttons">
+      <button
+        type="button"
+        onClick={() => router.push('/hr/employees/archived')}
+        className="manage-button"
+        style={glossPill('slate')}
+      >
+        Former Employees
+      </button>
+      <button
+        type="button"
+        onClick={() => loadEmployees(true)}
+        disabled={loading}
+        className="manage-button"
+        style={{
+          ...glossPill('neutral'),
+          cursor: loading ? 'default' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          opacity: loading ? 0.7 : 1,
+        }}
+      >
+        {loading ? (
+          <>
+            <span
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '999px',
+                border: '2px solid rgba(191,219,254,0.6)',
+                borderTopColor: '#ffffff',
+                animation: 'spin 0.7s linear infinite',
+              }}
+            />
+            Refreshing…
+          </>
+        ) : (
+          <>
+            <span>⟳</span> Refresh
+          </>
+        )}
+      </button>
+      {canCreate && (
+        <button
+          type="button"
+          onClick={openAddModal}
+          className="manage-button"
+          style={{
+            ...glossPill('neutral'),
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 18 }}>+</span> Add Employee
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => router.push('/hr/employees')}
+        className="manage-button"
+        style={glossPill('neutral')}
+      >
+        HR Hub
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
     <React.Fragment>
       <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
         @media (max-width: 768px) {
-          .manage-container {
-            padding: 16px !important;
-          }
-          .manage-header {
-            flex-direction: column !important;
-            gap: 16px !important;
-            align-items: flex-start !important;
-          }
-          .manage-header-logo {
-            width: 40px !important;
-            height: 40px !important;
-          }
-          .manage-header-title {
-            font-size: 18px !important;
-          }
-          .manage-header-buttons {
-            flex-direction: column !important;
-            width: 100% !important;
-            gap: 8px !important;
-          }
-          .manage-header-buttons button {
-            width: 100% !important;
-          }
           .manage-table-wrapper {
             overflow-x: auto !important;
-            margin-left: -16px !important;
-            margin-right: -16px !important;
-            padding-left: 16px !important;
-            padding-right: 16px !important;
           }
           .manage-table {
             min-width: 1000px !important;
@@ -600,64 +654,18 @@ export default function EmployeeShiftPage() {
             padding: 8px 6px !important;
             font-size: 12px !important;
           }
-          .manage-modal {
-            width: 100% !important;
-            max-width: 100% !important;
-            height: 100% !important;
-            max-height: 100% !important;
-            margin: 0 !important;
-            border-radius: 0 !important;
-            padding: 20px 16px !important;
-          }
-          .manage-form-grid {
-            grid-template-columns: 1fr !important;
-            gap: 12px !important;
-          }
-          .manage-form-row {
-            flex-direction: column !important;
-            gap: 12px !important;
-          }
-          .manage-form-row > div {
-            width: 100% !important;
-            min-width: auto !important;
-          }
         }
         @media (max-width: 480px) {
-          .manage-container {
-            padding: 12px !important;
-          }
-          .manage-header-title {
-            font-size: 16px !important;
+          .manage-button {
+            width: 100% !important;
+            justify-content: center !important;
           }
           .manage-table {
             min-width: 900px !important;
             font-size: 11px !important;
           }
         }
-        
-        /* Laptop & Desktop Responsive Styles */
         @media (min-width: 1024px) and (max-width: 1366px) {
-          .manage-container {
-            padding: 20px 24px !important;
-          }
-          .manage-header {
-            padding: 16px 22px !important;
-          }
-          .manage-header-logo {
-            width: 50px !important;
-            height: 50px !important;
-          }
-          .manage-header-title {
-            font-size: 20px !important;
-          }
-          .manage-header-buttons {
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-          }
-          .manage-header-buttons button {
-            padding: 8px 16px !important;
-            font-size: 12px !important;
-          }
           .manage-table {
             font-size: 12px !important;
           }
@@ -667,289 +675,87 @@ export default function EmployeeShiftPage() {
             font-size: 12px !important;
           }
         }
-        
         @media (min-width: 1367px) and (max-width: 1440px) {
-          .manage-container {
-            padding: 22px 26px !important;
-          }
           .manage-table {
             font-size: 12.5px !important;
           }
         }
-        
         @media (min-width: 1441px) {
-          .manage-container {
-            padding: 24px 28px !important;
-          }
           .manage-table {
             font-size: 13px !important;
           }
         }
       `}</style>
-      <div
-        className="manage-container"
-        style={{
-          minHeight: '100vh',
-          padding: '24px 28px 32px',
-          background:
-            'radial-gradient(circle at top, #0b2344 0, #0a1b32 35%, #061523 100%)',
-          color: '#0f172a',
-        }}
-      >
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            @keyframes toastIn {
-              from { opacity: 0; transform: translateY(10px) scale(0.97); }
-              to { opacity: 1; transform: translateY(0) scale(1); }
-            }
-            @keyframes modalIn {
-              from { opacity: 0; transform: translateY(18px) scale(0.96); }
-              to { opacity: 1; transform: translateY(0) scale(1); }
-            }
-            @keyframes spin {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-          `,
-        }}
-      />
 
-      <div
-        className="container-responsive"
-        style={{
-          width: '100%',
-          maxWidth: '100%',
-          margin: 0,
-        }}
+      <HrPageShell
+        subtitle="Employee Shift Management Console · Manage shifts, details, and active staff"
+        actions={headerActions}
       >
-        {/* Top bar with logo */}
-        <div
-          className="manage-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 18,
-            padding: '14px 20px',
-            borderRadius: 12,
-            background:
-              'linear-gradient(90deg, #0a2c54, #0f5ba5, #13a8e5)',
-            color: '#f9fafb',
-            boxShadow: '0 12px 28px rgba(15,23,42,0.55)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div
-              className="manage-header-logo"
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: '999px',
-                overflow: 'hidden',
-                backgroundColor: 'rgba(15,23,42,0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
-              />
-            </div>
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 8,
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
             <div>
-              <div
+              <h2
                 style={{
                   fontSize: 20,
                   fontWeight: 700,
-                  letterSpacing: 0.4,
+                  color: isDark ? '#f1f5f9' : (colors.text?.primary ?? '#111827'),
+                  marginBottom: 6,
+                  letterSpacing: '-0.025em',
                 }}
               >
-                Global Digital Solutions
-              </div>
-              <div
+                Employee Directory
+              </h2>
+              <p
                 style={{
-                  fontSize: 12,
-                  opacity: 0.9,
+                  fontSize: 13,
+                  color: isDark ? '#94a3b8' : (colors.text?.secondary ?? '#6b7280'),
+                  margin: 0,
                 }}
               >
-                Employee Shift Management Console
-              </div>
+                Manage employee information, shifts, and details. Double-click a row or click{' '}
+                <span style={{ color: colors.primary?.[400] ?? '#0ea5e9', fontWeight: 600 }}>View</span> to open full details.
+              </p>
             </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button
-              onClick={() => router.push('/hr/employees/archived')}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.35)',
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                color: '#f9fafb',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
+            <EmployeeFilters
+              searchQuery={searchQuery}
+              onSearchChange={(value) => {
+                setSearchQuery(value);
+                setCurrentPage(1);
               }}
-            >
-              Former Employees
-            </button>
-
-            <button
-              onClick={() => loadEmployees(true)}
-              disabled={loading}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 999,
-                border: 'none',
-                backgroundColor: 'rgba(15,23,42,0.28)',
-                color: '#e5f2ff',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: loading ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              {loading ? (
-                <>
-                  <span
-                    style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: '999px',
-                      border: '2px solid rgba(191,219,254,0.6)',
-                      borderTopColor: '#ffffff',
-                      animation: 'spin 0.7s linear infinite',
-                    }}
-                  />
-                  Refreshing…
-                </>
-              ) : (
-                <>
-                  <span>⟳</span> Refresh
-                </>
-              )}
-            </button>
-            
-            {/* Add Employee Button */}
-            <button
-              onClick={openAddModal}
-              style={{
-                padding: '8px 20px',
-                borderRadius: 999,
-                border: 'none',
-                background: 'linear-gradient(135deg, #10b981, #22c55e)',
-                color: '#ffffff',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
-              }}
-            >
-              <span style={{ fontSize: 18 }}>+</span> Add Employee
-            </button>
-          </div>
-        </div>
-
-        {/* MAIN CARD */}
-        <div
-          style={{
-            borderRadius: 16,
-            backgroundColor: '#ffffff',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            padding: '24px 28px 28px',
-            border: '1px solid #e5e7eb',
-          }}
-        >
-
-          {/* Existing employees table */}
-          <div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 8,
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <h2
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 700,
-                    color: '#111827',
-                    marginBottom: 6,
-                    letterSpacing: '-0.025em',
-                  }}
-                >
-                  Employee Directory
-                </h2>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: '#6b7280',
-                    margin: 0,
-                  }}
-                >
-                  Manage employee information, shifts, and details. Double-click a row or click{' '}
-                  <span style={{ color: '#0ea5e9', fontWeight: 600 }}>Edit</span> to open full details.
-                </p>
-              </div>
-              <EmployeeFilters
-                searchQuery={searchQuery}
-                onSearchChange={(value) => {
-                  setSearchQuery(value);
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-
-            <EmployeeTable
-              employees={employees}
-              shifts={shifts}
-              loading={loading}
-              savingId={savingId}
-              onShiftChange={handleShiftChange}
-              onEdit={openEditModal}
-              onSave={handleSaveRow}
-              onDelete={(emp) => setDeleteConfirm({ isOpen: true, employee: emp })}
-            />
-
-            <PaginationControls
-              currentPage={currentPage}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.total}
-              itemsPerPage={pagination.limit}
-              onPageChange={setCurrentPage}
-              loading={loading}
             />
           </div>
-        </div>
-      </div>
-      </div>
+
+          <EmployeeTable
+            employees={employees}
+            shifts={shifts}
+            loading={loading}
+            savingId={savingId}
+            canUpdate={canUpdate}
+            onShiftChange={canUpdate ? handleShiftChange : undefined}
+            onEdit={openEditModal}
+            onSave={canUpdate ? handleSaveRow : undefined}
+            onDelete={canDelete ? (emp) => setDeleteConfirm({ isOpen: true, employee: emp }) : undefined}
+          />
+
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={pagination.limit}
+            onPageChange={setCurrentPage}
+            loading={loading}
+          />
+        </GlassCard>
+      </HrPageShell>
 
       {/* Professional Toast Notification */}
       <Toast
@@ -962,7 +768,13 @@ export default function EmployeeShiftPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
-        title={editingEmployee ? 'Edit Employee' : 'Add New Employee'}
+        title={
+          editingEmployee
+            ? canUpdate
+              ? 'Edit Employee'
+              : 'View Employee'
+            : 'Add New Employee'
+        }
         size="lg"
       >
         <EmployeeForm
@@ -972,12 +784,14 @@ export default function EmployeeShiftPage() {
           onSubmit={handleFormSubmit}
           onCancel={closeModal}
           loading={isSaving}
+          readOnly={editingEmployee ? !canUpdate : false}
+          showBankDetails={canViewBankDetails}
         />
       </Modal>
 
       {/* Deactivate confirmation */}
       <Modal
-        isOpen={deleteConfirm.isOpen}
+        isOpen={canDelete && deleteConfirm.isOpen}
         onClose={() => {
           setDeleteConfirm({ isOpen: false, employee: null });
           setDeleteReason('Resigned');

@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export default function ViolationRulesPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { session, canUpdate } = usePermissions('violationRules');
   const { colors, theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -139,15 +140,29 @@ export default function ViolationRulesPage() {
     }));
   }
 
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/employees')} className="rules-button" style={glossPill('neutral')}>
+        HR Home
+      </button>
+      <button type="button" onClick={() => router.push('/hr/company-settings')} className="rules-button" style={glossPill('slate')}>
+        Company Settings
+      </button>
+      <button type="button" onClick={handleLogout} className="rules-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: colors.gradient.overlay,
-        color: colors.text.primary,
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
+    <HrPageShell
+      subtitle="Violation & Leave Deduction Rules"
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -193,156 +208,6 @@ export default function ViolationRulesPage() {
         }}
       />
 
-      {/* Header */}
-      <div className="container-responsive" style={{ margin: '0 auto 24px auto', width: '100%' }}>
-        <div
-          className="rules-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 28px',
-            borderRadius: 20,
-            background: colors.gradient.header,
-            color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-            boxShadow: theme === 'dark' 
-              ? "0 20px 50px rgba(19, 168, 229, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3)"
-              : "0 20px 50px rgba(59, 130, 246, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)",
-            border: `1px solid ${colors.border.default}`,
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 16,
-                overflow: 'hidden',
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(59, 130, 246, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-                border: `2px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : colors.border.default}`,
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  letterSpacing: 0.5,
-                  marginBottom: 4,
-                  textShadow: theme === 'dark' ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
-                }}
-              >
-                Global Digital Solutions
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  opacity: 0.95,
-                  fontWeight: 500,
-                }}
-              >
-                Violation &amp; Leave Deduction Rules
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <ThemeToggle />
-            <button
-              type="button"
-              onClick={() => router.push('/hr/employees')}
-              style={{
-                padding: '10px 18px',
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                backdropFilter: 'blur(10px)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              HR Home
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/hr/company-settings')}
-              style={{
-                padding: '10px 18px',
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                backdropFilter: 'blur(10px)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Company Settings
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.background.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Auto Logout Warning */}
       {showWarning && (
         <AutoLogoutWarning
@@ -354,19 +219,7 @@ export default function ViolationRulesPage() {
       )}
 
       {/* Main Form Card */}
-      <div
-        style={{
-          maxWidth: '100%',
-          margin: 0,
-          borderRadius: 16,
-          background: colors.background.card,
-          boxShadow: theme === 'dark' 
-            ? '0 20px 60px rgba(15,23,42,0.9)'
-            : '0 20px 60px rgba(0,0,0,0.08)',
-          padding: '24px 28px 28px',
-          border: `1px solid ${colors.border.default}`,
-        }}
-      >
+      <GlassCard style={{ marginTop: 18 }} padding={24}>
         {toast.text && (
           <div
             style={{
@@ -391,6 +244,15 @@ export default function ViolationRulesPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
+            {!canUpdate && (
+              <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+                View only — you cannot change this module.
+              </p>
+            )}
+            <fieldset
+              disabled={!canUpdate}
+              style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}
+            >
             {/* Violation Configuration Section */}
             <div
               className="rules-form-section"
@@ -925,50 +787,53 @@ export default function ViolationRulesPage() {
             </div>
 
             {/* Submit Button */}
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                justifyContent: 'flex-end',
-                marginTop: 24,
-              }}
-            >
-              <button
-                type="submit"
-                disabled={saving}
+            {canUpdate && (
+              <div
                 style={{
-                  padding: '12px 24px',
-                  background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 12,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  opacity: saving ? 0.6 : 1,
-                  boxShadow: `0 8px 20px ${colors.primary[500]}40`,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!saving) {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = `0 10px 24px ${colors.primary[500]}50`;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!saving) {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = `0 8px 20px ${colors.primary[500]}40`;
-                  }
+                  display: 'flex',
+                  gap: 12,
+                  justifyContent: 'flex-end',
+                  marginTop: 24,
                 }}
               >
-                {saving ? 'Saving...' : 'Save Violation Rules'}
-              </button>
-            </div>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{
+                    padding: '12px 24px',
+                    background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 12,
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    opacity: saving ? 0.6 : 1,
+                    boxShadow: `0 8px 20px ${colors.primary[500]}40`,
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!saving) {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = `0 10px 24px ${colors.primary[500]}50`;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!saving) {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = `0 8px 20px ${colors.primary[500]}40`;
+                    }
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Violation Rules'}
+                </button>
+              </div>
+            )}
+            </fieldset>
           </form>
         )}
-      </div>
-    </div>
+      </GlassCard>
+    </HrPageShell>
   );
 }
 

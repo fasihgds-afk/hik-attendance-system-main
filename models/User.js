@@ -1,5 +1,8 @@
 // next-app/models/User.js
 import mongoose from 'mongoose';
+import { buildPermissionsSchemaDefinition } from '../lib/auth/permissions';
+
+const PermissionsSchema = buildPermissionsSchemaDefinition(mongoose.Schema);
 
 const UserSchema = new mongoose.Schema(
   {
@@ -18,6 +21,12 @@ const UserSchema = new mongoose.Schema(
       enum: ['HR', 'EMPLOYEE', 'ADMIN'],
       required: true,
       index: true, // Index for role-based queries
+    },
+    // Module-level CRUD permissions (HR portal). ADMIN ignores this (full access).
+    // Legacy HR users with no permissions are treated as full access at runtime.
+    permissions: {
+      type: PermissionsSchema,
+      default: undefined,
     },
     // (optional but very useful)
     employeeEmpCode: {

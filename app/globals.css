@@ -5,25 +5,141 @@
   --foreground: #171717;
 }
 
-/* Theme-aware CSS variables */
+/*
+ * Theme-aware CSS variables
+ * Glass tokens mirror lib/theme/colors.js (glass, pageBackground, glassHeader)
+ */
 [data-theme="dark"] {
   --theme-bg-primary: #020617;
-  --theme-bg-secondary: #0f172a;
-  --theme-bg-card: #1e293b;
-  --theme-text-primary: #f1f5f9;
-  --theme-text-secondary: #cbd5e1;
-  --theme-border: rgba(55, 65, 81, 0.5);
-  --theme-row-hover: #334155;
+  --theme-bg-secondary: #0c1628;
+  --theme-bg-card: rgba(12, 28, 52, 0.75);
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #e2e8f0;
+  --theme-border: rgba(14, 165, 233, 0.28);
+  --theme-row-hover: rgba(20, 42, 72, 0.9);
+
+  --glass-panel-bg: linear-gradient(
+    165deg,
+    rgba(15, 55, 95, 0.55) 0%,
+    rgba(14, 165, 233, 0.08) 6%,
+    rgba(12, 40, 72, 0.62) 50%,
+    rgba(10, 30, 55, 0.7) 100%
+  );
+  --glass-blur: 32px;
+  --glass-saturate: 120%;
+  --glass-border: rgba(14, 165, 233, 0.28);
+  --glass-text: #ffffff;
+  --glass-shadow: 0 10px 36px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-gloss-sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.04) 24%,
+    transparent 50%
+  );
+
+  --page-bg-base: #020617;
+  --page-bg-gradient: radial-gradient(
+      circle at 16% 20%,
+      rgba(19, 168, 229, 0.24) 0%,
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at 84% 76%,
+      rgba(15, 91, 165, 0.2) 0%,
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 50% 100%,
+      rgba(10, 44, 84, 0.3) 0%,
+      transparent 55%
+    ),
+    linear-gradient(160deg, #020617 0%, #061525 38%, #0a2c54 70%, #0f172a 100%);
+
+  --glass-header-gradient: linear-gradient(
+    135deg,
+    rgba(8, 28, 52, 0.94) 0%,
+    rgba(10, 44, 84, 0.9) 48%,
+    rgba(15, 91, 165, 0.86) 100%
+  );
+  --glass-header-overlay: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.03) 38%,
+    rgba(0, 0, 0, 0.12) 100%
+  );
+  --glass-header-border: rgba(14, 165, 233, 0.3);
+  --glass-header-blur: 32px;
+
+  --gds-stop-1: #0a2c54;
+  --gds-stop-2: #0f5ba5;
+  --gds-stop-3: #13a8e5;
 }
 
 [data-theme="light"] {
-  --theme-bg-primary: #ffffff;
-  --theme-bg-secondary: #f8fafc;
-  --theme-bg-card: #ffffff;
+  --theme-bg-primary: #f0f9ff;
+  --theme-bg-secondary: #e0f2fe;
+  --theme-bg-card: rgba(255, 255, 255, 0.65);
   --theme-text-primary: #0f172a;
   --theme-text-secondary: #334155;
-  --theme-border: #e2e8f0;
-  --theme-row-hover: #e2e8f0;
+  --theme-border: rgba(14, 165, 233, 0.18);
+  --theme-row-hover: rgba(224, 242, 254, 0.85);
+
+  --glass-panel-bg: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(255, 255, 255, 0.72) 55%,
+    rgba(224, 242, 254, 0.55) 100%
+  );
+  --glass-blur: 32px;
+  --glass-saturate: 130%;
+  --glass-border: rgba(255, 255, 255, 0.85);
+  --glass-text: #0f172a;
+  --glass-shadow: 0 8px 32px rgba(10, 44, 84, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-gloss-sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.4) 22%,
+    transparent 48%
+  );
+
+  --page-bg-base: #f0f9ff;
+  --page-bg-gradient: radial-gradient(
+      circle at 14% 20%,
+      rgba(56, 189, 248, 0.4) 0%,
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at 86% 78%,
+      rgba(14, 165, 233, 0.28) 0%,
+      transparent 44%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(186, 230, 253, 0.35) 0%,
+      transparent 55%
+    ),
+    linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 40%, #f8fafc 100%);
+
+  --glass-header-gradient: linear-gradient(
+    135deg,
+    rgba(10, 44, 84, 0.94) 0%,
+    rgba(15, 91, 165, 0.9) 48%,
+    rgba(19, 168, 229, 0.86) 100%
+  );
+  --glass-header-overlay: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.06) 40%,
+    transparent 100%
+  );
+  --glass-header-border: rgba(255, 255, 255, 0.35);
+  --glass-header-blur: 32px;
+
+  --gds-stop-1: #0f5ba5;
+  --gds-stop-2: #0ea5e9;
+  --gds-stop-3: #38bdf8;
 }
 
 body {
@@ -31,6 +147,70 @@ body {
   color: var(--theme-text-primary);
   font-family: Arial, Helvetica, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ==================== GLASS SHELL (Phase 2) ==================== */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  isolation: isolate;
+}
+
+.app-shell__bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--page-bg-gradient);
+}
+
+.app-shell__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+}
+
+.app-shell__main {
+  flex: 1;
+  width: 100%;
+}
+
+/* Reusable frosted surface — warm gloss tokens */
+.glass-surface {
+  background: var(--glass-panel-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--glass-text);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate, 130%));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate, 130%));
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass-gloss-sheen);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 0;
+}
+
+/* Glass table wrapper: opaque shell, no blur — rows stay solid in component */
+.glass-table-wrapper {
+  /* intentionally no backdrop-filter */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__bg {
+    animation: none !important;
+  }
 }
 
 /* ==================== MOBILE RESPONSIVE UTILITIES ==================== */
@@ -87,6 +267,7 @@ body {
 /* Global mobile container padding */
 @media (max-width: 768px) {
   .daily-page-container,
+  .hr-page-container,
   .monthly-container,
   .manage-container {
     padding: 16px !important;
@@ -95,6 +276,7 @@ body {
 
 @media (max-width: 480px) {
   .daily-page-container,
+  .hr-page-container,
   .monthly-container,
   .manage-container {
     padding: 12px !important;
@@ -137,6 +319,7 @@ body {
 /* Small Laptops (1024px - 1366px) */
 @media (min-width: 1024px) and (max-width: 1366px) {
   .daily-page-container,
+  .hr-page-container,
   .monthly-container,
   .manage-container,
   .main-container,
@@ -213,6 +396,7 @@ body {
   }
   
   .daily-page-container,
+  .hr-page-container,
   .monthly-container,
   .manage-container,
   .main-container,
@@ -244,6 +428,7 @@ body {
   }
   
   .daily-page-container,
+  .hr-page-container,
   .monthly-container,
   .manage-container,
   .employee-dashboard-container {
@@ -267,6 +452,7 @@ body {
   }
   
   .daily-page-container,
+  .hr-page-container,
   .monthly-container,
   .manage-container,
   .employee-dashboard-container {
@@ -385,4 +571,534 @@ body {
   .daily-main-card {
     padding: 24px 28px !important;
   }
+}
+
+/* ==================== PHASE 6: GLASS HR RESPONSIVE SYSTEM ==================== */
+
+/* Unified horizontal scroll for HR data tables */
+.hr-table-scroll,
+.dept-table-wrapper,
+.shift-table-wrapper,
+.archived-table-wrapper,
+.manage-table-wrapper,
+.monthly-table-wrapper,
+.directory-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Glass card responsive inner padding (GlassCard content wrapper) */
+.hr-glass-card__body {
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .hr-glass-card__body {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .hr-glass-card__body {
+    padding: 12px !important;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1366px) {
+  .hr-glass-card__body {
+    padding: 18px !important;
+  }
+}
+
+/* ==================== HR GLOBAL HEADER ==================== */
+
+.hr-global-header {
+  position: relative;
+  overflow: hidden;
+}
+
+.hr-global-header__accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 2;
+}
+
+.hr-global-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(12px, 2vw, 20px);
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.hr-global-header__brand {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2vw, 18px);
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.hr-global-header__text {
+  min-width: 0;
+}
+
+.hr-global-header__meta {
+  margin-top: 8px;
+}
+
+.hr-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(10, 44, 84, 0.45);
+  padding: 5px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(14, 165, 233, 0.28);
+  max-width: 100%;
+}
+
+.hr-header-badge__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hr-global-header__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1 1 320px;
+}
+
+.hr-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(6px, 1vw, 10px);
+  flex-wrap: wrap;
+}
+
+.hr-header-actions__group {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(6px, 1vw, 10px);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.hr-header-theme {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Large desktop — single row, spacious */
+@media (min-width: 1441px) {
+  .hr-global-header__logo {
+    width: 96px !important;
+    height: 96px !important;
+  }
+
+  .hr-global-header__title {
+    font-size: 24px !important;
+  }
+
+  .hr-global-header__subtitle {
+    font-size: 14px !important;
+  }
+
+  .hr-header-actions button {
+    padding: 10px 18px !important;
+    font-size: 14px !important;
+    min-height: 44px;
+  }
+}
+
+/* Standard laptop / desktop */
+@media (min-width: 1281px) {
+  .hr-global-header__row {
+    flex-wrap: nowrap;
+  }
+
+  .hr-global-header__brand {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .hr-global-header__toolbar {
+    flex: 0 1 auto;
+    flex-wrap: nowrap !important;
+    max-width: min(68vw, 980px);
+    align-items: center;
+  }
+
+  .hr-header-actions {
+    flex-wrap: nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+/* Small laptop / tablet landscape */
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .hr-global-header__logo {
+    width: 72px !important;
+    height: 72px !important;
+  }
+
+  .hr-global-header__title {
+    font-size: 20px !important;
+  }
+
+  .hr-global-header__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hr-global-header__toolbar {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(10, 44, 84, 0.42);
+    border: 1px solid rgba(14, 165, 233, 0.22);
+    box-sizing: border-box;
+    justify-content: flex-start;
+  }
+
+  .hr-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .hr-header-actions > button,
+  .hr-header-actions > .hr-header-actions__group {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .hr-header-actions > .hr-header-actions__group > button {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .hr-header-actions > button,
+  .hr-header-actions > .hr-header-actions__group {
+    flex: 1 1 calc(50% - 6px) !important;
+    min-width: calc(50% - 6px) !important;
+  }
+
+  .hr-header-actions > .hr-header-actions__group {
+    display: flex;
+    justify-content: stretch;
+  }
+
+  .hr-header-actions > .hr-header-actions__group > button {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .hr-global-header__row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .hr-global-header__brand {
+    flex: none;
+    width: 100%;
+  }
+
+  .hr-global-header__toolbar {
+    width: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .hr-header-actions {
+    flex-direction: column;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .hr-header-actions > button,
+  .hr-header-theme button {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: none !important;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .hr-header-actions > .hr-header-actions__group {
+    width: 100% !important;
+    flex-direction: column !important;
+    min-width: 0 !important;
+  }
+
+  .hr-header-actions > .hr-header-actions__group > button {
+    width: 100% !important;
+  }
+
+  .hr-header-theme {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .hr-global-header__logo {
+    width: 56px !important;
+    height: 56px !important;
+  }
+
+  .hr-global-header__title {
+    font-size: 17px !important;
+  }
+
+  .hr-global-header__subtitle {
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  .hr-header-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hr-global-header__title {
+    font-size: 16px !important;
+  }
+
+  .hr-global-header__logo {
+    width: 48px !important;
+    height: 48px !important;
+  }
+}
+
+/* Light theme — header badge + toolbar tray readability */
+[data-theme="light"] .hr-header-badge {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+[data-theme="light"] .hr-global-header__toolbar {
+  color: #ffffff;
+}
+
+/* Light theme — HR hub overview + glass panels */
+[data-theme="light"] .overview-dept-chip {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(14, 165, 233, 0.22);
+  box-shadow: 0 2px 8px rgba(10, 44, 84, 0.06);
+}
+
+[data-theme="light"] .overview-dept-chip strong {
+  background: linear-gradient(135deg, #0f5ba5, #0ea5e9);
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+[data-theme="light"] .overview-metric {
+  border-right-color: rgba(14, 165, 233, 0.12);
+}
+
+[data-theme="light"] .hr-glass-card,
+[data-theme="light"] .hr-page-container {
+  color: var(--glass-text);
+}
+
+[data-theme="light"] .hr-glass-card {
+  box-shadow: 0 8px 28px rgba(10, 44, 84, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+@media (min-width: 1024px) and (max-width: 1280px) {
+  [data-theme="light"] .hr-global-header__toolbar {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+}
+
+/* Legacy class aliases (employees hub until fully migrated) */
+.glass-page-header .daily-header-toolbar .hr-header-actions > div:not(.hr-header-actions__group) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .hr-table-scroll,
+  .dept-table-wrapper,
+  .shift-table-wrapper,
+  .archived-table-wrapper,
+  .manage-table-wrapper,
+  .monthly-table-wrapper,
+  .directory-table-wrapper,
+  .table-responsive {
+    margin-left: -8px;
+    margin-right: -8px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+/* HR hub overview grids (employees page) */
+@media (max-width: 900px) {
+  .overview-metrics-strip {
+    grid-template-columns: 1fr !important;
+  }
+
+  .overview-metric {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(14, 165, 233, 0.15) !important;
+  }
+
+  .overview-metric:last-child {
+    border-bottom: none !important;
+  }
+}
+
+/* Flexible control rows inside glass cards */
+.hr-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .hr-controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .hr-controls-row > * {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* Stat / filter grids */
+.hr-stat-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+@media (max-width: 480px) {
+  .hr-stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Tab bars inside glass panels */
+.hr-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .hr-tab-bar {
+    flex-direction: column;
+  }
+
+  .hr-tab-bar > button {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* Employees hub custom header rows */
+@media (max-width: 1280px) {
+  .header-brand-row {
+    flex-wrap: wrap !important;
+  }
+
+  .header-actions-row {
+    width: 100% !important;
+    padding: 10px 12px !important;
+    border-radius: 14px !important;
+    background: rgba(10, 44, 84, 0.42) !important;
+    border: 1px solid rgba(14, 165, 233, 0.22) !important;
+    box-sizing: border-box !important;
+  }
+
+  .header-actions-row > div {
+    flex-wrap: wrap !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-actions-row {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .header-actions-row button {
+    width: 100% !important;
+    min-height: 44px;
+  }
+}
+
+/* Compact laptop header buttons */
+@media (min-width: 1024px) and (max-width: 1366px) {
+  .glass-page-header button,
+  .header-container button {
+    padding: 8px 14px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (min-width: 1921px) {
+  .daily-header-title,
+  .header-title {
+    font-size: 24px !important;
+  }
+
+  .daily-header-logo,
+  .header-logo {
+    width: 100px !important;
+    height: 100px !important;
+  }
+}
+
+/* Dark-mode data row hover — employee tables + monthly attendance */
+[data-theme="dark"] .hr-employee-row:hover,
+[data-theme="dark"] tr.row-hover:hover {
+  background-color: var(--theme-row-hover, rgba(20, 42, 72, 0.95)) !important;
+}
+
+[data-theme="dark"] .hr-employee-row:hover td,
+[data-theme="dark"] tr.row-hover:hover td {
+  background-color: var(--theme-row-hover, rgba(20, 42, 72, 0.95)) !important;
+  color: var(--theme-text-secondary, #e2e8f0) !important;
 }

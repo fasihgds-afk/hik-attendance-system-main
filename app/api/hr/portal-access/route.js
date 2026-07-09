@@ -6,7 +6,7 @@ import { buildEmployeeFilter } from '../../../../lib/db/queryOptimizer';
 import { isPortalEnabled } from '../../../../lib/auth/portalAccess';
 import { mergeActiveFilter } from '../../../../lib/employees/activeFilter';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -32,7 +32,7 @@ function normalizePortalFlag(emp) {
 // GET /api/hr/portal-access?page=1&limit=50&search=&status=all|active|blocked
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('portalAccess', 'view');
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -92,7 +92,7 @@ export async function GET(req) {
 // PATCH /api/hr/portal-access  { empCode, portalEnabled: boolean }
 export async function PATCH(req) {
   try {
-    const { user } = await requireHR();
+    const { user } = await requirePermission('portalAccess', 'update');
     await connectDB();
 
     const body = await req.json();

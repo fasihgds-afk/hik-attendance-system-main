@@ -1,5 +1,5 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../auth/[...nextauth]/route';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
+import { hasPermission } from '../../../../../lib/auth/permissions';
 import { connectDB } from '../../../../../lib/db';
 import Employee from '../../../../../models/Employee';
 import { decryptBankDetails } from '../../../../../lib/security/bankDetailsCrypto';
@@ -21,19 +21,14 @@ function maskIban(value = '') {
 
 export async function POST(req) {
   try {
-    const session = await getServerSession(authOptions);
-    const role = session?.user?.role;
-
-    if (!session || !['HR', 'ADMIN'].includes(role)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { user } = await requirePermission('bankDetails', 'view');
 
     const body = await req.json().catch(() => ({}));
     const empCodes = Array.isArray(body?.empCodes) ? body.empCodes : [];
     const mask = body?.mask !== false;
-    if (!mask && role !== 'HR') {
+    if (!mask && !hasPermission(user, 'bankDetails', 'export')) {
       return NextResponse.json(
-        { error: 'Only HR can export unmasked bank details' },
+        { error: 'Missing permission: bankDetails.export' },
         { status: 403 }
       );
     }
@@ -64,10 +59,15 @@ export async function POST(req) {
 
     return NextResponse.json({ items });
   } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (err?.code === 'FORBIDDEN_PERMISSION') {
+      return NextResponse.json({ error: err.message || 'Forbidden' }, { status: 403 });
+    }
     return NextResponse.json(
       { error: err?.message || 'Failed to fetch bank details' },
       { status: 500 }
     );
   }
 }
-

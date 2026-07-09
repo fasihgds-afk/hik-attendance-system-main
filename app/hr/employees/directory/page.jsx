@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 
 export default function EmployeeDirectoryPage() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+  const isDark = theme === 'dark';
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -19,8 +21,6 @@ export default function EmployeeDirectoryPage() {
   async function loadEmployees() {
     setLoading(true);
     try {
-      // Fetch all rows for directory so department groups stay together.
-      // Uses HR employees endpoint with exact total count.
       const firstRes = await fetch('/api/hr/employees?page=1&limit=50', {
         cache: 'no-store',
       });
@@ -139,332 +139,289 @@ export default function EmployeeDirectoryPage() {
     setCollapsedDepartments(next);
   }
 
+  const chipStyle = (active) => ({
+    ...glossPill('neutral'),
+    padding: '6px 10px',
+    borderRadius: 999,
+    border: `1px solid ${active ? (colors.primary?.[500] ?? '#3b82f6') : (colors.glass?.border ?? colors.border?.default)}`,
+    backgroundColor: active
+      ? (isDark ? 'rgba(59, 130, 246, 0.2)' : colors.background?.secondary)
+      : 'transparent',
+    fontWeight: active ? 600 : 500,
+    cursor: 'pointer',
+  });
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button
+        type="button"
+        onClick={() => loadEmployees()}
+        disabled={loading}
+        className="directory-button"
+        style={{
+          ...glossPill('neutral'),
+          cursor: loading ? 'default' : 'pointer',
+          opacity: loading ? 0.7 : 1,
+        }}
+      >
+        {loading ? 'Refreshing…' : '⟳ Refresh'}
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push('/hr/employees')}
+        className="directory-button"
+        style={glossPill('neutral')}
+      >
+        Back to HR Hub
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: colors.gradient.overlay,
-        color: colors.text.primary,
-        fontFamily:
-          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
+    <HrPageShell
+      subtitle="Employee Directory · Read-only HR view with searchable employee details"
+      actions={headerActions}
     >
-      <div style={{ width: '100%', margin: '0 auto' }}>
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 10,
-            padding: '14px 18px',
-            borderRadius: 14,
-            background: colors.gradient.header,
-            border: `1px solid ${colors.border.default}`,
-            boxShadow: '0 12px 28px rgba(15,23,42,0.3)',
-            marginBottom: 16,
+            marginBottom: 12,
           }}
         >
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff' }}>
-              Employee Directory
-            </div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>
-              Read-only HR view with searchable employee details
-            </div>
+          <div style={{ padding: 10, borderRadius: 10, background: colors.background?.secondary }}>
+            <div style={{ fontSize: 11, color: colors.text?.muted }}>Employees on This Page</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{visibleRows.length}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => router.push('/hr/employees')}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 10,
-                border: '1px solid rgba(255,255,255,0.25)',
-                backgroundColor: 'rgba(255,255,255,0.14)',
-                color: '#ffffff',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Back to HR Page
-            </button>
-            <ThemeToggle />
+          <div style={{ padding: 10, borderRadius: 10, background: colors.background?.secondary }}>
+            <div style={{ fontSize: 11, color: colors.text?.muted }}>Total Employees</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{totalEmployees}</div>
+          </div>
+          <div style={{ padding: 10, borderRadius: 10, background: colors.background?.secondary }}>
+            <div style={{ fontSize: 11, color: colors.text?.muted }}>Departments in View</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{departmentCount}</div>
           </div>
         </div>
 
-        <div
-          style={{
-            borderRadius: 14,
-            background: colors.background.card,
-            border: `1px solid ${colors.border.default}`,
-            padding: 16,
-            boxShadow: colors.card.shadow,
-          }}
-        >
-          <div
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+            }}
+            placeholder="Search by code, name, email..."
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: 10,
-              marginBottom: 12,
+              minWidth: 260,
+              flex: '1 1 280px',
+              padding: '9px 12px',
+              borderRadius: 10,
+              border: `1px solid ${colors.border?.input ?? colors.border?.default}`,
+              backgroundColor: colors.background?.input ?? colors.background?.card,
+              color: colors.text?.primary,
+              fontSize: 13,
+              outline: 'none',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setSelectedDepartment('ALL')}
+            style={chipStyle(selectedDepartment === 'ALL')}
+          >
+            All Departments
+          </button>
+          {visibleRowsByDepartment.map((group) => (
+            <button
+              key={`chip-${group.departmentName}`}
+              type="button"
+              onClick={() => setSelectedDepartment(group.departmentName)}
+              style={chipStyle(selectedDepartment === group.departmentName)}
+            >
+              {group.departmentName} ({group.employees.length})
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => setAllDepartmentsCollapsed(false)}
+            style={glossPill('slate')}
+          >
+            Expand All
+          </button>
+          <button
+            type="button"
+            onClick={() => setAllDepartmentsCollapsed(true)}
+            style={glossPill('slate')}
+          >
+            Collapse All
+          </button>
+        </div>
+
+        <div className="directory-table-wrapper hr-table-scroll table-responsive" style={{ width: '100%' }}>
+          <table
+            style={{
+              width: '100%',
+              minWidth: 1080,
+              borderCollapse: 'collapse',
+              borderRadius: 10,
+              overflow: 'hidden',
+              border: `1px solid ${colors.border?.table ?? colors.border?.default}`,
             }}
           >
-            <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
-              <div style={{ fontSize: 11, color: colors.text.muted }}>Employees on This Page</div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{visibleRows.length}</div>
-            </div>
-            <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
-              <div style={{ fontSize: 11, color: colors.text.muted }}>Total Employees</div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{totalEmployees}</div>
-            </div>
-            <div style={{ padding: 10, borderRadius: 10, background: colors.background.secondary }}>
-              <div style={{ fontSize: 11, color: colors.text.muted }}>Departments in View</div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{departmentCount}</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-              }}
-              placeholder="Search by code, name, email..."
-              style={{
-                minWidth: 260,
-                flex: '1 1 280px',
-                padding: '9px 12px',
-                borderRadius: 10,
-                border: `1px solid ${colors.border.input}`,
-                backgroundColor: colors.background.input,
-                color: colors.text.primary,
-                fontSize: 13,
-                outline: 'none',
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-            <button
-              type="button"
-              onClick={() => setSelectedDepartment('ALL')}
-              style={{
-                padding: '6px 10px',
-                borderRadius: 999,
-                border: `1px solid ${selectedDepartment === 'ALL' ? colors.primary[500] : colors.border.default}`,
-                backgroundColor:
-                  selectedDepartment === 'ALL' ? colors.background.secondary : colors.background.card,
-                color: colors.text.primary,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              All Departments
-            </button>
-            {visibleRowsByDepartment.map((group) => (
-              <button
-                key={`chip-${group.departmentName}`}
-                type="button"
-                onClick={() => setSelectedDepartment(group.departmentName)}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 999,
-                  border: `1px solid ${
-                    selectedDepartment === group.departmentName
-                      ? colors.primary[500]
-                      : colors.border.default
-                  }`,
-                  backgroundColor:
-                    selectedDepartment === group.departmentName
-                      ? colors.background.secondary
-                      : colors.background.card,
-                  color: colors.text.primary,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                {group.departmentName} ({group.employees.length})
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <button
-              type="button"
-              onClick={() => setAllDepartmentsCollapsed(false)}
-              style={{
-                padding: '7px 12px',
-                borderRadius: 8,
-                border: `1px solid ${colors.border.default}`,
-                backgroundColor: colors.background.secondary,
-                color: colors.text.primary,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Expand All
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllDepartmentsCollapsed(true)}
-              style={{
-                padding: '7px 12px',
-                borderRadius: 8,
-                border: `1px solid ${colors.border.default}`,
-                backgroundColor: colors.background.secondary,
-                color: colors.text.primary,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Collapse All
-            </button>
-          </div>
-
-          <div style={{ width: '100%', overflowX: 'auto' }}>
-            <table
-              style={{
-                width: '100%',
-                minWidth: 1080,
-                borderCollapse: 'collapse',
-                borderRadius: 10,
-                overflow: 'hidden',
-                border: `1px solid ${colors.border.table}`,
-              }}
-            >
-              <thead>
+            <thead>
+              <tr>
+                {[
+                  'Emp Code',
+                  'Name',
+                  'Department',
+                  'Designation',
+                  'Shift',
+                  'Salary',
+                  'Saturday Group',
+                  'Email',
+                ].map((heading) => (
+                  <th
+                    key={heading}
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: colors.text?.table?.header ?? colors.text?.primary,
+                      backgroundColor: colors.background?.table?.header ?? colors.background?.secondary,
+                      borderBottom: `1px solid ${colors.border?.table ?? colors.border?.default}`,
+                    }}
+                  >
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
                 <tr>
-                  {[
-                    'Emp Code',
-                    'Name',
-                    'Department',
-                    'Designation',
-                    'Shift',
-                    'Salary',
-                    'Saturday Group',
-                    'Email',
-                  ].map((heading) => (
-                    <th
-                      key={heading}
+                  <td
+                    colSpan={8}
+                    style={{
+                      padding: 18,
+                      textAlign: 'center',
+                      fontSize: 13,
+                      color: colors.text?.muted,
+                      backgroundColor: colors.background?.table?.row,
+                    }}
+                  >
+                    Loading directory...
+                  </td>
+                </tr>
+              ) : visibleRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    style={{
+                      padding: 18,
+                      textAlign: 'center',
+                      fontSize: 13,
+                      color: colors.text?.muted,
+                      backgroundColor: colors.background?.table?.row,
+                    }}
+                  >
+                    No employees found for this search.
+                  </td>
+                </tr>
+              ) : (
+                filteredDepartmentGroups.flatMap((group) => [
+                  <tr key={`group-${group.departmentName}`}>
+                    <td
+                      colSpan={8}
                       style={{
-                        textAlign: 'left',
                         padding: '10px 12px',
                         fontSize: 12,
                         fontWeight: 700,
-                        color: colors.text.table.header,
-                        backgroundColor: colors.background.table.header,
-                        borderBottom: `1px solid ${colors.border.table}`,
+                        color: colors.text?.primary,
+                        backgroundColor: colors.background?.table?.header,
+                        borderTop: `1px solid ${colors.border?.table ?? colors.border?.default}`,
+                        borderBottom: `1px solid ${colors.border?.table ?? colors.border?.default}`,
                       }}
                     >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      style={{
-                        padding: 18,
-                        textAlign: 'center',
-                        fontSize: 13,
-                        color: colors.text.muted,
-                        backgroundColor: colors.background.table.row,
-                      }}
-                    >
-                      Loading directory...
-                    </td>
-                  </tr>
-                ) : visibleRows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      style={{
-                        padding: 18,
-                        textAlign: 'center',
-                        fontSize: 13,
-                        color: colors.text.muted,
-                        backgroundColor: colors.background.table.row,
-                      }}
-                    >
-                      No employees found for this search.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDepartmentGroups.flatMap((group) => [
-                    <tr key={`group-${group.departmentName}`}>
-                      <td
-                        colSpan={8}
+                      <button
+                        type="button"
+                        onClick={() => toggleDepartment(group.departmentName)}
                         style={{
-                          padding: '10px 12px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: colors.text?.primary,
                           fontSize: 12,
                           fontWeight: 700,
-                          color: colors.text.primary,
-                          backgroundColor: colors.background.table.header,
-                          borderTop: `1px solid ${colors.border.table}`,
-                          borderBottom: `1px solid ${colors.border.table}`,
+                          cursor: 'pointer',
+                          padding: 0,
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => toggleDepartment(group.departmentName)}
+                        {collapsedDepartments[group.departmentName] ? '▶' : '▼'} {group.departmentName} (
+                        {group.employees.length})
+                      </button>
+                    </td>
+                  </tr>,
+                  ...(collapsedDepartments[group.departmentName]
+                    ? []
+                    : group.employees.map((employee, index) => {
+                        const rowBase =
+                          index % 2 === 0
+                            ? colors.background?.table?.row
+                            : colors.background?.table?.rowEven;
+                        const rowHover = colors.background?.table?.rowHover;
+                        const cellStyle = {
+                          padding: '9px 12px',
+                          fontSize: 13,
+                          color: colors.text?.primary,
+                          backgroundColor: rowBase,
+                        };
+
+                        return (
+                        <tr
+                          key={employee._id || `${group.departmentName}-${employee.empCode}-${index}`}
+                          className="hr-employee-row"
                           style={{
-                            border: 'none',
-                            background: 'transparent',
-                            color: colors.text.primary,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            padding: 0,
+                            backgroundColor: rowBase,
+                            transition: 'background-color 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = rowHover;
+                            e.currentTarget.querySelectorAll('td').forEach((td) => {
+                              td.style.backgroundColor = rowHover;
+                            });
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = rowBase;
+                            e.currentTarget.querySelectorAll('td').forEach((td) => {
+                              td.style.backgroundColor = rowBase;
+                            });
                           }}
                         >
-                          {collapsedDepartments[group.departmentName] ? '▶' : '▼'} {group.departmentName} (
-                          {group.employees.length})
-                        </button>
-                      </td>
-                    </tr>,
-                    ...(collapsedDepartments[group.departmentName]
-                      ? []
-                      : group.employees.map((employee, index) => (
-                          <tr
-                            key={employee._id || `${group.departmentName}-${employee.empCode}-${index}`}
-                            style={{
-                              backgroundColor:
-                                index % 2 === 0
-                                  ? colors.background.table.row
-                                  : colors.background.table.rowEven,
-                            }}
-                          >
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.empCode || '-'}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 600 }}>
-                              {employee.name || '-'}
-                            </td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.department || '-'}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.designation || '-'}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.shift || '-'}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>
-                              {employee.monthlySalary != null ? Number(employee.monthlySalary).toLocaleString() : '-'}
-                            </td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.saturdayGroup || '-'}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{employee.email || '-'}</td>
-                          </tr>
-                        ))),
-                  ])
-                )}
-              </tbody>
-            </table>
-          </div>
+                          <td style={cellStyle}>{employee.empCode || '-'}</td>
+                          <td style={{ ...cellStyle, fontWeight: 600 }}>{employee.name || '-'}</td>
+                          <td style={cellStyle}>{employee.department || '-'}</td>
+                          <td style={cellStyle}>{employee.designation || '-'}</td>
+                          <td style={cellStyle}>{employee.shift || '-'}</td>
+                          <td style={cellStyle}>
+                            {employee.monthlySalary != null ? Number(employee.monthlySalary).toLocaleString() : '-'}
+                          </td>
+                          <td style={cellStyle}>{employee.saturdayGroup || '-'}</td>
+                          <td style={cellStyle}>{employee.email || '-'}</td>
+                        </tr>
+                        );
+                      })),
+                ])
+              )}
+            </tbody>
+          </table>
         </div>
-      </div>
-    </div>
+      </GlassCard>
+    </HrPageShell>
   );
 }

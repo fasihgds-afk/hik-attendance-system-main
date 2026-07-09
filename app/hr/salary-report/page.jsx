@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -271,6 +272,7 @@ export default function HrSalaryReportPage() {
   const { colors, theme } = useTheme();
   const router = useRouter();
   const printRef = useRef(null);
+  const { canExport } = usePermissions('salaryReport');
 
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
     inactivityTime: 30 * 60 * 1000,
@@ -657,6 +659,19 @@ export default function HrSalaryReportPage() {
 
   const hasReport = reportRows.length > 0;
 
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/employees')} className="salary-button" style={glossPill('neutral')}>
+        HR Home
+      </button>
+      <button type="button" onClick={handleLogout} className="salary-button" style={glossPill('rose')}>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
     <>
       {showWarning && (
@@ -667,89 +682,13 @@ export default function HrSalaryReportPage() {
         />
       )}
 
-      <div
-        style={{
-          minHeight: '100vh',
-          padding: '20px 24px',
-          background: colors.background.page,
-          color: colors.text.primary,
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        }}
+      <HrPageShell
+        subtitle="Net salary paid (after deductions) · gross salary column · raise highlights"
+        actions={headerActions}
       >
-        {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 24,
-            padding: '16px 20px',
-            borderRadius: 16,
-            background: colors.gradient.primary,
-            border: `1px solid ${colors.border.default}`,
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: '#ffffff', margin: 0 }}>
-              Salary Report
-            </h1>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '4px 0 0' }}>
-              Net salary paid (after deductions) · gross salary column · raise highlights
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <ThemeToggle />
-            <button
-              type="button"
-              onClick={() => router.push('/hr/employees')}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.3)',
-                background: 'rgba(255,255,255,0.1)',
-                color: '#ffffff',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              HR Home
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.3)',
-                background: 'rgba(255,255,255,0.1)',
-                color: '#ffffff',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-
         {/* Filters */}
-        <div
-          style={{
-            padding: '16px 18px',
-            borderRadius: 14,
-            background: colors.background.card,
-            border: `1px solid ${colors.border.default}`,
-            marginBottom: 20,
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 16,
-            alignItems: 'flex-end',
-          }}
-        >
+        <GlassCard style={{ marginTop: 18, marginBottom: 20 }} padding="16px 18px">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, color: colors.text.secondary, marginBottom: 6 }}>
               Year
@@ -931,7 +870,7 @@ export default function HrSalaryReportPage() {
             {loadingReport ? 'Loading…' : 'View Report'}
           </button>
 
-          {hasReport && (
+          {hasReport && canExport && (
             <>
               <button
                 type="button"
@@ -967,17 +906,11 @@ export default function HrSalaryReportPage() {
               </button>
             </>
           )}
-        </div>
+          </div>
+        </GlassCard>
 
         {/* Report table */}
-        <div
-          style={{
-            borderRadius: 14,
-            border: `1px solid ${colors.border.default}`,
-            background: colors.background.card,
-            overflow: 'hidden',
-          }}
-        >
+        <GlassCard padding={0} style={{ overflow: 'hidden' }}>
           {!hasReport && !loadingReport && (
             <div style={{ padding: 40, textAlign: 'center', color: colors.text.secondary, fontSize: 14 }}>
               Select filters and click <strong>View Report</strong> to see net salary.
@@ -1037,7 +970,7 @@ export default function HrSalaryReportPage() {
           )}
 
           {hasReport && (
-            <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 320px)' }}>
+            <div style={{ overflowX: 'auto', maxHeight: 'calc(100vh - 320px)' }} className="hr-table-scroll table-responsive">
               <div
                 ref={printRef}
                 style={{
@@ -1187,7 +1120,7 @@ export default function HrSalaryReportPage() {
               </div>
             </div>
           )}
-        </div>
+        </GlassCard>
 
         {toast.text && (
           <div
@@ -1208,7 +1141,7 @@ export default function HrSalaryReportPage() {
             {toast.text}
           </div>
         )}
-      </div>
+      </HrPageShell>
     </>
   );
 }

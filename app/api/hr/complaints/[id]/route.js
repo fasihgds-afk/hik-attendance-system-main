@@ -3,7 +3,7 @@
 import { connectDB } from '../../../../../lib/db';
 import Complaint from '../../../../../models/Complaint';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ const VALID_STATUSES = ['open', 'in_progress', 'resolved', 'closed'];
 // GET /api/hr/complaints/[id]
 export async function GET(req, { params }) {
   try {
-    await requireHR();
+    await requirePermission('complaints', 'view');
     await connectDB();
     const { id } = await params;
     if (!id) throw new ValidationError('Complaint ID is required');
@@ -32,7 +32,7 @@ export async function GET(req, { params }) {
 // PATCH /api/hr/complaints/[id] – update status, hrResponse, internalNote
 export async function PATCH(req, { params }) {
   try {
-    await requireHR();
+    await requirePermission('complaints', 'update');
     await connectDB();
     const { id } = await params;
     if (!id) throw new ValidationError('Complaint ID is required');

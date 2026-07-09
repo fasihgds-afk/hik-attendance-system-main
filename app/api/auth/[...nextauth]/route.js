@@ -7,6 +7,7 @@ import Employee from "../../../../models/Employee";
 import { isPortalEnabled } from "../../../../lib/auth/portalAccess";
 import { isEmployeeActive } from "../../../../lib/employees/activeFilter";
 import bcrypt from "bcryptjs";
+import { resolvePermissions } from "../../../../lib/auth/permissions";
 
 export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -47,12 +48,16 @@ export const authOptions = {
             // Optimize: Use lean() and select only needed fields for faster query
             // Email is indexed, so this should be fast
             const user = await User.findOne({ email })
-              .select('_id email passwordHash role employeeEmpCode name')
+              .select('_id email passwordHash role employeeEmpCode name permissions isActive')
               .lean()
               .maxTimeMS(2000); // Reduced to 2 seconds for faster failure
               
             if (!user || !["HR", "ADMIN"].includes(user.role)) {
               // NextAuth HR/ADMIN user not found or invalid role
+              return null;
+            }
+
+            if (user.isActive === false) {
               return null;
             }
 
@@ -74,6 +79,7 @@ export const authOptions = {
               email: user.email,
               role: user.role, // "HR" or "ADMIN"
               empCode: user.employeeEmpCode || null,
+              permissions: resolvePermissions(user),
             };
           } catch (err) {
             console.error('[NextAuth] HR login error:', err);
@@ -137,6 +143,9 @@ export const authOptions = {
         token.designation = user.designation ?? token.designation;
         token.shift = user.shift ?? token.shift;
         token.allowWebClockIn = user.allowWebClockIn ?? token.allowWebClockIn;
+        if (user.permissions) {
+          token.permissions = user.permissions;
+        }
       }
       return token;
     },
@@ -149,6 +158,9 @@ export const authOptions = {
         session.user.designation = token.designation;
         session.user.shift = token.shift;
         session.user.allowWebClockIn = !!token.allowWebClockIn;
+        if (token.permissions) {
+          session.user.permissions = token.permissions;
+        }
       }
       return session;
     },

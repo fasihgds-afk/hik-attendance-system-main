@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { calculateAwayDeductionDays, calculateAwayDeductionAmount } from '@/lib/calculations/awayDeduction';
+import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
 
 // Styles will be generated dynamically based on theme
 
@@ -321,6 +322,8 @@ function isUpcomingDayClient(dateStr, apiMonth) {
 export default function MonthlyHrPage() {
   // ALL HOOKS MUST BE CALLED FIRST, IN THE SAME ORDER
   const { colors, theme } = useTheme(); // Theme colors
+  const { canUpdate, canExport } = usePermissions('monthlyAttendance');
+  const canExportBankDetails = useModulePermission('bankDetails', 'export');
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return now.toISOString().slice(0, 7); // YYYY-MM
@@ -384,6 +387,12 @@ export default function MonthlyHrPage() {
   const [exportIncludeDays, setExportIncludeDays] = useState(true);
   const [exportIncludeBankDetails, setExportIncludeBankDetails] = useState(false);
   const [showExportSettings, setShowExportSettings] = useState(false);
+
+  useEffect(() => {
+    if (!canExportBankDetails && exportIncludeBankDetails) {
+      setExportIncludeBankDetails(false);
+    }
+  }, [canExportBankDetails, exportIncludeBankDetails]);
 
   // Generate theme-aware table styles AFTER all hooks
   const headerCell = {
@@ -1154,17 +1163,192 @@ export default function MonthlyHrPage() {
   }
   // ================== END EXCEL EXPORT =========================
 
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions className="monthly-header-actions">
+      {canExport && (
+        <div className="hr-header-actions__group hr-header-actions__group--export">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={loading || !filteredEmployees.length}
+            className="monthly-button"
+            style={{
+              ...glossPill('neutral'),
+              cursor: loading || !filteredEmployees.length ? 'not-allowed' : 'pointer',
+              opacity: loading || !filteredEmployees.length ? 0.5 : 1,
+            }}
+          >
+            ⬇ Export to Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowExportSettings((prev) => !prev)}
+            className="monthly-button monthly-export-gear"
+            style={{
+              ...glossPill('warm'),
+              width: 40,
+              minWidth: 40,
+              padding: 0,
+              justifyContent: 'center',
+            }}
+            title="Export settings"
+          >
+            ⚙
+          </button>
+
+          {showExportSettings && (
+            <div
+              className="monthly-export-dropdown"
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 'calc(100% + 6px)',
+                padding: '10px 12px',
+                borderRadius: 12,
+                backgroundColor: colors.background.secondary,
+                color: colors.text.primary,
+                border: `1px solid ${colors.border.default}`,
+                boxShadow: theme === 'dark'
+                  ? '0 18px 40px rgba(0,0,0,0.55)'
+                  : '0 12px 32px rgba(10,44,84,0.18)',
+                minWidth: 260,
+                fontSize: 11.5,
+                zIndex: 30,
+              }}
+            >
+            <div
+              style={{
+                marginBottom: 6,
+                fontWeight: 600,
+                fontSize: 12,
+              }}
+            >
+              Export fields
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                maxHeight: 180,
+                overflowY: 'auto',
+              }}
+            >
+              {exportColumns.map((col) => (
+                <label
+                  key={col.key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={col.enabled}
+                    onChange={() => toggleExportColumn(col.key)}
+                  />
+                  <span>{col.label}</span>
+                </label>
+              ))}
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                paddingTop: 6,
+                borderTop: `1px solid ${colors.border.default}`,
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={exportIncludeDays}
+                  onChange={(e) => setExportIncludeDays(e.target.checked)}
+                />
+                <span>Include per-day columns</span>
+              </label>
+              {canExportBankDetails && (
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                    marginTop: 6,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={exportIncludeBankDetails}
+                    onChange={(e) => setExportIncludeBankDetails(e.target.checked)}
+                  />
+                  <span>Include bank details</span>
+                </label>
+              )}
+            </div>
+          </div>
+          )}
+        </div>
+      )}
+
+      {canUpdate && (
+        <button
+          type="button"
+          onClick={openBulkModal}
+          disabled={loading}
+          title="Mark Eid / public holidays for all employees at once"
+          className="monthly-button"
+          style={{
+            ...glossPill('warm'),
+            cursor: loading ? 'default' : 'pointer',
+          }}
+        >
+          🕌 Mark Eid / Holidays
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={loadMonth}
+        disabled={loading}
+        className="monthly-button"
+        style={{
+          ...glossPill('neutral'),
+          cursor: loading ? 'default' : 'pointer',
+        }}
+      >
+        {loading && (
+          <span
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '999px',
+              border: '2px solid rgba(88,211,77,0.3)',
+              borderTopColor: '#58D34D',
+              animation: 'spin 0.7s linear infinite',
+            }}
+          />
+        )}
+        {loading ? 'Refreshing…' : 'Reload Month'}
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
-    <div
+    <HrPageShell
       className="monthly-container"
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: colors.gradient.overlay,
-        color: colors.text.primary,
-        fontFamily:
-          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
+      subtitle="Monthly Attendance · Violation Policy & Payroll Impact"
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -1185,32 +1369,49 @@ export default function MonthlyHrPage() {
             from { opacity: 0; transform: translateY(8px) scale(0.96); }
             to { opacity: 1; transform: translateY(0) scale(1); }
           }
-          tr.row-hover:hover td {
+          [data-theme="dark"] tr.row-hover:hover td {
+            background-color: var(--theme-row-hover, rgba(20, 42, 72, 0.95)) !important;
+          }
+          [data-theme="light"] tr.row-hover:hover td {
             background-color: #e5efff !important;
           }
+
+          /* Monthly header — single aligned toolbar row on desktop */
+          @media (min-width: 1024px) {
+            .monthly-container .hr-global-header__toolbar {
+              flex-wrap: nowrap !important;
+              align-items: center !important;
+              max-width: none !important;
+            }
+            .monthly-container .hr-header-actions.monthly-header-actions {
+              flex-wrap: nowrap !important;
+              justify-content: flex-end !important;
+              gap: 8px !important;
+            }
+            .monthly-container .hr-header-actions__group {
+              flex-shrink: 0;
+            }
+            .monthly-container .hr-header-theme {
+              flex-shrink: 0;
+              margin-left: 4px;
+            }
+          }
+
           @media (max-width: 768px) {
             .monthly-container {
               padding: 16px !important;
             }
-            .monthly-header {
-              flex-direction: column !important;
-              gap: 16px !important;
-              align-items: flex-start !important;
-            }
-            .monthly-header-logo {
-              width: 60px !important;
-              height: 60px !important;
-            }
-            .monthly-header-title {
-              font-size: 18px !important;
-            }
-            .monthly-header-buttons {
+            .monthly-header-actions {
               flex-direction: column !important;
               width: 100% !important;
               gap: 8px !important;
             }
-            .monthly-header-buttons button {
+            .monthly-header-actions button,
+            .monthly-header-actions .hr-header-actions__group {
               width: 100% !important;
+            }
+            .monthly-header-actions .hr-header-actions__group {
+              flex-direction: column !important;
             }
             .monthly-controls {
               flex-direction: column !important;
@@ -1266,9 +1467,6 @@ export default function MonthlyHrPage() {
             .monthly-container {
               padding: 12px !important;
             }
-            .monthly-header-title {
-              font-size: 16px !important;
-            }
             .monthly-table {
               min-width: 1000px !important;
               font-size: 10px !important;
@@ -1285,22 +1483,8 @@ export default function MonthlyHrPage() {
             .monthly-container {
               padding: 20px 24px !important;
             }
-            .monthly-header {
-              padding: 14px 18px !important;
-            }
-            .monthly-header-logo {
-              width: 75px !important;
-              height: 75px !important;
-            }
-            .monthly-header-title {
-              font-size: 20px !important;
-            }
-            .monthly-header-buttons {
-              flex-wrap: wrap !important;
-              gap: 8px !important;
-            }
-            .monthly-header-buttons button {
-              padding: 8px 16px !important;
+            .monthly-header-actions button {
+              padding: 8px 14px !important;
               font-size: 12px !important;
             }
             .monthly-table {
@@ -1351,13 +1535,6 @@ export default function MonthlyHrPage() {
             .monthly-container {
               padding: 28px 32px !important;
             }
-            .monthly-header-title {
-              font-size: 24px !important;
-            }
-            .monthly-header-logo {
-              width: 100px !important;
-              height: 100px !important;
-            }
             .monthly-table {
               font-size: 13px !important;
             }
@@ -1371,310 +1548,11 @@ export default function MonthlyHrPage() {
         }}
       />
 
-      <div className="container-responsive" style={{ margin: '0 auto', width: '100%' }}>
-        {/* Top gradient header */}
-        <div
-          className="monthly-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 20,
-            padding: '16px 22px',
-            borderRadius: 18,
-            background: colors.gradient.primary,
-            color: '#f9fafb',
-            boxShadow: '0 16px 38px rgba(255, 255, 255, 0.09)',
-            border: `1px solid ${colors.border.hover}`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div
-              className="monthly-header-logo"
-              style={{
-                width: 100,
-                height: 100,
-                borderRadius: '999px',
-                overflow: 'hidden',
-                backgroundColor: 'rgba(15,23,42,0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
-              />
-            </div>
-            <div>
-              <div
-                className="monthly-header-title"
-                style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: 0.4,
-                }}
-              >
-                Global Digital Solutions
-              </div>
-              <div
-                style={{
-                  fontSize: 12.5,
-                  opacity: 0.9,
-                }}
-              >
-                Monthly Attendance · Violation Policy & Payroll Impact
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="monthly-header-buttons"
-            style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'center',
-            }}
-          >
-            <div style={{ position: 'relative', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <ThemeToggle />
-              <button
-                onClick={handleExport}
-                disabled={loading || !filteredEmployees.length}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(255, 255, 255, 0.25)',
-                  background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
-                  color: colors.primary[600],
-                  fontWeight: 600,
-                  fontSize: 12.5,
-                  cursor:
-                    loading || !filteredEmployees.length
-                      ? 'not-allowed'
-                      : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  opacity: loading || !filteredEmployees.length ? 0.5 : 1,
-                  transition: 'all 0.2s',
-                  boxShadow: '0 4px 12px rgba(255, 255, 255, 0.2)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading && filteredEmployees.length) {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(255, 255, 255, 0.3)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 255, 255, 0.2)';
-                }}
-              >
-                ⬇ Export to Excel
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowExportSettings((prev) => !prev)}
-                style={{
-                  width: 32,
-                  borderRadius: 999,
-                  border: '1px solid rgba(88,211,77,0.4)', // Logo green border
-                  background: 'linear-gradient(135deg, #0c225c, #58D34D)', // Logo green-blue gradient
-                  color: '#ffffff',
-                  fontSize: 14,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.1)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(88,211,77,0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-                title="Export settings"
-              >
-                ⚙
-              </button>
-
-              {showExportSettings && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '110%',
-                    marginTop: 6,
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    backgroundColor: '#0f172a',
-                    color: '#e5e7eb',
-                    boxShadow: '0 18px 40px rgba(15,23,42,0.7)',
-                    minWidth: 260,
-                    fontSize: 11.5,
-                    zIndex: 30,
-                  }}
-                >
-                  <div
-                    style={{
-                      marginBottom: 6,
-                      fontWeight: 600,
-                      fontSize: 12,
-                    }}
-                  >
-                    Export fields
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 4,
-                      maxHeight: 180,
-                      overflowY: 'auto',
-                    }}
-                  >
-                    {exportColumns.map((col) => (
-                      <label
-                        key={col.key}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={col.enabled}
-                          onChange={() => toggleExportColumn(col.key)}
-                        />
-                        <span>{col.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 8,
-                      paddingTop: 6,
-                      borderTop: '1px solid rgba(148,163,184,0.6)',
-                    }}
-                  >
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={exportIncludeDays}
-                        onChange={(e) => setExportIncludeDays(e.target.checked)}
-                      />
-                      <span>Include per-day columns</span>
-                    </label>
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        cursor: 'pointer',
-                        marginTop: 6,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={exportIncludeBankDetails}
-                        onChange={(e) => setExportIncludeBankDetails(e.target.checked)}
-                      />
-                      <span>Include bank details (HR only)</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={openBulkModal}
-              disabled={loading}
-              title="Mark Eid / public holidays for all employees at once"
-              style={{
-                padding: '9px 20px',
-                borderRadius: 999,
-                border: 'none',
-                background:
-                  'linear-gradient(135deg, #7c3aed, #2563eb, #06b6d4)',
-                color: '#ffffff',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: loading ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 14px 30px rgba(124,58,237,0.45)',
-              }}
-            >
-              🕌 Mark Eid / Holidays
-            </button>
-
-            <button
-              onClick={loadMonth}
-              disabled={loading}
-              style={{
-                padding: '9px 20px',
-                borderRadius: 999,
-                border: 'none',
-                background:
-                  'linear-gradient(135deg, #0F162A, #0c225cff, #58D34D)',
-                color: '#ffffffff',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: loading ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 14px 30px rgba(16,185,129,0.5)',
-              }}
-            >
-              {loading && (
-                <span
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: '999px',
-                    border: '2px solid rgba(88,211,77,0.3)', // Logo green
-                    borderTopColor: '#58D34D', // Logo green
-                    animation: 'spin 0.7s linear infinite',
-                  }}
-                />
-              )}
-              {loading ? 'Refreshing…' : 'Reload Month'}
-            </button>
-          </div>
-        </div>
-
-        {/* Main card */}
-        <div
-          style={{
-            borderRadius: 16,
-            background: colors.gradient.card,
-            border: `1px solid ${colors.border.default}`,
-            boxShadow: colors.card.shadow,
-            padding: '24px 28px 28px',
-          }}
-        >
+        <GlassCard style={{ marginTop: 18 }} padding="24px 28px 28px">
           {/* Controls + summary */}
           <div style={{ marginBottom: 14 }}>
             <div
+              className="monthly-controls hr-controls-row"
               style={{
                 display: 'flex',
                 flexWrap: 'wrap',
@@ -1810,9 +1688,9 @@ export default function MonthlyHrPage() {
                     style={{
                       padding: '7px 10px 7px 28px',
                       borderRadius: 8,
-                      border: '1px solid #cbd5f5',
-                      backgroundColor: '#ffffff',
-                      color: '#0f172a',
+                      border: `1px solid ${colors.border.input}`,
+                      backgroundColor: colors.background.input,
+                      color: colors.text.primary,
                       fontSize: 13,
                       outline: 'none',
                       width: '100%',
@@ -1912,7 +1790,7 @@ export default function MonthlyHrPage() {
 
           {/* Table wrapper */}
           <div
-            className="monthly-table-wrapper"
+            className="monthly-table-wrapper hr-table-scroll table-responsive"
             style={{
               maxHeight: 'calc(100vh - 320px)',
               overflowX: 'auto',
@@ -2412,8 +2290,7 @@ export default function MonthlyHrPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
+        </GlassCard>
 
       {/* Toast */}
       {toast.text && (
@@ -2502,7 +2379,7 @@ export default function MonthlyHrPage() {
                       fontWeight: 700,
                     }}
                   >
-                    Edit Attendance
+                    {canUpdate ? 'Edit Attendance' : 'View Attendance'}
                   </h3>
                   <p
                     style={{
@@ -2513,6 +2390,11 @@ export default function MonthlyHrPage() {
                     {selected.emp.empCode} – {selected.emp.name} –{' '}
                     {selected.day.date} (Shift {selected.emp.shift || '-'})
                   </p>
+                  {!canUpdate && (
+                    <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+                      View only — you cannot change this module.
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={closeModal}
@@ -2528,6 +2410,10 @@ export default function MonthlyHrPage() {
                 </button>
               </div>
 
+              <fieldset
+                disabled={!canUpdate}
+                style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}
+              >
               <div
                 style={{
                   display: 'flex',
@@ -2849,6 +2735,7 @@ export default function MonthlyHrPage() {
                 )}
               </div>
 
+              </fieldset>
               <div
                 style={{
                   display: 'flex',
@@ -2868,25 +2755,27 @@ export default function MonthlyHrPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  Cancel
+                  {canUpdate ? 'Cancel' : 'Close'}
                 </button>
-                <button
-                  onClick={handleSaveDay}
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: 999,
-                    border: 'none',
-                    background:
-                      'linear-gradient(135deg,#2563eb,#38bdf8,#22c55e)',
-                    color: '#f9fafb',
-                    fontWeight: 700,
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    boxShadow: '0 10px 24px rgba(37,99,235,0.45)',
-                  }}
-                >
-                  Save Changes
-                </button>
+                {canUpdate && (
+                  <button
+                    onClick={handleSaveDay}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: 999,
+                      border: 'none',
+                      background:
+                        'linear-gradient(135deg,#2563eb,#38bdf8,#22c55e)',
+                      color: '#f9fafb',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      boxShadow: '0 10px 24px rgba(37,99,235,0.45)',
+                    }}
+                  >
+                    Save Changes
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2894,7 +2783,7 @@ export default function MonthlyHrPage() {
       )}
 
       {/* Bulk Holiday Modal (e.g. Eid) – applies to ALL employees */}
-      {bulkOpen && (
+      {canUpdate && bulkOpen && (
         <div
           style={{
             position: 'fixed',
@@ -3134,6 +3023,6 @@ export default function MonthlyHrPage() {
           </div>
         </div>
       )}
-    </div>
+    </HrPageShell>
   );
 }

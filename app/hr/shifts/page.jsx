@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { resolveShiftGracePeriods } from '@/lib/shift/gracePeriods';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export default function ShiftManagementPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { canCreate, canUpdate, canDelete } = usePermissions('shifts');
   const { colors, theme } = useTheme();
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -353,15 +354,29 @@ export default function ShiftManagementPage() {
     }
   }
 
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions>
+      {canCreate && (
+        <button type="button" onClick={openNewModal} className="shift-button" style={glossPill('neutral')}>
+          <span style={{ fontSize: 18 }}>+</span>
+          Create New Shift
+        </button>
+      )}
+      <button type="button" onClick={handleLogout} className="shift-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: colors.gradient.overlay,
-        color: colors.text.primary,
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
+    <HrPageShell
+      subtitle="Shift Management · Define work schedules and timings"
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -475,171 +490,6 @@ export default function ShiftManagementPage() {
         `,
         }}
       />
-      {/* Enhanced Professional Header */}
-      <div className="container-responsive" style={{ margin: '0 auto 24px auto', width: '100%' }}>
-        <div
-          className="shift-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 28px',
-            borderRadius: 20,
-            background: colors.gradient.header,
-            color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-            boxShadow: theme === 'dark' 
-              ? "0 20px 50px rgba(19, 168, 229, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3)"
-              : "0 20px 50px rgba(59, 130, 246, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)",
-            border: `1px solid ${colors.border.default}`,
-            position: 'relative',
-            overflow: 'hidden',
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          {/* Background Pattern */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-              pointerEvents: 'none',
-            }}
-          />
-          
-          {/* Left: logo + title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1 }}>
-            <div
-              className="shift-header-logo"
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 16,
-                overflow: 'hidden',
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(59, 130, 246, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-                border: `2px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : colors.border.default}`,
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-            <div>
-              <div
-                className="shift-header-title"
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  letterSpacing: 0.5,
-                  marginBottom: 4,
-                  textShadow: theme === 'dark' ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
-                }}
-              >
-                Global Digital Solutions
-              </div>
-              <div
-                className="shift-header-subtitle"
-                style={{
-                  fontSize: 13,
-                  opacity: 0.95,
-                  fontWeight: 500,
-                }}
-              >
-                Shift Management · Create & Configure Employee Shifts
-              </div>
-            </div>
-          </div>
-
-          {/* Right: actions */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            <ThemeToggle />
-            <button
-              className="shift-button"
-              onClick={openNewModal}
-              style={{
-                padding: '9px 18px',
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.border.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.background.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <span style={{ fontSize: 18 }}>+</span>
-              Create New Shift
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.background.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Auto Logout Warning */}
       {showWarning && (
@@ -651,20 +501,7 @@ export default function ShiftManagementPage() {
         />
       )}
 
-      {/* Main Card */}
-      <div
-        style={{
-          maxWidth: '100%',
-          margin: 0,
-          borderRadius: 16,
-          background: colors.background.card,
-          boxShadow: theme === 'dark' 
-            ? '0 20px 60px rgba(15,23,42,0.9)'
-            : '0 20px 60px rgba(0,0,0,0.08)',
-          padding: '16px 20px 20px',
-          border: `1px solid ${colors.border.default}`,
-        }}
-      >
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
         {toast.text && (
           <div
             style={{
@@ -684,66 +521,70 @@ export default function ShiftManagementPage() {
         )}
 
         <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <button
-            onClick={handleActivateAll}
-            disabled={loading}
-            style={{
-              padding: '10px 20px',
-              background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 12,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontSize: 14,
-              fontWeight: 600,
-              boxShadow: `0 8px 20px ${colors.primary[500]}40`,
-              opacity: loading ? 0.6 : 1,
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) {
+          {canUpdate && (
+            <button
+              onClick={handleActivateAll}
+              disabled={loading}
+              style={{
+                padding: '10px 20px',
+                background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 12,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: 14,
+                fontWeight: 600,
+                boxShadow: `0 8px 20px ${colors.primary[500]}40`,
+                opacity: loading ? 0.6 : 1,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = `0 10px 24px ${colors.primary[500]}50`;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = `0 8px 20px ${colors.primary[500]}40`;
+                }
+              }}
+            >
+              ✓ Activate All Shifts
+            </button>
+          )}
+          {canCreate && (
+            <button
+              onClick={openNewModal}
+              style={{
+                padding: '10px 20px',
+                background: `linear-gradient(135deg, ${colors.success}, ${colors.secondary[600]})`,
+                color: theme === 'dark' ? '#ffffff' : colors.secondary[900],
+                border: 'none',
+                borderRadius: 12,
+                cursor: 'pointer',
+                fontSize: 14,
+                fontWeight: 600,
+                boxShadow: `0 8px 20px ${colors.success}40`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = `0 10px 24px ${colors.primary[500]}50`;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!loading) {
+                e.currentTarget.style.boxShadow = `0 10px 24px ${colors.success}50`;
+              }}
+              onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = `0 8px 20px ${colors.primary[500]}40`;
-              }
-            }}
-          >
-            ✓ Activate All Shifts
-          </button>
-          <button
-            onClick={openNewModal}
-            style={{
-              padding: '10px 20px',
-              background: `linear-gradient(135deg, ${colors.success}, ${colors.secondary[600]})`,
-              color: theme === 'dark' ? '#ffffff' : colors.secondary[900],
-              border: 'none',
-              borderRadius: 12,
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: 600,
-              boxShadow: `0 8px 20px ${colors.success}40`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = `0 10px 24px ${colors.success}50`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = `0 8px 20px ${colors.success}40`;
-            }}
-          >
-            <span style={{ fontSize: 18 }}>+</span>
-            Create New Shift
-          </button>
+                e.currentTarget.style.boxShadow = `0 8px 20px ${colors.success}40`;
+              }}
+            >
+              <span style={{ fontSize: 18 }}>+</span>
+              Create New Shift
+            </button>
+          )}
         </div>
 
         {loading && !shifts.length ? (
@@ -752,7 +593,7 @@ export default function ShiftManagementPage() {
           </div>
         ) : (
           <div
-            className="shift-table-wrapper"
+            className="shift-table-wrapper hr-table-scroll table-responsive"
             style={{
               borderRadius: 12,
               border: `1px solid ${colors.border.default}`,
@@ -865,31 +706,33 @@ export default function ShiftManagementPage() {
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                          <button
-                            onClick={() => openEditModal(shift)}
-                            style={{
-                              padding: '6px 14px',
-                              backgroundColor: theme === 'dark' ? 'rgba(59,130,246,0.2)' : `${colors.primary[500]}20`,
-                              color: colors.primary[400] || colors.primary[500],
-                              border: `1px solid ${colors.primary[500]}40`,
-                              borderRadius: 6,
-                              cursor: 'pointer',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              transition: 'all 0.2s',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(59,130,246,0.3)' : `${colors.primary[500]}30`;
-                              e.currentTarget.style.transform = 'translateY(-1px)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(59,130,246,0.2)' : `${colors.primary[500]}20`;
-                              e.currentTarget.style.transform = 'translateY(0)';
-                            }}
-                          >
-                            Edit
-                          </button>
-                          {shift.isActive && (
+                          {canUpdate && (
+                            <button
+                              onClick={() => openEditModal(shift)}
+                              style={{
+                                padding: '6px 14px',
+                                backgroundColor: theme === 'dark' ? 'rgba(59,130,246,0.2)' : `${colors.primary[500]}20`,
+                                color: colors.primary[400] || colors.primary[500],
+                                border: `1px solid ${colors.primary[500]}40`,
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(59,130,246,0.3)' : `${colors.primary[500]}30`;
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(59,130,246,0.2)' : `${colors.primary[500]}20`;
+                                e.currentTarget.style.transform = 'translateY(0)';
+                              }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canUpdate && shift.isActive && (
                             <button
                               onClick={() => handleDeactivate(shift._id)}
                               style={{
@@ -915,30 +758,32 @@ export default function ShiftManagementPage() {
                               Deactivate
                             </button>
                           )}
-                          <button
-                            onClick={() => handlePermanentDelete(shift._id, shift.code)}
-                            style={{
-                              padding: '6px 14px',
-                              backgroundColor: theme === 'dark' ? 'rgba(239,68,68,0.2)' : `${colors.error}20`,
-                              color: colors.error,
-                              border: `1px solid ${colors.error}40`,
-                              borderRadius: 6,
-                              cursor: 'pointer',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              transition: 'all 0.2s',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(239,68,68,0.3)' : `${colors.error}30`;
-                              e.currentTarget.style.transform = 'translateY(-1px)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(239,68,68,0.2)' : `${colors.error}20`;
-                              e.currentTarget.style.transform = 'translateY(0)';
-                            }}
-                          >
-                            Delete
-                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handlePermanentDelete(shift._id, shift.code)}
+                              style={{
+                                padding: '6px 14px',
+                                backgroundColor: theme === 'dark' ? 'rgba(239,68,68,0.2)' : `${colors.error}20`,
+                                color: colors.error,
+                                border: `1px solid ${colors.error}40`,
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(239,68,68,0.3)' : `${colors.error}30`;
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(239,68,68,0.2)' : `${colors.error}20`;
+                                e.currentTarget.style.transform = 'translateY(0)';
+                              }}
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -949,10 +794,10 @@ export default function ShiftManagementPage() {
             </table>
           </div>
         )}
-      </div>
+      </GlassCard>
 
       {/* Modal */}
-      {modalOpen && (
+      {modalOpen && ((editingShift && canUpdate) || (!editingShift && canCreate)) && (
         <div
           style={{
             position: 'fixed',
@@ -1451,6 +1296,6 @@ export default function ShiftManagementPage() {
           </div>
         </div>
       )}
-    </div>
+    </HrPageShell>
   );
 }

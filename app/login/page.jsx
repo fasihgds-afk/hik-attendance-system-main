@@ -5,11 +5,18 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+import {
+  AppShell,
+  GlassCard,
+  GlassInput,
+  GlassButton,
+} from "@/components/glass";
 
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { theme, toggleTheme, colors } = useTheme();
+  const { theme, colors } = useTheme();
 
   // 🔒 Lock employee login on UI
   const employeeLoginLocked = false; // change to false if you want to re-enable employee login
@@ -133,33 +140,32 @@ function LoginInner() {
     }
   }
 
-  // ---------------- RENDER ----------------
   const isDark = theme === "dark";
-  const gradient = isDark
-    ? "linear-gradient(135deg, #0F162A, #0c225cff, #58D34D)"
-    : "linear-gradient(135deg, #3b82f6, #2563eb, #22c55e)";
+  const gdsGradient = colors.gradient.header;
+
+  const labelStyle = {
+    fontSize: 12,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: colors.text.secondary,
+    fontWeight: 600,
+  };
 
   return (
-    <div
-      className="login-page-wrapper"
-      style={{
-        minHeight: "100vh",
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 20,
-        backgroundImage: isDark ? "url('/new1.jpeg')" : "none",
-        backgroundSize: "cover",
-        backgroundPosition: "left center",
-        backgroundRepeat: "no-repeat",
-        backgroundAttachment: "fixed",
-        backgroundColor: isDark ? colors.background.primary : colors.background.secondary,
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif',
-        transition: "background-color 0.3s ease",
-      }}
-    >
+    <AppShell>
+      <div
+        className="login-page-wrapper"
+        style={{
+          minHeight: "100vh",
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
+          fontFamily:
+            '-apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif',
+        }}
+      >
       <style jsx>{`
         @media (max-width: 768px) {
           .login-page-wrapper {
@@ -235,56 +241,21 @@ function LoginInner() {
         }
       `}</style>
 
-      {/* Theme Toggle Button */}
-      <button
-        type="button"
-        onClick={toggleTheme}
-        style={{
-          position: "fixed",
-          top: 20,
-          right: 20,
-          zIndex: 1000,
-          width: 48,
-          height: 48,
-          borderRadius: "50%",
-          border: `2px solid ${colors.border.default}`,
-          backgroundColor: colors.background.card,
-          color: colors.text.primary,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          fontSize: 20,
-          boxShadow: colors.card.shadow,
-          transition: "all 0.3s ease",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "scale(1.1)";
-          e.currentTarget.style.borderColor = colors.primary[500];
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "scale(1)";
-          e.currentTarget.style.borderColor = colors.border.default;
-        }}
-        title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-      >
-        {theme === "dark" ? "☀️" : "🌙"}
-      </button>
+      <div style={{ position: "fixed", top: 20, right: 20, zIndex: 1000 }}>
+        <ThemeToggle />
+      </div>
 
       <div
         className="login-container"
         style={{ width: "80%", maxWidth: 850, marginRight: "350px" }}
       >
-        <div
+        <GlassCard
           className="login-card"
+          padding={0}
+          borderRadius={30}
           style={{
             display: "flex",
-            borderRadius: 30,
             overflow: "hidden",
-            backgroundColor: colors.background.card,
-            boxShadow: colors.card.shadow,
-            border: `1px solid ${colors.border.default}`,
-            transition: "all 0.3s ease",
           }}
         >
           {/* LEFT PANEL */}
@@ -294,7 +265,7 @@ function LoginInner() {
               flex: "1 1 50%",
               position: "relative",
               padding: "32px 36px",
-              background: gradient,
+              background: gdsGradient,
               color: "#f9fafb",
               display: "flex",
               flexDirection: "column",
@@ -309,7 +280,7 @@ function LoginInner() {
                 width: 120,
                 height: 120,
                 borderRadius: "50%",
-                background: gradient,
+                background: gdsGradient,
                 opacity: 0.9,
                 boxShadow: "0 20px 52px rgba(0, 0, 0, 0.7)",
               }}
@@ -322,7 +293,7 @@ function LoginInner() {
                 width: 95,
                 height: 95,
                 borderRadius: "50%",
-                background: gradient,
+                background: gdsGradient,
                 opacity: 0.95,
               }}
             />
@@ -334,7 +305,7 @@ function LoginInner() {
                 width: 52,
                 height: 52,
                 borderRadius: "50%",
-                background: gradient,
+                background: gdsGradient,
                 opacity: 0.95,
               }}
             />
@@ -411,10 +382,11 @@ function LoginInner() {
             style={{
               flex: "1 1 50%",
               padding: "30px 36px 28px",
-              backgroundColor: colors.background.card,
+              background: colors.glass.panelBg,
+              WebkitBackdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
+              backdropFilter: `blur(${colors.glass.blur}) saturate(${colors.glass.saturate || '130%'})`,
               display: "flex",
               flexDirection: "column",
-              transition: "background-color 0.3s ease",
             }}
           >
             <div className="login-form-title" style={{ marginBottom: 16 }}>
@@ -422,7 +394,7 @@ function LoginInner() {
                 style={{
                   fontSize: 24,
                   fontWeight: 700,
-                  color: colors.text.primary,
+                  color: colors.glass.text,
                   letterSpacing: 0.5,
                 }}
               >
@@ -454,7 +426,7 @@ function LoginInner() {
                     mode === "HR"
                       ? `${colors.primary[500]}15`
                       : "transparent",
-                  color: colors.text.primary,
+                  color: colors.glass.text,
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: "pointer",
@@ -481,7 +453,7 @@ function LoginInner() {
                     mode === "EMPLOYEE"
                       ? `${colors.primary[500]}15`
                       : "transparent",
-                  color: colors.text.primary,
+                  color: colors.glass.text,
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: employeeLoginLocked ? "not-allowed" : "pointer",
@@ -519,131 +491,58 @@ function LoginInner() {
                 style={{
                   padding: "14px 16px 16px",
                   borderRadius: 18,
-                  backgroundColor: colors.background.secondary,
-                  border: `1px solid ${colors.border.default}`,
-                  boxShadow: colors.card.shadow,
+                  border: `1px solid ${colors.glass.border}`,
+                  background: isDark
+                    ? "rgba(15, 23, 42, 0.45)"
+                    : "rgba(255, 255, 255, 0.55)",
                   display: "flex",
                   flexDirection: "column",
                   gap: 10,
-                  transition: "all 0.3s ease",
                 }}
               >
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 6 }}
                 >
-                  <label
-                    style={{
-                      fontSize: 12,
-                      letterSpacing: 1.5,
-                      textTransform: "uppercase",
-                      color: colors.text.secondary,
-                      fontWeight: 600,
-                    }}
-                  >
-                    EMAIL ADDRESS
-                  </label>
-                  <input
+                  <label style={labelStyle}>EMAIL ADDRESS</label>
+                  <GlassInput
                     type="email"
                     value={hrEmail}
                     onChange={(e) => setHrEmail(e.target.value)}
                     required
                     placeholder="hr@globaldigitalsolutions.com"
-                    style={{
-                      padding: "10px 13px",
-                      borderRadius: 12,
-                      border: `1px solid ${colors.border.input}`,
-                      backgroundColor: colors.input.background,
-                      fontSize: 14,
-                      outline: "none",
-                      color: colors.input.color,
-                      transition: "all 0.2s ease",
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = colors.primary[500];
-                      e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = colors.border.input;
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
+                    style={{ borderRadius: 12 }}
                   />
                 </div>
 
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 6 }}
                 >
-                  <label
-                    style={{
-                      fontSize: 12,
-                      letterSpacing: 1.5,
-                      textTransform: "uppercase",
-                      color: colors.text.secondary,
-                      fontWeight: 600,
-                    }}
-                  >
-                    PASSWORD
-                  </label>
-                  <input
+                  <label style={labelStyle}>PASSWORD</label>
+                  <GlassInput
                     type="password"
                     value={hrPassword}
                     onChange={(e) => setHrPassword(e.target.value)}
                     required
                     placeholder="Enter your password"
-                    style={{
-                      padding: "10px 13px",
-                      borderRadius: 12,
-                      border: `1px solid ${colors.border.input}`,
-                      backgroundColor: colors.input.background,
-                      fontSize: 14,
-                      outline: "none",
-                      color: colors.input.color,
-                      transition: "all 0.2s ease",
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = colors.primary[500];
-                      e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = colors.border.input;
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
+                    style={{ borderRadius: 12 }}
                   />
                 </div>
 
-                <button
+                <GlassButton
                   type="submit"
                   className="login-submit-button"
                   disabled={loading}
                   style={{
                     marginTop: 8,
-                    padding: "11px 16px",
-                    borderRadius: 999,
-                    border: "none",
                     width: "100%",
-                    background: gradient,
-                    color: "#ffffff",
-                    fontSize: 14,
-                    fontWeight: 700,
+                    borderRadius: 999,
                     letterSpacing: 1.5,
                     textTransform: "uppercase",
-                    cursor: loading ? "default" : "pointer",
-                    boxShadow: `0 16px 36px ${colors.primary[500]}55`,
                     opacity: loading ? 0.75 : 1,
-                    transition: "all 0.3s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!loading) {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.boxShadow = `0 20px 40px ${colors.primary[500]}66`;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = `0 16px 36px ${colors.primary[500]}55`;
                   }}
                 >
                   {loading ? "SIGNING IN..." : "SIGN IN"}
-                </button>
+                </GlassButton>
               </form>
             ) : employeeLoginLocked ? (
               // EMPLOYEE LOGIN LOCKED MESSAGE
@@ -668,88 +567,42 @@ function LoginInner() {
                 style={{
                   padding: "14px 16px 16px",
                   borderRadius: 18,
-                  backgroundColor: colors.background.secondary,
-                  border: `1px solid ${colors.border.default}`,
-                  boxShadow: colors.card.shadow,
+                  border: `1px solid ${colors.glass.border}`,
+                  background: isDark
+                    ? "rgba(15, 23, 42, 0.45)"
+                    : "rgba(255, 255, 255, 0.55)",
                   display: "flex",
                   flexDirection: "column",
                   gap: 10,
-                  transition: "all 0.3s ease",
                 }}
               >
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 6 }}
                 >
-                  <label
-                    style={{
-                      fontSize: 12,
-                      letterSpacing: 1.5,
-                      textTransform: "uppercase",
-                      color: colors.text.secondary,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Employee Code
-                  </label>
-                  <input
+                  <label style={labelStyle}>Employee Code</label>
+                  <GlassInput
                     value={empCode}
                     onChange={(e) => setEmpCode(e.target.value)}
                     required
                     placeholder="e.g. 00082"
-                    style={{
-                      padding: "10px 13px",
-                      borderRadius: 12,
-                      border: `1px solid ${colors.border.input}`,
-                      backgroundColor: colors.input.background,
-                      fontSize: 14,
-                      outline: "none",
-                      color: colors.input.color,
-                      transition: "all 0.2s ease",
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = colors.primary[500];
-                      e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = colors.border.input;
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
+                    style={{ borderRadius: 12 }}
                   />
                 </div>
 
-                <button
+                <GlassButton
                   type="submit"
                   disabled={loading}
                   style={{
                     marginTop: 8,
-                    padding: "11px 16px",
-                    borderRadius: 999,
-                    border: "none",
                     width: "100%",
-                    background: gradient,
-                    color: "#ffffff",
-                    fontSize: 14,
-                    fontWeight: 700,
+                    borderRadius: 999,
                     letterSpacing: 2,
                     textTransform: "uppercase",
-                    cursor: loading ? "default" : "pointer",
-                    boxShadow: `0 16px 36px ${colors.secondary[500]}50`,
                     opacity: loading ? 0.75 : 1,
-                    transition: "all 0.3s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!loading) {
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                      e.currentTarget.style.boxShadow = `0 20px 40px ${colors.secondary[500]}66`;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = `0 16px 36px ${colors.secondary[500]}50`;
                   }}
                 >
                   {loading ? "Checking..." : "Sign In"}
-                </button>
+                </GlassButton>
               </form>
             )}
 
@@ -765,9 +618,10 @@ function LoginInner() {
               © 2025 Global Digital Solutions Internal Use Only
             </div>
           </div>
-        </div>
+        </GlassCard>
       </div>
     </div>
+    </AppShell>
   );
 }
 

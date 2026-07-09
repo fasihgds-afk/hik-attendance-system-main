@@ -2,7 +2,7 @@
 // Auto-detect and create shift history from existing attendance records
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 import Employee from '../../../../../models/Employee';
 import Shift from '../../../../../models/Shift';
 import ShiftAttendance from '../../../../../models/ShiftAttendance';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 // Auto-detects shift changes from attendance records and creates history
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('employeeShifts', 'create');
     await connectDB();
 
     const body = await req.json();

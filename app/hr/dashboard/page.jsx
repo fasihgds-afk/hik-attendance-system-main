@@ -6,9 +6,20 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { getTableStyles } from '@/lib/theme/styles';
+import {
+  HrPageShell,
+  HrHeaderActions,
+  HrHeaderBadge,
+  GlassCard,
+  GlassTable,
+  GlassInput,
+  GlassButton,
+} from '@/components/glass';
+import { getGlossPillStyles } from '@/lib/theme/styles';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 // Styles will be generated dynamically based on theme
 
@@ -28,6 +39,7 @@ export default function HrDashboardPage() {
   // ALL HOOKS MUST BE CALLED FIRST, IN THE SAME ORDER
   const { colors, theme } = useTheme(); // Theme colors
   const router = useRouter();
+  const { canCreate, canExport, ready } = usePermissions('dailyAttendance');
   
   // Auto logout after 30 minutes of inactivity (with 5 minute warning)
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
@@ -64,24 +76,9 @@ export default function HrDashboardPage() {
 
   const [toast, setToast] = useState({ type: '', text: '' });
 
-  // Generate theme-aware table styles AFTER all hooks
-  const thStyle = {
-    padding: '10px 12px',
-    textAlign: 'left',
-    borderBottom: `1px solid ${colors.border.table}`,
-    fontWeight: 600,
-    fontSize: 13,
-    color: colors.text.table.header,
-    backgroundColor: colors.background.table.header,
-  };
-
-  const tdStyle = {
-    padding: '9px 12px',
-    borderBottom: `1px solid ${colors.border.table}`,
-    fontSize: 13,
-    color: colors.text.table.cell,
-    backgroundColor: colors.background.table.row,
-  };
+  const tableStyles = getTableStyles(colors);
+  const thStyle = tableStyles.th;
+  const tdStyle = tableStyles.td;
 
   function showToast(type, text) {
     setToast({ type, text });
@@ -120,8 +117,10 @@ export default function HrDashboardPage() {
     loadShifts();
   }, []);
 
-  // Auto-run Load and Save every 20 minutes
+  // Auto-run Load and Save every 20 minutes (only when user can create/sync)
   useEffect(() => {
+    if (!ready || !canCreate) return;
+
     // Run immediately on mount
     handleLoadAndSave();
 
@@ -133,7 +132,7 @@ export default function HrDashboardPage() {
     // Cleanup interval on unmount
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessDate]); // Re-run when business date changes
+  }, [businessDate, ready, canCreate]); // Re-run when business date or permission changes
 
 
   async function handleLoadAndSave() {
@@ -544,18 +543,65 @@ export default function HrDashboardPage() {
 
   // ----------------------------------------------------------------
 
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerMeta = (
+    <HrHeaderBadge>
+      Date: {businessDate}
+    </HrHeaderBadge>
+  );
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/violation-rules')} style={glossPill('warm')}>
+        Violation Rules
+      </button>
+      <button type="button" onClick={() => router.push('/hr/company-settings')} style={glossPill('slate')}>
+        Company Settings
+      </button>
+      <button type="button" onClick={() => router.push('/hr/leaves')} style={glossPill('neutral')}>
+        Leave Management
+      </button>
+      <button type="button" onClick={() => router.push('/hr/complaints')} style={glossPill('rose')}>
+        Complaints
+      </button>
+      {canCreate && (
+        <button
+          type="button"
+          onClick={handleLoadAndSave}
+          disabled={loading}
+          style={{
+            ...glossPill('neutral'),
+            opacity: loading ? 0.7 : 1,
+            cursor: loading ? 'default' : 'pointer',
+          }}
+        >
+          {loading && (
+            <span
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '999px',
+                border: `2px solid rgba(14, 165, 233, 0.3)`,
+                borderTopColor: colors.primary[500],
+                animation: 'spin 0.7s linear infinite',
+              }}
+            />
+          )}
+          {loading ? 'Loading & Saving…' : 'Load & Save'}
+        </button>
+      )}
+      <button type="button" onClick={handleLogout} style={glossPill('neutral')}>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background:
-          'linear-gradient(135deg, #0F162A, #0c225cff, #58D34D)',
-        color: '#0f172a',
-        fontFamily:
-          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
-      className="daily-page-container"
+    <HrPageShell
+      subtitle="HR Daily Attendance (Day & Night Shifts)"
+      meta={headerMeta}
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -569,48 +615,10 @@ export default function HrDashboardPage() {
             to { transform: rotate(360deg); }
           }
           .hr-att-table tbody tr.data-row:hover td {
-            background-color: var(--theme-row-hover, rgba(59, 130, 246, 0.1)) !important;
+            background-color: var(--theme-row-hover, rgba(14, 165, 233, 0.1)) !important;
           }
 
-          /* Small / medium laptops */
-          .daily-header-toolbar {
-            display: contents;
-          }
-          @media (max-width: 1280px) {
-            .daily-header {
-              flex-direction: column !important;
-              align-items: stretch !important;
-              gap: 14px !important;
-            }
-            .daily-header > div:first-child {
-              min-width: 0 !important;
-            }
-            .daily-header-toolbar {
-              display: block !important;
-              width: 100% !important;
-              padding: 10px 12px !important;
-              border-radius: 14px !important;
-              background: rgba(255, 255, 255, 0.07) !important;
-              border: 1px solid rgba(255, 255, 255, 0.14) !important;
-              box-sizing: border-box !important;
-            }
-            .daily-header-toolbar > div {
-              width: 100% !important;
-              flex-wrap: wrap !important;
-              justify-content: flex-start !important;
-              gap: 8px !important;
-            }
-            .daily-header-toolbar > div button {
-              flex: 1 1 auto !important;
-              min-width: 132px !important;
-            }
-          }
-          @media (max-width: 900px) {
-            .daily-header-toolbar > div button {
-              flex: 1 1 calc(50% - 6px) !important;
-              min-width: calc(50% - 6px) !important;
-            }
-          }
+          /* Header/toolbar responsive rules: see globals.css Phase 6 */
           
           /* Mobile Responsive Styles */
           @media (max-width: 768px) {
@@ -864,300 +872,7 @@ export default function HrDashboardPage() {
         }}
       />
 
-      <div className="container-responsive" style={{ margin: '0 auto', width: '100%' }}>
-        {/* Brand header bar with logo */}
-        <div
-          className="daily-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 18,
-            padding: '16px 22px',
-            borderRadius: 14,
-            background: colors.gradient.primary,
-            color: '#f9fafb',
-            boxShadow: '0 12px 28px rgba(15,23,42,0.55)',
-            border: `1px solid ${colors.border.hover}`,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            <div
-              className="daily-header-logo"
-              style={{
-                width: 90,
-                height: 90,
-                borderRadius: 20,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                flexShrink: 0,
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  display: 'block',
-                  transform: 'scale(1.02)',
-                }}
-              />
-            </div>
-
-            <div>
-              <div
-                className="daily-header-title"
-                style={{
-                  fontSize: 22,
-                  fontWeight: 800,
-                  letterSpacing: 0.4,
-                  lineHeight: 1.05,
-                }}
-              >
-                Global Digital Solutions
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  opacity: 0.95,
-                  marginTop: 6,
-                }}
-              >
-                HR Daily Attendance (Day &amp; Night Shifts)
-              </div>
-            </div>
-          </div>
-
-          {/* right side of header: selected date tag + button */}
-          <div className="daily-header-toolbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div
-              style={{
-                padding: '6px 12px',
-                borderRadius: 999,
-                backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                border: '1px solid rgba(255, 255, 255, 0.25)',
-                fontSize: 11,
-                color: '#ffffff',
-                backdropFilter: 'blur(10px)',
-              }}
-            >
-              <span style={{ opacity: 0.9, marginRight: 6 }}>Date:</span>
-              <span style={{ fontWeight: 600 }}>{businessDate}</span>
-            </div>
-
-            <button
-              onClick={() => router.push('/hr/violation-rules')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                color: '#ffffff',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 6px 20px rgba(245, 158, 11, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(245, 158, 11, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(245, 158, 11, 0.4)';
-              }}
-            >
-              ⚖️ Violation Rules
-            </button>
-
-            <button
-              onClick={() => router.push('/hr/company-settings')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, #64748b, #475569)',
-                color: '#ffffff',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 6px 20px rgba(100, 116, 139, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(100, 116, 139, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(100, 116, 139, 0.4)';
-              }}
-            >
-              ⚙️ Company Settings
-            </button>
-
-            <button
-              onClick={() => router.push('/hr/leaves')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                color: '#ffffff',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 6px 20px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(16, 185, 129, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
-              }}
-            >
-              🏖️ Leave Management
-            </button>
-
-            <button
-              onClick={() => router.push('/hr/complaints')}
-              style={{
-                padding: '10px 20px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
-                color: '#ffffff',
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 6px 20px rgba(139, 92, 246, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.5)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.4)';
-              }}
-            >
-              📋 Complaints
-            </button>
-
-            <button
-              onClick={handleLoadAndSave}
-              disabled={loading}
-              style={{
-                padding: '10px 20px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
-                color: colors.primary[600],
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: loading ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 6px 20px rgba(255, 255, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(255, 255, 255, 0.4)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 255, 255, 0.3)';
-                }
-              }}
-            >
-              {loading && (
-                <span
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: '999px',
-                    border: '2px solid rgba(59, 130, 246, 0.3)',
-                    borderTopColor: colors.primary[500],
-                    animation: 'spin 0.7s linear infinite',
-                  }}
-                />
-              )}
-              {loading ? 'Loading & Saving…' : 'Load & Save'}
-            </button>
-            <ThemeToggle />
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 8,
-                border: "1px solid rgba(255, 255, 255, 0.3)",
-                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                color: "#ffffff",
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                whiteSpace: "nowrap",
-                height: "36px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: "80px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.3)";
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(0, 0, 0, 0.3)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.2)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.25)";
-              }}
-            >
-              Logout
-            </button>
-          </div>
-          </div>
-        </div>
-        
-        {/* Auto Logout Warning */}
-        {showWarning && (
+      {showWarning && (
           <AutoLogoutWarning
             timeRemaining={timeRemaining}
             onStayLoggedIn={handleStayLoggedIn}
@@ -1166,16 +881,7 @@ export default function HrDashboardPage() {
         )}
 
         {/* MAIN CARD */}
-        <div
-          className="daily-main-card"
-          style={{
-            borderRadius: 16,
-            background: colors.gradient.card,
-            border: `1px solid ${colors.border.default}`,
-            boxShadow: colors.card.shadow,
-            padding: '24px 28px 28px',
-          }}
-        >
+        <GlassCard className="daily-main-card" padding="24px 28px 28px">
           {/* Legend + date + summary + stats */}
           <div style={{ marginBottom: 14 }}>
             {/* Shift legend */}
@@ -1232,21 +938,11 @@ export default function HrDashboardPage() {
                   >
                     Business Date
                   </label>
-                  <input
+                  <GlassInput
                     type="date"
                     value={businessDate}
                     onChange={(e) => setBusinessDate(e.target.value)}
-                    style={{
-                      padding: '7px 10px',
-                      borderRadius: 8,
-                      border: `1px solid ${colors.border.input}`,
-                      backgroundColor: colors.background.input,
-                      color: colors.text.primary,
-                      minWidth: 170,
-                      fontSize: 13,
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
+                    style={{ minWidth: 170, fontSize: 13, width: 'auto' }}
                   />
                 </div>
 
@@ -1257,27 +953,17 @@ export default function HrDashboardPage() {
                       fontWeight: 600,
                       display: 'block',
                       marginBottom: 4,
-                      color: '#111827',
+                      color: colors.text.primary,
                     }}
                   >
                     Filter by Shift
                   </label>
-                  <select
+                  <GlassInput
+                    asSelect
                     value={selectedShift}
                     onChange={(e) => setSelectedShift(e.target.value)}
-                    style={{
-                      padding: '7px 10px',
-                      borderRadius: 8,
-                      border: `1px solid ${colors.border.input}`,
-                      backgroundColor: colors.background.input,
-                      color: colors.text.primary,
-                      minWidth: 200,
-                      fontSize: 13,
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
+                    style={{ minWidth: 200, fontSize: 13, width: 'auto' }}
                   >
-                    <option value="">All Shifts</option>
                     <option value="">All Shifts</option>
                     {shifts.length > 0 ? (
                       shifts.map((shift) => (
@@ -1288,7 +974,7 @@ export default function HrDashboardPage() {
                     ) : (
                       <option value="" disabled>No shifts available</option>
                     )}
-                  </select>
+                  </GlassInput>
                 </div>
 
                 <div
@@ -1410,7 +1096,7 @@ export default function HrDashboardPage() {
                   style={{
                     fontSize: 16,
                     fontWeight: 700,
-                    color: '#0f172a',
+                    color: colors.glass.text,
                     marginBottom: 2,
                   }}
                 >
@@ -1419,7 +1105,7 @@ export default function HrDashboardPage() {
                 <p
                   style={{
                     fontSize: 11,
-                    color: '#6b7280',
+                    color: colors.text.secondary,
                   }}
                 >
                   Built from device events and stored in{' '}
@@ -1457,78 +1143,43 @@ export default function HrDashboardPage() {
                   >
                     🔍
                   </span>
-                  <input
+                  <GlassInput
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search employee, dept, shift, status..."
                     style={{
-                      padding: '8px 12px 8px 30px',
+                      paddingLeft: 30,
                       borderRadius: 999,
-                      border: `1px solid ${colors.border.input}`,
-                      backgroundColor: colors.background.input,
-                      color: colors.text.primary,
                       fontSize: 12,
-                      outline: 'none',
                       minWidth: 220,
-                      transition: 'border-color 0.2s',
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = colors.primary[500];
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = colors.border.input;
+                      width: 'auto',
                     }}
                   />
                 </div>
 
                 {/* export button */}
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 999,
-                    border: 'none',
-                    background:
-                      'linear-gradient(135deg,#22c55e,#16a34a,#15803d)',
-                    color: '#f9fafb',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    boxShadow: '0 10px 20px rgba(22,163,74,0.45)',
-                  }}
-                >
-                  ⬇ Export Excel
-                </button>
+                {canExport && (
+                  <GlassButton type="button" onClick={handleExportExcel} style={{ borderRadius: 999, fontSize: 12, padding: '8px 14px' }}>
+                    ⬇ Export Excel
+                  </GlassButton>
+                )}
               </div>
             </div>
 
-            <div className="daily-table-wrapper" style={{ overflowX: 'auto', width: '100%' }}>
-                <table
-                className="hr-att-table daily-table"
-                style={{
-                  width: '100%',
-                  minWidth: 900,
-                  borderCollapse: 'collapse',
-                  borderRadius: 10,
-                  border: `1px solid ${colors.border.table}`,
-                  overflow: 'hidden',
-                  backgroundColor: colors.background.table.row,
-                }}
-              >
-                <thead>
+            <GlassTable className="daily-table-wrapper hr-table-scroll table-responsive">
+                <GlassTable.Head>
                   <tr>
-                    <th style={thStyle}>Emp Code</th>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Department</th>
-                    <th style={thStyle}>Designation</th>
-                    <th style={thStyle}>Shift</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Check In</th>
-                    <th style={thStyle}>Check Out</th>
+                    <GlassTable.Th>Emp Code</GlassTable.Th>
+                    <GlassTable.Th>Name</GlassTable.Th>
+                    <GlassTable.Th>Department</GlassTable.Th>
+                    <GlassTable.Th>Designation</GlassTable.Th>
+                    <GlassTable.Th>Shift</GlassTable.Th>
+                    <GlassTable.Th>Status</GlassTable.Th>
+                    <GlassTable.Th>Check In</GlassTable.Th>
+                    <GlassTable.Th>Check Out</GlassTable.Th>
                   </tr>
-                </thead>
-                <tbody>
+                </GlassTable.Head>
+                <GlassTable.Body>
                   {rowsWithHeaders.length === 0 ? (
                     <tr>
                       <td
@@ -1648,12 +1299,10 @@ export default function HrDashboardPage() {
                       );
                     })
                   )}
-                </tbody>
-              </table>
-            </div>
+                </GlassTable.Body>
+            </GlassTable>
           </div>
-        </div>
-      </div>
+        </GlassCard>
 
       {/* Toast popup */}
       {toast.text && (
@@ -1684,16 +1333,7 @@ export default function HrDashboardPage() {
           {toast.text}
         </div>
       )}
-      
-      {/* Auto Logout Warning */}
-      {showWarning && (
-        <AutoLogoutWarning
-          timeRemaining={timeRemaining}
-          onStayLoggedIn={handleStayLoggedIn}
-          onLogout={autoLogout}
-        />
-      )}
-    </div>
+    </HrPageShell>
   );
 }
 

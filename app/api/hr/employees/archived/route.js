@@ -13,7 +13,7 @@ import {
   errorResponseFromException,
   HTTP_STATUS,
 } from '../../../../../lib/api/response';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../../lib/errors/errorHandler';
 import { decryptBankDetails } from '../../../../../lib/security/bankDetailsCrypto';
 
@@ -49,7 +49,7 @@ function formatArchivedEmployee(emp) {
 // GET /api/hr/employees/archived?page=1&limit=50&search=
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('archivedEmployees', 'view');
     await connectDB();
 
     const { searchParams } = new URL(req.url);
@@ -101,7 +101,7 @@ export async function GET(req) {
 // POST /api/hr/employees/archived  { empCode } — restore to active
 export async function POST(req) {
   try {
-    const { user } = await requireHR();
+    const { user } = await requirePermission('archivedEmployees', 'update');
     await connectDB();
 
     const body = await req.json();

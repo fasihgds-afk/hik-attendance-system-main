@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const tableHeaderBg = (colors, isDark) => (isDark ? '#1e293b' : (colors.background?.table?.header ?? 'rgba(59, 130, 246, 0.08)'));
 const tableBorder = (colors, isDark) => (isDark ? 'rgba(55, 65, 81, 0.8)' : (colors.border?.table ?? colors.border?.default ?? '#e5e7eb'));
@@ -31,7 +32,7 @@ function policyToastLabel(p) {
 
 export default function DepartmentPoliciesPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { canCreate, canUpdate } = usePermissions('departments');
   const { colors, theme } = useTheme();
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -192,22 +193,36 @@ export default function DepartmentPoliciesPage() {
     return 'Working for all';
   };
 
-  // Portal-like colors: full-width layout, dark blue background, gradient header
-  const pageBg = theme === 'dark' ? '#0a0a23' : (colors.gradient?.overlay ?? colors.background?.default);
-  const headerGradient = theme === 'dark' ? 'linear-gradient(90deg, #0a2c54 0%, #0f5ba5 35%, #13a8e5 100%)' : (colors.gradient?.header ?? colors.background?.card);
-  const cardBg = theme === 'dark' ? '#1e293b' : (colors.background?.card ?? '#ffffff');
-  const cardShadow = theme === 'dark' ? '0 20px 60px rgba(0,0,0,0.5)' : '0 20px 60px rgba(0,0,0,0.08)';
+  // Glass shell page — theme tokens for surfaces
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/company-settings')} className="dept-button" style={glossPill('slate')}>
+        Company Settings
+      </button>
+      <button type="button" onClick={() => router.push('/hr/employees')} className="dept-button" style={glossPill('neutral')}>
+        Back to HR
+      </button>
+      {canCreate && (
+        <button type="button" onClick={openAddModal} className="dept-button" style={glossPill('neutral')}>
+          <span style={{ fontSize: 18 }}>+</span>
+          Add Department
+        </button>
+      )}
+      <button type="button" onClick={handleLogout} className="dept-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: pageBg,
-        color: colors.text?.primary,
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        boxSizing: 'border-box',
-      }}
+    <HrPageShell
+      subtitle="Department Policies · Saturday off rules (All off or Alternate by group)"
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -317,237 +332,7 @@ export default function DepartmentPoliciesPage() {
         }}
       />
 
-      {/* Same-width wrapper: header and main card share width on desktop/laptop */}
-      <div className="container-responsive" style={{ margin: '0 auto', width: '100%', maxWidth: '100%' }}>
-        {/* Header - portal gradient */}
-        <div
-          className="dept-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 28px',
-            borderRadius: 20,
-            background: headerGradient,
-            color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-            boxShadow: theme === 'dark'
-              ? '0 20px 50px rgba(19, 168, 229, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3)'
-              : '0 20px 50px rgba(59, 130, 246, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)',
-            border: `1px solid ${colors.border?.default}`,
-            position: 'relative',
-            overflow: 'hidden',
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundImage: theme === 'dark' ? 'radial-gradient(circle at 80% 50%, rgba(19, 168, 229, 0.15) 0%, transparent 50%)' : 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-              pointerEvents: 'none',
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1 }}>
-            <div
-              className="dept-header-logo"
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 16,
-                overflow: 'hidden',
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(59, 130, 246, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-                border: `2px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : colors.border?.default}`,
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-            <div>
-              <div
-                className="dept-header-title"
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  letterSpacing: 0.5,
-                  marginBottom: 4,
-                  textShadow: theme === 'dark' ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
-                }}
-              >
-                Global Digital Solutions
-              </div>
-              <div
-                className="dept-header-subtitle"
-                style={{ fontSize: 13, opacity: 0.95, fontWeight: 500 }}
-              >
-                Department Policies · Saturday off rules (All off or Alternate by group)
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            <ThemeToggle />
-            <button
-              type="button"
-              onClick={() => router.push('/hr/company-settings')}
-              className="dept-button"
-              style={{
-                padding: '9px 18px',
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(148, 163, 184, 0.45)' : colors.border?.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(100, 116, 139, 0.25)' : colors.background?.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(100, 116, 139, 0.4)' : colors.background?.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(100, 116, 139, 0.25)' : colors.background?.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              Company Settings
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/hr/employees')}
-              className="dept-button"
-              style={{
-                padding: '9px 18px',
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.border?.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background?.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.background?.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background?.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              Back to HR
-            </button>
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="dept-button"
-              style={{
-                padding: '9px 18px',
-                borderRadius: 12,
-                border: theme === 'dark' ? '1px solid rgba(19, 168, 229, 0.5)' : `1px solid ${colors.border?.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(19, 168, 229, 0.25)' : colors.background?.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: theme === 'dark' ? '0 4px 16px rgba(19, 168, 229, 0.35)' : '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(19, 168, 229, 0.4)' : colors.background?.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                if (theme === 'dark') e.currentTarget.style.boxShadow = '0 6px 20px rgba(19, 168, 229, 0.45)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(19, 168, 229, 0.25)' : colors.background?.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-                if (theme === 'dark') e.currentTarget.style.boxShadow = '0 4px 16px rgba(19, 168, 229, 0.35)';
-              }}
-            >
-              <span style={{ fontSize: 18 }}>+</span>
-              Add Department
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="dept-button"
-              style={{
-                padding: '10px 18px',
-                borderRadius: 12,
-                border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border?.default}`,
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background?.card,
-                color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : colors.background?.hover;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background?.card;
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* Main Card - same width as header (both inside container-responsive) */}
-        <div
-          style={{
-            width: '100%',
-            marginTop: 24,
-            borderRadius: 16,
-            background: cardBg,
-            boxShadow: cardShadow,
-            padding: '16px 20px 20px',
-            border: `1px solid ${colors.border?.default}`,
-            boxSizing: 'border-box',
-          }}
-        >
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
         {toast.text && (
           <div
             style={{
@@ -585,13 +370,13 @@ export default function DepartmentPoliciesPage() {
           </div>
         ) : (
           <div
-            className="dept-table-wrapper"
+            className="dept-table-wrapper hr-table-scroll table-responsive"
             style={{
               borderRadius: 12,
               border: `1px solid ${tableBorder(colors, theme === 'dark')}`,
               overflow: 'hidden',
               overflowX: 'auto',
-              backgroundColor: cardBg,
+              backgroundColor: colors.background?.card,
             }}
           >
             <table
@@ -655,13 +440,15 @@ export default function DepartmentPoliciesPage() {
                         <div style={{ display: 'grid', gap: 8 }}>
                           <select
                             value={d.saturdayShiftMode || 'own_time'}
+                            disabled={!canUpdate}
                             onChange={(e) => handleSaturdayShiftChange(d, { saturdayShiftMode: e.target.value })}
                             style={{
                               padding: '8px 12px', borderRadius: 8,
                               border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`,
                               background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
                               color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
-                              fontSize: 13, cursor: 'pointer', outline: 'none',
+                              fontSize: 13, cursor: canUpdate ? 'pointer' : 'default', outline: 'none',
+                              opacity: canUpdate ? 1 : 0.7,
                             }}
                           >
                             <option value="own_time">Each shift&apos;s own time</option>
@@ -671,16 +458,18 @@ export default function DepartmentPoliciesPage() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tableCellColor(colors, theme === 'dark') }}>
                               <input
                                 type="time"
+                                disabled={!canUpdate}
                                 defaultValue={d.saturdayUnifiedStart || '21:00'}
-                                onBlur={(e) => { if (e.target.value && e.target.value !== d.saturdayUnifiedStart) handleSaturdayShiftChange(d, { saturdayUnifiedStart: e.target.value }); }}
-                                style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12 }}
+                                onBlur={(e) => { if (canUpdate && e.target.value && e.target.value !== d.saturdayUnifiedStart) handleSaturdayShiftChange(d, { saturdayUnifiedStart: e.target.value }); }}
+                                style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12, opacity: canUpdate ? 1 : 0.7 }}
                               />
                               <span>to</span>
                               <input
                                 type="time"
+                                disabled={!canUpdate}
                                 defaultValue={d.saturdayUnifiedEnd || '06:00'}
-                                onBlur={(e) => { if (e.target.value && e.target.value !== d.saturdayUnifiedEnd) handleSaturdayShiftChange(d, { saturdayUnifiedEnd: e.target.value }); }}
-                                style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12 }}
+                                onBlur={(e) => { if (canUpdate && e.target.value && e.target.value !== d.saturdayUnifiedEnd) handleSaturdayShiftChange(d, { saturdayUnifiedEnd: e.target.value }); }}
+                                style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12, opacity: canUpdate ? 1 : 0.7 }}
                               />
                             </div>
                           )}
@@ -691,6 +480,7 @@ export default function DepartmentPoliciesPage() {
                       <div style={{ display: 'grid', gap: 8 }}>
                         <select
                           value={d.saturdayPolicy || 'alternate'}
+                          disabled={!canUpdate}
                           onChange={(e) => handlePolicyChange(d, e.target.value)}
                           style={{
                             padding: '8px 12px',
@@ -699,8 +489,9 @@ export default function DepartmentPoliciesPage() {
                             background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
                             color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
                             fontSize: 13,
-                            cursor: 'pointer',
+                            cursor: canUpdate ? 'pointer' : 'default',
                             outline: 'none',
+                            opacity: canUpdate ? 1 : 0.7,
                           }}
                         >
                           <option value="all_working">All Saturdays Working</option>
@@ -710,7 +501,7 @@ export default function DepartmentPoliciesPage() {
                         <select
                           value={d.fifthSaturdayPolicy || 'working_all'}
                           onChange={(e) => handleFifthPolicyChange(d, e.target.value)}
-                          disabled={!isAlternateSaturdayPolicy(d.saturdayPolicy)}
+                          disabled={!canUpdate || !isAlternateSaturdayPolicy(d.saturdayPolicy)}
                           style={{
                             padding: '8px 12px',
                             borderRadius: 8,
@@ -718,9 +509,9 @@ export default function DepartmentPoliciesPage() {
                             background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card),
                             color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary,
                             fontSize: 13,
-                            cursor: isAlternateSaturdayPolicy(d.saturdayPolicy) ? 'pointer' : 'not-allowed',
+                            cursor: canUpdate && isAlternateSaturdayPolicy(d.saturdayPolicy) ? 'pointer' : 'not-allowed',
                             outline: 'none',
-                            opacity: isAlternateSaturdayPolicy(d.saturdayPolicy) ? 1 : 0.6,
+                            opacity: canUpdate && isAlternateSaturdayPolicy(d.saturdayPolicy) ? 1 : 0.6,
                           }}
                         >
                           <option value="working_all">5th Saturday: Working for all</option>
@@ -735,11 +526,10 @@ export default function DepartmentPoliciesPage() {
             </table>
           </div>
         )}
-        </div>
-      </div>
+        </GlassCard>
 
       {/* Modal - same structure as Shifts */}
-      {modalOpen && (
+      {canCreate && modalOpen && (
         <div
           style={{
             position: 'fixed',
@@ -760,7 +550,7 @@ export default function DepartmentPoliciesPage() {
           <div
             className="dept-modal"
             style={{
-              backgroundColor: cardBg,
+              backgroundColor: colors.background?.card,
               borderRadius: 16,
               padding: '24px',
               maxWidth: 500,
@@ -938,6 +728,6 @@ export default function DepartmentPoliciesPage() {
           </div>
         </div>
       )}
-    </div>
+    </HrPageShell>
   );
 }

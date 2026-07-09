@@ -3,7 +3,7 @@ import { connectDB } from '../../../../../lib/db';
 import Employee from '../../../../../models/Employee';
 import { ACTIVE_EMPLOYEE_FILTER } from '../../../../../lib/employees/activeFilter';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('employees', 'view');
     await connectDB();
 
     const departmentCounts = await Employee.aggregate(

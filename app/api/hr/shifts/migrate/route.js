@@ -3,13 +3,13 @@
 import { connectDB } from '../../../../../lib/db';
 import Shift from '../../../../../models/Shift';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'update');
     await connectDB();
 
     const defaultShifts = [

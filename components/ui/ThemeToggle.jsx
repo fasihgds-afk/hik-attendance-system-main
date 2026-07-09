@@ -18,11 +18,11 @@ export default function ThemeToggle({ compact = false }) {
         width: dim,
         height: dim,
         borderRadius: rad,
-        border: `1px solid ${theme === 'dark' ? 'rgba(251, 191, 36, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+        border: `1px solid ${theme === 'dark' ? 'rgba(251, 191, 36, 0.3)' : 'rgba(14, 165, 233, 0.3)'}`,
         background: theme === 'dark' 
           ? 'linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1))'
-          : 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1))',
-        color: theme === 'dark' ? '#fbbf24' : '#3b82f6',
+          : 'linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.1))',
+        color: theme === 'dark' ? '#fbbf24' : '#0ea5e9',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',

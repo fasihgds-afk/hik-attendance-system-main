@@ -1,7 +1,7 @@
 // app/api/hr/shifts/[id]/route.js
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 import Shift, { mergeGraceFromBody, resolveShiftGracePeriods } from '../../../../../models/Shift';
 import { DEFAULT_GRACE_PERIOD } from '../../../../../lib/shift/gracePeriods.js';
 import { getCompanyTodayYmd } from '../../../../../lib/time/companyToday.js';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/hr/shifts/[id] - Get a specific shift
 export async function GET(req, { params }) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'view');
     await connectDB();
 
     // Handle both Next.js 14 and 15 (params might be a promise in Next.js 15)
@@ -47,7 +47,7 @@ export async function GET(req, { params }) {
 // PUT /api/hr/shifts/[id] - Update a shift
 export async function PUT(req, { params }) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'update');
     await connectDB();
 
     // Handle both Next.js 14 and 15 (params might be a promise in Next.js 15)
@@ -229,7 +229,7 @@ export async function PUT(req, { params }) {
 // Query param: ?permanent=true for permanent deletion, otherwise soft delete (deactivate)
 export async function DELETE(req, { params }) {
   try {
-    await requireHR();
+    await requirePermission('shifts', 'delete');
     await connectDB();
 
     // Handle both Next.js 14 and 15 (params might be a promise in Next.js 15)

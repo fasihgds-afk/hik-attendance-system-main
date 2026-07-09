@@ -9,6 +9,8 @@ import Toast from '../../../../components/common/Toast';
 import ConfirmDialog from '../../../../components/ui/ConfirmDialog';
 import Modal from '../../../../components/ui/Modal';
 import { useTheme } from '@/lib/theme/ThemeContext';
+import { usePermissions } from '@/hooks/usePermissions';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -23,27 +25,17 @@ function formatDate(value) {
   }
 }
 
-const thStyle = {
-  padding: '10px 12px',
-  textAlign: 'left',
-  borderBottom: '1px solid #E5E7EB',
-  fontWeight: 600,
-  fontSize: 13,
-  color: '#0f172a',
-  backgroundColor: '#e5f1ff',
-};
-
-const tdStyle = {
-  padding: '12px 16px',
-  borderBottom: '1px solid #f1f5f9',
-  fontSize: 14,
-  color: '#1f2937',
-  backgroundColor: '#ffffff',
-};
+const tableHeaderBg = (colors, isDark) => (isDark ? '#1e293b' : (colors.background?.table?.header ?? 'rgba(59, 130, 246, 0.08)'));
+const tableBorder = (colors, isDark) => (isDark ? 'rgba(55, 65, 81, 0.8)' : (colors.border?.table ?? colors.border?.default ?? '#e5e7eb'));
+const tableCellColor = (colors, isDark) => (isDark ? '#cbd5e1' : (colors.text?.table?.cell ?? colors.text?.primary ?? '#0f172a'));
+const tableHeaderColor = (colors, isDark) => (isDark ? '#f1f5f9' : (colors.text?.table?.header ?? colors.text?.primary ?? '#0f172a'));
+const rowBg = (colors, index, isDark) => (isDark ? (index % 2 === 0 ? '#0f172a' : '#1e293b') : (index % 2 === 0 ? (colors.background?.table?.row ?? colors.background?.card ?? '#fff') : (colors.background?.table?.rowEven ?? colors.background?.default ?? '#f8fafc')));
+const rowHover = (colors, isDark) => (isDark ? '#334155' : (colors.background?.table?.rowHover ?? colors.background?.hover ?? '#f0f9ff'));
 
 export default function FormerEmployeesPage() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
+  const { canUpdate } = usePermissions('archivedEmployees');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -53,6 +45,9 @@ export default function FormerEmployeesPage() {
   const [restoringId, setRestoringId] = useState(null);
   const [viewEmployee, setViewEmployee] = useState(null);
   const [restoreConfirm, setRestoreConfirm] = useState({ isOpen: false, employee: null });
+
+  const isDark = theme === 'dark';
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
 
   function showToast(type, text) {
     setToast({ type, text });
@@ -112,6 +107,61 @@ export default function FormerEmployeesPage() {
     }
   }
 
+  const headerActions = (
+    <HrHeaderActions>
+      <button
+        type="button"
+        onClick={() => loadEmployees()}
+        disabled={loading}
+        className="archived-button"
+        style={{
+          ...glossPill('neutral'),
+          cursor: loading ? 'default' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          opacity: loading ? 0.7 : 1,
+        }}
+      >
+        {loading ? (
+          <>
+            <span
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '999px',
+                border: '2px solid rgba(191,219,254,0.6)',
+                borderTopColor: '#ffffff',
+                animation: 'spin 0.7s linear infinite',
+              }}
+            />
+            Refreshing…
+          </>
+        ) : (
+          <>
+            <span>⟳</span> Refresh
+          </>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push('/hr/employees/manage')}
+        className="archived-button"
+        style={glossPill('slate')}
+      >
+        Active Employees
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push('/hr/employees')}
+        className="archived-button"
+        style={glossPill('neutral')}
+      >
+        HR Hub
+      </button>
+    </HrHeaderActions>
+  );
+
   return (
     <>
       <style
@@ -121,300 +171,190 @@ export default function FormerEmployeesPage() {
               from { transform: rotate(0deg); }
               to { transform: rotate(360deg); }
             }
+            @media (max-width: 480px) {
+              .archived-button {
+                width: 100% !important;
+                justify-content: center !important;
+              }
+            }
           `,
         }}
       />
-      <div
-        style={{
-          minHeight: '100vh',
-          padding: '24px 28px 32px',
-          background: 'radial-gradient(circle at top, #0b2344 0, #0a1b32 35%, #061523 100%)',
-          color: '#0f172a',
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        }}
+      <HrPageShell
+        subtitle="Former Employees Archive · Deactivated staff hidden from active lists"
+        actions={headerActions}
       >
-        <div style={{ width: '100%', maxWidth: '100%', margin: 0 }}>
-          {/* Header — same as Employee Manager */}
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
               justifyContent: 'space-between',
-              marginBottom: 18,
-              padding: '14px 20px',
-              borderRadius: 12,
-              background: 'linear-gradient(90deg, #0a2c54, #0f5ba5, #13a8e5)',
-              color: '#f9fafb',
-              boxShadow: '0 12px 28px rgba(15,23,42,0.55)',
-              flexWrap: 'wrap',
+              alignItems: 'center',
+              marginBottom: 8,
               gap: 12,
+              flexWrap: 'wrap',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div
+            <div>
+              <h2
                 style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '999px',
-                  overflow: 'hidden',
-                  backgroundColor: 'rgba(15,23,42,0.4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <img
-                  src="/gds.png"
-                  alt="Global Digital Solutions logo"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 0.4 }}>
-                  Global Digital Solutions
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.9 }}>
-                  Former Employees Archive
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => loadEmployees()}
-                disabled={loading}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 999,
-                  border: 'none',
-                  backgroundColor: 'rgba(15,23,42,0.28)',
-                  color: '#e5f2ff',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: loading ? 'default' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                {loading ? (
-                  <>
-                    <span
-                      style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: '999px',
-                        border: '2px solid rgba(191,219,254,0.6)',
-                        borderTopColor: '#ffffff',
-                        animation: 'spin 0.7s linear infinite',
-                      }}
-                    />
-                    Refreshing…
-                  </>
-                ) : (
-                  <>
-                    <span>⟳</span> Refresh
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push('/hr/employees/manage')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.35)',
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  color: '#f9fafb',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Active Employees
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push('/hr/employees')}
-                style={{
-                  padding: '8px 20px',
-                  borderRadius: 999,
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #10b981, #22c55e)',
-                  color: '#ffffff',
-                  fontSize: 13,
+                  fontSize: 20,
                   fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+                  color: isDark ? '#f1f5f9' : (colors.text?.primary ?? '#111827'),
+                  marginBottom: 6,
+                  letterSpacing: '-0.025em',
                 }}
               >
-                HR Hub
-              </button>
+                Archived Records ({pagination.total})
+              </h2>
+              <p style={{ fontSize: 13, color: isDark ? '#94a3b8' : (colors.text?.secondary ?? '#6b7280'), margin: 0 }}>
+                Deactivated staff — hidden from manager, daily sheet, and current monthly payroll.
+                Attendance history is kept; past months still show records when reopening old sheets.
+              </p>
             </div>
+            <EmployeeFilters
+              searchQuery={searchQuery}
+              onSearchChange={(value) => {
+                setSearchQuery(value);
+                setCurrentPage(1);
+              }}
+            />
           </div>
 
-          {/* Main card — same as Employee Manager */}
           <div
+            className="archived-table-wrapper hr-table-scroll table-responsive"
             style={{
-              borderRadius: 16,
-              backgroundColor: '#ffffff',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-              padding: '24px 28px 28px',
-              border: '1px solid #e5e7eb',
+              overflowX: 'auto',
+              borderRadius: 12,
+              border: `1px solid ${tableBorder(colors, isDark)}`,
+              marginTop: 16,
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 8,
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <h2
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 700,
-                    color: '#111827',
-                    marginBottom: 6,
-                    letterSpacing: '-0.025em',
-                  }}
-                >
-                  Archived Records ({pagination.total})
-                </h2>
-                <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
-                  Deactivated staff — hidden from manager, daily sheet, and current monthly payroll.
-                  Attendance history is kept; past months still show records when reopening old sheets.
-                </p>
-              </div>
-              <EmployeeFilters
-                searchQuery={searchQuery}
-                onSearchChange={(value) => {
-                  setSearchQuery(value);
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-
-            <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid #e5e7eb', marginTop: 16 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
-                <thead>
+            <table className="archived-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 960 }}>
+              <thead>
+                <tr style={{ backgroundColor: tableHeaderBg(colors, isDark), borderBottom: `2px solid ${tableBorder(colors, isDark)}` }}>
+                  {['Employee', 'Department', 'Last Working Day', 'Deactivated', 'Reason'].map((heading) => (
+                    <th
+                      key={heading}
+                      style={{
+                        padding: '10px 12px',
+                        textAlign: 'left',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        color: tableHeaderColor(colors, isDark),
+                      }}
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, fontSize: 13, color: tableHeaderColor(colors, isDark) }}>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
                   <tr>
-                    <th style={thStyle}>Employee</th>
-                    <th style={thStyle}>Department</th>
-                    <th style={thStyle}>Last Working Day</th>
-                    <th style={thStyle}>Deactivated</th>
-                    <th style={thStyle}>Reason</th>
-                    <th style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
+                    <td colSpan={6} style={{ padding: 32, textAlign: 'center', color: isDark ? '#94a3b8' : (colors.text?.muted ?? '#6b7280'), fontSize: 14 }}>
+                      Loading…
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={6} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: '#6b7280' }}>
-                        Loading…
-                      </td>
-                    </tr>
-                  ) : employees.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ ...tdStyle, textAlign: 'center', padding: 32, color: '#6b7280' }}>
-                        No former employees yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    employees.map((emp, index) => (
-                      <tr
-                        key={emp.empCode}
-                        style={{
-                          backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc',
-                          transition: 'all 0.15s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#f0f9ff';
-                          e.currentTarget.style.boxShadow = 'inset 4px 0 0 0 #3b82f6';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#ffffff' : '#f8fafc';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        <td style={tdStyle}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <EmployeeAvatar employee={emp} size={40} />
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>
-                                {emp.name || 'No Name'}
-                              </div>
-                              <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 500 }}>
-                                {emp.empCode}
-                              </div>
+                ) : employees.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: 32, textAlign: 'center', color: isDark ? '#94a3b8' : (colors.text?.muted ?? '#6b7280'), fontSize: 14 }}>
+                      No former employees yet.
+                    </td>
+                  </tr>
+                ) : (
+                  employees.map((emp, index) => (
+                    <tr
+                      key={emp.empCode}
+                      style={{
+                        borderBottom: `1px solid ${tableBorder(colors, isDark)}`,
+                        backgroundColor: rowBg(colors, index, isDark),
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = rowHover(colors, isDark);
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = rowBg(colors, index, isDark);
+                      }}
+                    >
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, isDark) }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <EmployeeAvatar employee={emp} size={40} />
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: isDark ? '#f1f5f9' : (colors.text?.primary ?? '#111827') }}>
+                              {emp.name || 'No Name'}
+                            </div>
+                            <div style={{ fontSize: 12, color: isDark ? '#94a3b8' : (colors.text?.muted ?? '#6b7280'), fontWeight: 500 }}>
+                              {emp.empCode}
                             </div>
                           </div>
-                        </td>
-                        <td style={tdStyle}>
-                          {emp.department ? (
-                            <span
-                              style={{
-                                padding: '6px 12px',
-                                borderRadius: 16,
-                                backgroundColor: '#eff6ff',
-                                color: '#1d4ed8',
-                                fontSize: 12,
-                                fontWeight: 600,
-                              }}
-                            >
-                              {emp.department}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td style={tdStyle}>{emp.lastWorkingDay || '—'}</td>
-                        <td style={tdStyle}>
-                          <div>{formatDate(emp.deletedAt)}</div>
-                          {emp.deletedBy ? (
-                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                              by {emp.deletedBy}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td style={tdStyle}>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, isDark) }}>
+                        {emp.department ? (
                           <span
                             style={{
-                              padding: '4px 10px',
-                              borderRadius: 8,
-                              backgroundColor: '#fef2f2',
-                              color: '#b91c1c',
+                              padding: '6px 12px',
+                              borderRadius: 16,
+                              backgroundColor: isDark ? 'rgba(59, 130, 246, 0.2)' : '#eff6ff',
+                              color: isDark ? '#93c5fd' : '#1d4ed8',
                               fontSize: 12,
                               fontWeight: 600,
                             }}
                           >
-                            {emp.deleteReason || 'Terminated'}
+                            {emp.department}
                           </span>
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              onClick={() => setViewEmployee(emp)}
-                              style={{
-                                padding: '8px 16px',
-                                borderRadius: 8,
-                                border: 'none',
-                                background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-                                color: '#ffffff',
-                                fontSize: 13,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
-                              }}
-                            >
-                              View
-                            </button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, isDark) }}>{emp.lastWorkingDay || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, isDark) }}>
+                        <div>{formatDate(emp.deletedAt)}</div>
+                        {emp.deletedBy ? (
+                          <div style={{ fontSize: 11, color: isDark ? '#94a3b8' : (colors.text?.muted ?? '#6b7280'), marginTop: 2 }}>
+                            by {emp.deletedBy}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 14, color: tableCellColor(colors, isDark) }}>
+                        <span
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 8,
+                            backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#fef2f2',
+                            color: isDark ? '#fca5a5' : '#b91c1c',
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {emp.deleteReason || 'Terminated'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setViewEmployee(emp)}
+                            style={{
+                              padding: '8px 16px',
+                              borderRadius: 8,
+                              border: 'none',
+                              background: `linear-gradient(135deg, ${colors.primary?.[500] ?? '#3b82f6'}, ${colors.primary?.[600] ?? '#2563eb'})`,
+                              color: '#ffffff',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              boxShadow: `0 2px 4px ${colors.primary?.[500] ?? '#3b82f6'}33`,
+                            }}
+                          >
+                            View
+                          </button>
+                          {canUpdate && (
                             <button
                               type="button"
                               disabled={restoringId === emp.empCode}
@@ -423,7 +363,7 @@ export default function FormerEmployeesPage() {
                                 padding: '8px 16px',
                                 borderRadius: 8,
                                 border: 'none',
-                                background: 'linear-gradient(135deg, #10b981, #22c55e)',
+                                background: `linear-gradient(135deg, ${colors.success ?? '#10b981'}, #22c55e)`,
                                 color: '#ffffff',
                                 fontSize: 13,
                                 fontWeight: 600,
@@ -434,26 +374,26 @@ export default function FormerEmployeesPage() {
                             >
                               {restoringId === emp.empCode ? 'Restoring…' : 'Restore'}
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <PaginationControls
-              currentPage={currentPage}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.total}
-              itemsPerPage={pagination.limit}
-              onPageChange={setCurrentPage}
-              loading={loading}
-            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </div>
+
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.total}
+            itemsPerPage={pagination.limit}
+            onPageChange={setCurrentPage}
+            loading={loading}
+          />
+        </GlassCard>
+      </HrPageShell>
 
       <Modal
         isOpen={!!viewEmployee}
@@ -487,7 +427,7 @@ export default function FormerEmployeesPage() {
       </Modal>
 
       <ConfirmDialog
-        isOpen={restoreConfirm.isOpen}
+        isOpen={canUpdate && restoreConfirm.isOpen}
         onClose={() => setRestoreConfirm({ isOpen: false, employee: null })}
         onConfirm={() => restoreConfirm.employee && handleRestore(restoreConfirm.employee)}
         title="Restore Employee"

@@ -3,7 +3,7 @@ import { connectDB } from "../../../../lib/db";
 import Employee from "../../../../models/Employee";
 import { mergeActiveFilter } from "../../../../lib/employees/activeFilter";
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
-import { requireHR } from "../../../../lib/auth/requireAuth";
+import { requirePermission } from "../../../../lib/auth/requireAuth";
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ export async function GET(req) {
   const startTime = Date.now();
   
   try {
-    await requireHR();
+    await requirePermission('employees', 'view');
     // OPTIMIZATION: Connect DB (cached singleton, no reconnection per request)
     await connectDB();
 

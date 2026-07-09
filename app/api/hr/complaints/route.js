@@ -3,7 +3,7 @@
 import { connectDB } from '../../../../lib/db';
 import Complaint from '../../../../models/Complaint';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -21,7 +21,7 @@ function escapeRegex(value) {
 // period: all = all time, week = last 7 days, month = last 30 days. Results sorted latest first.
 export async function GET(req) {
   try {
-    await requireHR();
+    await requirePermission('complaints', 'view');
     await connectDB();
     const { searchParams } = new URL(req.url);
     const status = (searchParams.get('status') || '').trim();

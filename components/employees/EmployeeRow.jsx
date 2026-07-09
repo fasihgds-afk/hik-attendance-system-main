@@ -1,89 +1,105 @@
+'use client';
+
 /**
  * Employee Row Component
- * 
+ *
  * Single employee table row with inline editing
  */
 
+import { useTheme } from '@/lib/theme/ThemeContext';
+import { getTableStyles } from '@/lib/theme/styles';
 import EmployeeAvatar from './EmployeeAvatar';
 import EmployeeQuickInfo from './EmployeeQuickInfo';
 
-const tdStyle = {
-  padding: '12px 16px',
-  borderBottom: '1px solid #f1f5f9',
-  fontSize: 14,
-  color: '#1f2937',
-  backgroundColor: '#ffffff',
-};
-
-const selectStyle = {
-  padding: '6px 10px',
-  borderRadius: 8,
-  border: '1px solid #d1d5db',
-  backgroundColor: '#ffffff',
-  color: '#374151',
-  fontSize: 13,
-  outline: 'none',
-  minWidth: 140,
-  cursor: 'pointer',
-  transition: 'all 0.2s',
-  fontWeight: 500,
-};
+function applyRowBackground(rowEl, backgroundColor) {
+  rowEl.style.backgroundColor = backgroundColor;
+  rowEl.querySelectorAll('td').forEach((td) => {
+    td.style.backgroundColor = backgroundColor;
+  });
+}
 
 export default function EmployeeRow({
   employee,
   index,
   shifts,
   savingId,
+  canUpdate = true,
   onShiftChange,
   onEdit,
   onSave,
   onDelete,
 }) {
-  const isSaving = savingId === (employee._id || employee.empCode);
+  const { colors, theme } = useTheme();
+  const isDark = theme === 'dark';
+  const tableStyles = getTableStyles(colors);
+
+  const rowBase =
+    index % 2 === 0 ? colors.background.table.row : colors.background.table.rowEven;
+  const rowHover = colors.background.table.rowHover;
+
+  const tdStyle = {
+    ...tableStyles.td,
+    backgroundColor: rowBase,
+  };
+
+  const selectStyle = {
+    padding: '6px 10px',
+    borderRadius: 8,
+    border: `1px solid ${colors.border.input}`,
+    backgroundColor: colors.background.input,
+    color: colors.text.primary,
+    fontSize: 13,
+    outline: 'none',
+    minWidth: 140,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontWeight: 500,
+  };
 
   const handleShiftChange = (newShift) => {
+    if (!canUpdate || !onShiftChange) return;
     onShiftChange(index, newShift);
   };
 
   return (
     <tr
-      onDoubleClick={() => onEdit(employee)}
+      className="hr-employee-row"
+      onDoubleClick={() => onEdit?.(employee)}
       style={{
         cursor: 'pointer',
-        backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc',
-        transition: 'all 0.15s ease',
+        backgroundColor: rowBase,
+        transition: 'background-color 0.15s ease, box-shadow 0.15s ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = '#f0f9ff';
-        e.currentTarget.style.boxShadow = 'inset 4px 0 0 0 #3b82f6';
+        applyRowBackground(e.currentTarget, rowHover);
+        e.currentTarget.style.boxShadow = isDark
+          ? 'inset 4px 0 0 0 rgba(14, 165, 233, 0.75)'
+          : 'inset 4px 0 0 0 #3b82f6';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#ffffff' : '#f8fafc';
+        applyRowBackground(e.currentTarget, rowBase);
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      {/* Employee Column - Combined Avatar + Name + Code with Quick Info */}
       <td style={tdStyle}>
         <EmployeeQuickInfo employee={employee}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <EmployeeAvatar employee={employee} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ 
-                fontWeight: 600, 
-                fontSize: 14, 
-                color: '#111827',
-                marginBottom: 2,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}>
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 14,
+                  color: colors.text.primary,
+                  marginBottom: 2,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 {employee.name || 'No Name'}
               </div>
-              <div style={{ 
-                fontSize: 12, 
-                color: '#6b7280',
-                fontWeight: 500,
-              }}>
+              <div style={{ fontSize: 12, color: colors.text.secondary, fontWeight: 500 }}>
                 {employee.empCode}
               </div>
             </div>
@@ -91,68 +107,66 @@ export default function EmployeeRow({
         </EmployeeQuickInfo>
       </td>
 
-      {/* Department Column */}
       <td style={tdStyle}>
         {employee.department ? (
-          <span style={{
-            padding: '6px 12px',
-            borderRadius: 16,
-            backgroundColor: '#eff6ff',
-            color: '#1e40af',
-            fontSize: 12,
-            fontWeight: 600,
-            display: 'inline-block',
-          }}>
+          <span
+            style={{
+              padding: '6px 12px',
+              borderRadius: 16,
+              backgroundColor: isDark ? 'rgba(14, 165, 233, 0.2)' : '#eff6ff',
+              color: isDark ? '#bae6fd' : '#1e40af',
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'inline-block',
+            }}
+          >
             {employee.department}
           </span>
         ) : (
-          <span style={{ color: '#9ca3af', fontSize: 14 }}>-</span>
+          <span style={{ color: colors.text.muted, fontSize: 14 }}>-</span>
         )}
         {employee.designation && (
-          <div style={{ 
-            fontSize: 12, 
-            color: '#6b7280',
-            marginTop: 4,
-          }}>
+          <div style={{ fontSize: 12, color: colors.text.secondary, marginTop: 4 }}>
             {employee.designation}
           </div>
         )}
       </td>
 
-      {/* Shift Column */}
       <td style={tdStyle}>
         {(() => {
-          // Normalize shift value for comparison (uppercase, trimmed)
           const normalizedShift = employee.shift ? String(employee.shift).trim().toUpperCase() : '';
-          // Find matching shift code (case-insensitive)
-          const matchingShift = shifts.find(s => 
-            s.code.toUpperCase() === normalizedShift || 
-            s.code === normalizedShift ||
-            s.code === employee.shift
+          const matchingShift = shifts.find(
+            (s) =>
+              s.code.toUpperCase() === normalizedShift ||
+              s.code === normalizedShift ||
+              s.code === employee.shift
           );
-          const selectedShiftCode = matchingShift ? matchingShift.code : (employee.shift || '');
-          
+          const selectedShiftCode = matchingShift ? matchingShift.code : employee.shift || '';
+
           return (
             <select
               style={{
                 ...selectStyle,
                 minWidth: 180,
+                opacity: canUpdate ? 1 : 0.7,
+                cursor: canUpdate ? 'pointer' : 'default',
               }}
               value={selectedShiftCode}
+              disabled={!canUpdate}
               onChange={(e) => handleShiftChange(e.target.value)}
               onClick={(e) => e.stopPropagation()}
               onFocus={(e) => {
-                e.currentTarget.style.borderColor = '#3b82f6';
-                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)';
+                if (!canUpdate) return;
+                e.currentTarget.style.borderColor = colors.primary[500];
+                e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}33`;
               }}
               onBlur={(e) => {
-                e.currentTarget.style.borderColor = '#d1d5db';
+                e.currentTarget.style.borderColor = colors.border.input;
                 e.currentTarget.style.boxShadow = 'none';
-                // Auto-save on blur if shift changed
+                if (!canUpdate || !onSave) return;
                 const newShift = e.target.value;
                 const currentShift = selectedShiftCode;
                 if (newShift !== currentShift) {
-                  // Pass updated employee with new shift value
                   const updatedEmployee = { ...employee, shift: newShift };
                   setTimeout(() => {
                     onSave(updatedEmployee);
@@ -168,48 +182,40 @@ export default function EmployeeRow({
                   </option>
                 ))
               ) : (
-                <option value="" disabled>No shifts available</option>
+                <option value="" disabled>
+                  No shifts available
+                </option>
               )}
             </select>
           );
         })()}
         {employee.shift && (
-          <div style={{ 
-            fontSize: 11, 
-            color: '#10b981',
-            marginTop: 4,
-            fontWeight: 600,
-          }}>
+          <div style={{ fontSize: 11, color: colors.success, marginTop: 4, fontWeight: 600 }}>
             Active
           </div>
         )}
       </td>
 
-      {/* Salary Column */}
       <td style={tdStyle}>
         {employee.monthlySalary != null ? (
           <div>
-            <div style={{ 
-              fontWeight: 700, 
-              fontSize: 15,
-              color: '#059669',
-              marginBottom: 2,
-            }}>
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: 15,
+                color: colors.success,
+                marginBottom: 2,
+              }}
+            >
               ₨{employee.monthlySalary.toLocaleString()}
             </div>
-            <div style={{ 
-              fontSize: 11, 
-              color: '#6b7280',
-            }}>
-              per month
-            </div>
+            <div style={{ fontSize: 11, color: colors.text.secondary }}>per month</div>
           </div>
         ) : (
-          <span style={{ color: '#9ca3af', fontSize: 14 }}>-</span>
+          <span style={{ color: colors.text.muted, fontSize: 14 }}>-</span>
         )}
       </td>
 
-      {/* Actions Column */}
       <td style={{ ...tdStyle, textAlign: 'center' }}>
         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
@@ -222,24 +228,24 @@ export default function EmployeeRow({
               padding: '8px 16px',
               borderRadius: 8,
               border: 'none',
-              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[700]})`,
               color: '#ffffff',
               fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'all 0.2s',
-              boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
+              boxShadow: `0 2px 4px ${colors.primary[500]}33`,
               display: 'flex',
               alignItems: 'center',
               gap: 6,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.3)';
+              e.currentTarget.style.boxShadow = `0 4px 8px ${colors.primary[500]}44`;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.2)';
+              e.currentTarget.style.boxShadow = `0 2px 4px ${colors.primary[500]}33`;
             }}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -259,7 +265,7 @@ export default function EmployeeRow({
                 padding: '8px 12px',
                 borderRadius: 8,
                 border: 'none',
-                backgroundColor: '#dc2626',
+                backgroundColor: colors.error,
                 color: '#ffffff',
                 fontSize: 13,
                 fontWeight: 600,
@@ -272,12 +278,10 @@ export default function EmployeeRow({
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#b91c1c';
                 e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(220, 38, 38, 0.3)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#dc2626';
+                e.currentTarget.style.backgroundColor = colors.error;
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(220, 38, 38, 0.2)';
               }}
             >
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -290,4 +294,3 @@ export default function EmployeeRow({
     </tr>
   );
 }
-

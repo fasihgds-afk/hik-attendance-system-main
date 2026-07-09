@@ -6,7 +6,8 @@ import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/quer
 import { NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
 import { validateEmployee } from '../../../lib/validations/employee';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
-import { requireHR, requireAuth } from '../../../lib/auth/requireAuth';
+import { requirePermission, requireAuth } from '../../../lib/auth/requireAuth';
+import { hasPermission } from '../../../lib/auth/permissions';
 import {
   decryptBankDetails,
   encryptBankDetails,
@@ -288,6 +289,16 @@ export async function POST(req) {
       });
     } else if (user.role !== 'HR' && user.role !== 'ADMIN') {
       return errorResponse('Unauthorized', 401);
+    } else {
+      // HR/ADMIN: require create or update on employees module
+      const existing = await Employee.findOne(mergeActiveFilter({ empCode }))
+        .select('_id')
+        .lean()
+        .maxTimeMS(1500);
+      const action = existing ? 'update' : 'create';
+      if (!hasPermission(user, 'employees', action)) {
+        return errorResponse(`Missing permission: employees.${action}`, 403);
+      }
     }
 
     // Build update object
@@ -434,7 +445,7 @@ export async function POST(req) {
 // DELETE /api/employee?empCode=XXXXX - HR/ADMIN only (soft delete / deactivate)
 export async function DELETE(req) {
   try {
-    const { user } = await requireHR();
+    const { user } = await requirePermission('employees', 'delete');
     await connectDB();
 
     const { searchParams } = new URL(req.url);

@@ -4,7 +4,7 @@ import { connectDB } from '../../../../lib/db';
 import CompanySettings from '../../../../models/CompanySettings';
 import { getCompanySettings, invalidateCompanySettingsCache, DEFAULT_COMPANY_SETTINGS } from '../../../../lib/settings/getCompanySettings';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
-import { requireHR } from '../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
@@ -66,7 +66,7 @@ function validateUpdate(body) {
 // GET /api/hr/company-settings - current settings (creates defaults if missing)
 export async function GET() {
   try {
-    await requireHR();
+    await requirePermission('companySettings', 'view');
     const settings = await getCompanySettings({ fresh: true });
     return successResponse({ settings }, 'Company settings retrieved', HTTP_STATUS.OK);
   } catch (err) {
@@ -78,7 +78,7 @@ export async function GET() {
 // PATCH /api/hr/company-settings - update one or more settings fields
 export async function PATCH(req) {
   try {
-    const { user } = await requireHR();
+    const { user } = await requirePermission('companySettings', 'update');
     await connectDB();
     const body = await req.json();
     const update = validateUpdate(body);

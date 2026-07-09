@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const DEFAULT_SETTINGS = {
   timezoneOffset: '+05:00',
@@ -42,6 +43,7 @@ function resolveWorkingDays(mode, fixedDays, calendarDays) {
 export default function HrCompanySettingsPage() {
   const { colors, theme } = useTheme();
   const router = useRouter();
+  const { canUpdate } = usePermissions('companySettings');
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
     inactivityTime: 30 * 60 * 1000,
     warningTime: 5 * 60 * 1000,
@@ -88,6 +90,7 @@ export default function HrCompanySettingsPage() {
   }, []);
 
   function toggleOffDay(dayNum) {
+    if (!canUpdate) return;
     if (dayNum === 6) return; // Saturday handled on Departments page
     setSettings((prev) => {
       const has = prev.weeklyOffDays.includes(dayNum);
@@ -141,12 +144,6 @@ export default function HrCompanySettingsPage() {
     }
   };
 
-  const pageBg = theme === 'dark' ? '#0a0a23' : (colors.gradient?.overlay ?? colors.background?.default);
-  const headerGradient = theme === 'dark'
-    ? 'linear-gradient(90deg, #0a2c54 0%, #0f5ba5 35%, #13a8e5 100%)'
-    : (colors.gradient?.header ?? colors.background?.card);
-  const cardBg = theme === 'dark' ? '#1e293b' : (colors.background?.card ?? '#ffffff');
-  const cardShadow = theme === 'dark' ? '0 20px 60px rgba(0,0,0,0.5)' : '0 20px 60px rgba(0,0,0,0.08)';
   const sectionBg = theme === 'dark' ? 'rgba(15, 23, 42, 0.6)' : (colors.background?.secondary ?? '#f8fafc');
   const mutedText = theme === 'dark' ? '#94a3b8' : colors.text?.secondary;
   const inputBorder = theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default;
@@ -191,51 +188,40 @@ export default function HrCompanySettingsPage() {
     lineHeight: 1.5,
   };
 
-  const navBtn = {
-    padding: '10px 18px',
-    borderRadius: 12,
-    border: `1px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : colors.border?.default}`,
-    backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : colors.background?.card,
-    color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-    fontWeight: 600,
-    fontSize: 13,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    backdropFilter: 'blur(10px)',
-    transition: 'all 0.2s',
-    whiteSpace: 'nowrap',
-  };
+
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const headerActions = (
+    <HrHeaderActions className="cs-header-actions">
+      <button type="button" onClick={() => router.push('/hr/employees')} className="cs-button" style={glossPill('neutral')}>
+        HR Home
+      </button>
+      <button type="button" onClick={() => router.push('/hr/departments')} className="cs-button" style={glossPill('slate')}>
+        Departments
+      </button>
+      <button type="button" onClick={() => router.push('/hr/violation-rules')} className="cs-button" style={glossPill('neutral')}>
+        Violation Rules
+      </button>
+      <button type="button" onClick={handleLogout} className="cs-button" style={glossPill('rose')}>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
 
   if (!mounted) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background: '#0a0a23',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#94a3b8',
-          fontSize: 14,
-        }}
-      >
-        Loading...
-      </div>
+      <HrPageShell subtitle="Company Settings · Timezone, off-days & salary rules">
+        <div style={{ textAlign: 'center', padding: 40, color: mutedText, fontSize: 14 }}>
+          Loading...
+        </div>
+      </HrPageShell>
     );
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        padding: '24px 28px 32px',
-        background: pageBg,
-        color: colors.text?.primary,
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        boxSizing: 'border-box',
-      }}
+    <HrPageShell
+      subtitle="Company Settings · Timezone, off-days & salary rules"
+      actions={headerActions}
     >
       <style
         dangerouslySetInnerHTML={{
@@ -250,101 +236,7 @@ export default function HrCompanySettingsPage() {
         }}
       />
 
-      <div className="container-responsive" style={{ margin: '0 auto', width: '100%', maxWidth: '100%' }}>
-        {/* Header — same portal style as Departments */}
-        <div
-          className="cs-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 28px',
-            borderRadius: 20,
-            background: headerGradient,
-            color: theme === 'dark' ? '#ffffff' : colors.text?.primary,
-            boxShadow: theme === 'dark'
-              ? '0 20px 50px rgba(19, 168, 229, 0.25), 0 8px 16px rgba(0, 0, 0, 0.3)'
-              : '0 20px 50px rgba(59, 130, 246, 0.15), 0 8px 16px rgba(0, 0, 0, 0.1)',
-            border: `1px solid ${colors.border?.default}`,
-            position: 'relative',
-            overflow: 'hidden',
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: theme === 'dark'
-                ? 'radial-gradient(circle at 80% 50%, rgba(19, 168, 229, 0.15) 0%, transparent 50%)'
-                : 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-              pointerEvents: 'none',
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1 }}>
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 16,
-                overflow: 'hidden',
-                backgroundColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(59, 130, 246, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-                border: `2px solid ${theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : colors.border?.default}`,
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 0.5, marginBottom: 4 }}>
-                Global Digital Solutions
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.95, fontWeight: 500 }}>
-                Company Settings · Timezone, off-days &amp; salary rules
-              </div>
-            </div>
-          </div>
-
-          <div className="cs-header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            <ThemeToggle compact />
-            <button type="button" onClick={() => router.push('/hr/employees')} style={navBtn}>
-              HR Home
-            </button>
-            <button type="button" onClick={() => router.push('/hr/departments')} style={navBtn}>
-              Departments
-            </button>
-            <button type="button" onClick={() => router.push('/hr/violation-rules')} style={navBtn}>
-              Violation Rules
-            </button>
-            <button type="button" onClick={handleLogout} style={navBtn}>
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* Main card */}
-        <div
-          style={{
-            width: '100%',
-            marginTop: 24,
-            borderRadius: 16,
-            background: cardBg,
-            boxShadow: cardShadow,
-            padding: '20px 24px 24px',
-            border: `1px solid ${colors.border?.default}`,
-            boxSizing: 'border-box',
-          }}
-        >
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
           {toast.text && (
             <div
               style={{
@@ -403,6 +295,11 @@ export default function HrCompanySettingsPage() {
             <div style={{ padding: '40px 0', textAlign: 'center', color: mutedText }}>Loading settings...</div>
           ) : (
             <form onSubmit={handleSave}>
+              {!canUpdate && (
+                <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+                  View only — you cannot change this module.
+                </p>
+              )}
               {/* Section: Timezone */}
               <div
                 style={{
@@ -427,8 +324,9 @@ export default function HrCompanySettingsPage() {
                       type="text"
                       value={settings.timezoneOffset}
                       placeholder="+05:00"
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, timezoneOffset: e.target.value })}
-                      style={fieldStyle}
+                      style={{ ...fieldStyle, opacity: canUpdate ? 1 : 0.7 }}
                     />
                     <span style={hintStyle}>Example: +05:00 for Pakistan</span>
                   </div>
@@ -438,8 +336,9 @@ export default function HrCompanySettingsPage() {
                       id="businessDayCutoff"
                       type="time"
                       value={settings.businessDayCutoff}
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, businessDayCutoff: e.target.value })}
-                      style={fieldStyle}
+                      style={{ ...fieldStyle, opacity: canUpdate ? 1 : 0.7 }}
                     />
                     <span style={hintStyle}>Before this time, &quot;today&quot; is still yesterday</span>
                   </div>
@@ -470,7 +369,7 @@ export default function HrCompanySettingsPage() {
                       <button
                         key={num}
                         type="button"
-                        disabled={isSat}
+                        disabled={isSat || !canUpdate}
                         title={isSat ? 'Configure Saturday on Departments page' : label}
                         onClick={() => toggleOffDay(num)}
                         style={{
@@ -488,8 +387,8 @@ export default function HrCompanySettingsPage() {
                           color: isSat ? mutedText : isOff ? (theme === 'dark' ? '#38bdf8' : colors.primary) : colors.text?.primary,
                           fontWeight: isOff ? 700 : 500,
                           fontSize: 13,
-                          cursor: isSat ? 'not-allowed' : 'pointer',
-                          opacity: isSat ? 0.7 : 1,
+                          cursor: isSat || !canUpdate ? 'not-allowed' : 'pointer',
+                          opacity: isSat || !canUpdate ? 0.7 : 1,
                         }}
                       >
                         {short}
@@ -524,8 +423,9 @@ export default function HrCompanySettingsPage() {
                       id="nightCheckoutCutoff"
                       type="time"
                       value={settings.nightCheckoutCutoff}
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, nightCheckoutCutoff: e.target.value })}
-                      style={fieldStyle}
+                      style={{ ...fieldStyle, opacity: canUpdate ? 1 : 0.7 }}
                     />
                     <span style={hintStyle}>Morning checkout before this belongs to previous night</span>
                   </div>
@@ -534,8 +434,9 @@ export default function HrCompanySettingsPage() {
                     <select
                       id="nightShiftOffAnchor"
                       value={settings.nightShiftOffAnchor}
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, nightShiftOffAnchor: e.target.value })}
-                      style={{ ...fieldStyle, cursor: 'pointer' }}
+                      style={{ ...fieldStyle, cursor: canUpdate ? 'pointer' : 'default', opacity: canUpdate ? 1 : 0.7 }}
                     >
                       <option value="start">Shift start day (night you start)</option>
                       <option value="end">Shift end day (night you finish)</option>
@@ -590,8 +491,9 @@ export default function HrCompanySettingsPage() {
                     <select
                       id="workingDaysMode"
                       value={settings.workingDaysMode}
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, workingDaysMode: e.target.value })}
-                      style={{ ...fieldStyle, cursor: 'pointer' }}
+                      style={{ ...fieldStyle, cursor: canUpdate ? 'pointer' : 'default', opacity: canUpdate ? 1 : 0.7 }}
                     >
                       <option value="legacy">Legacy — days in month minus 6 (current)</option>
                       <option value="actual">Per employee — count their real off days</option>
@@ -615,8 +517,9 @@ export default function HrCompanySettingsPage() {
                       type="text"
                       value={settings.currency}
                       placeholder="PKR"
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, currency: e.target.value })}
-                      style={fieldStyle}
+                      style={{ ...fieldStyle, opacity: canUpdate ? 1 : 0.7 }}
                     />
                     <span style={hintStyle}>Shown on payslips and reports</span>
                   </div>
@@ -630,8 +533,9 @@ export default function HrCompanySettingsPage() {
                       min={1}
                       max={31}
                       value={settings.fixedDaysPerMonth}
+                      disabled={!canUpdate}
                       onChange={(e) => setSettings({ ...settings, fixedDaysPerMonth: e.target.value })}
-                      style={fieldStyle}
+                      style={{ ...fieldStyle, opacity: canUpdate ? 1 : 0.7 }}
                     />
                   </div>
                 )}
@@ -641,26 +545,28 @@ export default function HrCompanySettingsPage() {
               </div>
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  style={{
-                    padding: '12px 28px',
-                    borderRadius: 12,
-                    border: 'none',
-                    background: theme === 'dark'
-                      ? 'linear-gradient(135deg, #0ea5e9, #0284c7)'
-                      : colors.primary,
-                    color: '#ffffff',
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: saving ? 'not-allowed' : 'pointer',
-                    opacity: saving ? 0.6 : 1,
-                    boxShadow: '0 4px 14px rgba(14, 165, 233, 0.35)',
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save settings'}
-                </button>
+                {canUpdate && (
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    style={{
+                      padding: '12px 28px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: theme === 'dark'
+                        ? 'linear-gradient(135deg, #0ea5e9, #0284c7)'
+                        : colors.primary,
+                      color: '#ffffff',
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.6 : 1,
+                      boxShadow: '0 4px 14px rgba(14, 165, 233, 0.35)',
+                    }}
+                  >
+                    {saving ? 'Saving...' : 'Save settings'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => router.push('/hr/employees')}
@@ -675,13 +581,12 @@ export default function HrCompanySettingsPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  Cancel
+                  {canUpdate ? 'Cancel' : 'Back'}
                 </button>
               </div>
             </form>
           )}
-        </div>
-      </div>
+      </GlassCard>
 
       {showWarning && (
         <AutoLogoutWarning
@@ -690,6 +595,6 @@ export default function HrCompanySettingsPage() {
           onLogout={autoLogout}
         />
       )}
-    </div>
+    </HrPageShell>
   );
 }

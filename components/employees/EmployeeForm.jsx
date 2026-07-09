@@ -17,6 +17,8 @@ export default function EmployeeForm({
   onSubmit,
   onCancel,
   loading = false,
+  readOnly = false,
+  showBankDetails = true,
 }) {
   const todayStr = () => new Date().toISOString().slice(0, 10);
   const defaultSalaryMonth = () => {
@@ -51,6 +53,7 @@ export default function EmployeeForm({
   const [imagePreview, setImagePreview] = useState(employee?.profileImageUrl || '');
 
   const handleChange = (field, value) => {
+    if (readOnly) return;
     setFormData(prev => ({
       ...prev,
       [field]: value,
@@ -93,6 +96,7 @@ export default function EmployeeForm({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (readOnly) return;
     if (!formData.empCode.trim()) {
       alert('Employee Code is required');
       return;
@@ -156,23 +160,32 @@ export default function EmployeeForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <div
+      <fieldset
+        disabled={readOnly}
         style={{
           backgroundColor: '#ffffff',
           borderRadius: 12,
           padding: 24,
           border: '1px solid #e5e7eb',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          margin: 0,
+          minWidth: 0,
         }}
       >
         {/* Form Header */}
         <div style={{ marginBottom: 24 }}>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827', margin: 0 }}>
-            {isEditMode ? 'Edit Employee Details' : 'Add New Employee'}
+            {isEditMode
+              ? readOnly
+                ? 'Employee Details'
+                : 'Edit Employee Details'
+              : 'Add New Employee'}
           </h2>
           <p style={{ fontSize: 14, color: '#6b7280', marginTop: 6, margin: 0 }}>
-            {isEditMode 
-              ? 'Update employee information below. All changes will be saved immediately.'
+            {isEditMode
+              ? readOnly
+                ? 'View employee information below.'
+                : 'Update employee information below. All changes will be saved immediately.'
               : 'Fill in the required details to add a new employee to the system'}
           </p>
         </div>
@@ -535,129 +548,158 @@ export default function EmployeeForm({
         </div>
 
         {/* Section: Bank Details (Private) */}
-        <div style={{ marginBottom: 28 }}>
-          <h3
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              color: '#111827',
-              marginBottom: 16,
-              paddingBottom: 8,
-              borderBottom: '2px solid #e5e7eb',
-            }}
-          >
-            Bank Details (Private)
-          </h3>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: 20,
-              marginBottom: 24,
-            }}
-          >
-            <div>
-              <label style={labelStyle}>Bank Name</label>
-              <input
-                type="text"
-                value={formData.bankDetails?.bankName || ''}
-                onChange={(e) =>
-                  handleChange('bankDetails', {
-                    ...(formData.bankDetails || {}),
-                    bankName: e.target.value,
-                  })
-                }
-                placeholder="e.g. HBL"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Account Title</label>
-              <input
-                type="text"
-                value={formData.bankDetails?.accountTitle || ''}
-                onChange={(e) =>
-                  handleChange('bankDetails', {
-                    ...(formData.bankDetails || {}),
-                    accountTitle: e.target.value,
-                  })
-                }
-                placeholder="Account holder name"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Account Number</label>
-              <input
-                type="text"
-                value={formData.bankDetails?.accountNumber || ''}
-                onChange={(e) =>
-                  handleChange('bankDetails', {
-                    ...(formData.bankDetails || {}),
-                    accountNumber: e.target.value,
-                  })
-                }
-                placeholder="Bank account number"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>IBAN</label>
-              <input
-                type="text"
-                value={formData.bankDetails?.iban || ''}
-                onChange={(e) =>
-                  handleChange('bankDetails', {
-                    ...(formData.bankDetails || {}),
-                    iban: e.target.value,
-                  })
-                }
-                placeholder="PKXX...."
-                style={inputStyle}
-              />
+        {showBankDetails && (
+          <div style={{ marginBottom: 28 }}>
+            <h3
+              style={{
+                fontSize: 16,
+                fontWeight: 700,
+                color: '#111827',
+                marginBottom: 16,
+                paddingBottom: 8,
+                borderBottom: '2px solid #e5e7eb',
+              }}
+            >
+              Bank Details (Private)
+            </h3>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 20,
+                marginBottom: 24,
+              }}
+            >
+              <div>
+                <label style={labelStyle}>Bank Name</label>
+                <input
+                  type="text"
+                  value={formData.bankDetails?.bankName || ''}
+                  onChange={(e) =>
+                    handleChange('bankDetails', {
+                      ...(formData.bankDetails || {}),
+                      bankName: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. HBL"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Account Title</label>
+                <input
+                  type="text"
+                  value={formData.bankDetails?.accountTitle || ''}
+                  onChange={(e) =>
+                    handleChange('bankDetails', {
+                      ...(formData.bankDetails || {}),
+                      accountTitle: e.target.value,
+                    })
+                  }
+                  placeholder="Account holder name"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Account Number</label>
+                <input
+                  type="text"
+                  value={formData.bankDetails?.accountNumber || ''}
+                  onChange={(e) =>
+                    handleChange('bankDetails', {
+                      ...(formData.bankDetails || {}),
+                      accountNumber: e.target.value,
+                    })
+                  }
+                  placeholder="Bank account number"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>IBAN</label>
+                <input
+                  type="text"
+                  value={formData.bankDetails?.iban || ''}
+                  onChange={(e) =>
+                    handleChange('bankDetails', {
+                      ...(formData.bankDetails || {}),
+                      iban: e.target.value,
+                    })
+                  }
+                  placeholder="PKXX...."
+                  style={inputStyle}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Form Actions */}
+        {/* Form Actions (inside fieldset only when editable — Close stays outside when read-only) */}
+        {!readOnly && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 12,
+              paddingTop: 20,
+              borderTop: '1px solid #e5e7eb',
+            }}
+          >
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                style={cancelButtonStyle}
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleReset}
+              style={resetButtonStyle}
+            >
+              Reset
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                ...submitButtonStyle,
+                opacity: loading ? 0.6 : 1,
+                cursor: loading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {loading ? 'Saving...' : (isEditMode ? 'Update Employee' : 'Add Employee')}
+            </button>
+          </div>
+        )}
+      </fieldset>
+      {readOnly && (
         <div
           style={{
             display: 'flex',
             justifyContent: 'flex-end',
+            alignItems: 'center',
             gap: 12,
-            paddingTop: 20,
-            borderTop: '1px solid #e5e7eb',
+            paddingTop: 16,
+            marginTop: 4,
           }}
         >
+          <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, marginRight: 'auto' }}>
+            View only — you cannot change this module.
+          </p>
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
               style={cancelButtonStyle}
             >
-              Cancel
+              Close
             </button>
           )}
-          <button
-            type="button"
-            onClick={handleReset}
-            style={resetButtonStyle}
-          >
-            Reset
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              ...submitButtonStyle,
-              opacity: loading ? 0.6 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading ? 'Saving...' : (isEditMode ? 'Update Employee' : 'Add Employee')}
-          </button>
         </div>
-      </div>
+      )}
     </form>
   );
 }

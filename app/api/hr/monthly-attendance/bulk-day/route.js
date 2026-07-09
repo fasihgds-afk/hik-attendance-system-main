@@ -21,7 +21,7 @@
 // =============================================================================
 
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
-import { requireHR } from '../../../../../lib/auth/requireAuth';
+import { requirePermission } from '../../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../../lib/errors/errorHandler';
 
 import { connectDB } from '../../../../../lib/db';
@@ -48,7 +48,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(req) {
   try {
-    await requireHR();
+    await requirePermission('monthlyAttendance', 'update');
     await connectDB();
 
     const body = await req.json();
