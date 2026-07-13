@@ -35,9 +35,15 @@ const EmployeeItEquipmentSchema = new mongoose.Schema(
     mouse: { type: Boolean, default: false },
     keyboard: { type: Boolean, default: false },
     monitor: { type: Boolean, default: false },
+    charger: { type: Boolean, default: false },
     /** Free-text: dock, webcam, other odds and ends */
     extraEquipment: { type: String, default: '', trim: true },
-    /** e.g. Admin rights, software install permission */
+    /**
+     * Whether the employee may take the company laptop home.
+     * UI label: "Take laptop home"
+     */
+    takeHomeAllowed: { type: Boolean, default: false },
+    /** @deprecated kept for older rows; prefer takeHomeAllowed */
     laptopPermission: { type: String, default: '', trim: true },
     notes: { type: String, default: '', trim: true },
     updatedBy: { type: String, default: '' },

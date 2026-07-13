@@ -8,6 +8,7 @@ export const ASSET_TYPES = [
   'keyboard',
   'mouse',
   'headset',
+  'charger',
   'dock',
   'phone',
   'other',
@@ -19,6 +20,12 @@ export const ASSET_CONDITIONS = ['new', 'good', 'fair', 'poor'];
 
 /** Types that use processor / RAM / ROM specs */
 export const COMPUTE_ASSET_TYPES = ['laptop', 'desktop'];
+
+/** Types that show brand name */
+export const BRAND_ASSET_TYPES = ['laptop', 'desktop', 'monitor'];
+
+/** Types that can be added in bulk (quantity) */
+export const BULK_ASSET_TYPES = ['keyboard', 'mouse', 'charger'];
 
 const AssetSchema = new mongoose.Schema(
   {
@@ -35,12 +42,11 @@ const AssetSchema = new mongoose.Schema(
       enum: ASSET_TYPES,
       index: true,
     },
+    brand: { type: String, default: '', trim: true },
     /** Specs for laptop / desktop */
     processor: { type: String, default: '', trim: true },
     ram: { type: String, default: '', trim: true },
     rom: { type: String, default: '', trim: true },
-    /** Kept optional for legacy rows; not used in new form */
-    brand: { type: String, default: '', trim: true },
     model: { type: String, default: '', trim: true },
     serialNumber: { type: String, default: '', trim: true },
     status: {
@@ -72,6 +78,7 @@ export function formatAssetLabel(asset) {
   if (!asset) return '';
   if (COMPUTE_ASSET_TYPES.includes(asset.type)) {
     const parts = [
+      asset.brand || null,
       asset.assetTag,
       asset.processor ? `CPU ${asset.processor}` : null,
       asset.ram ? `RAM ${asset.ram}` : null,
@@ -79,7 +86,10 @@ export function formatAssetLabel(asset) {
     ].filter(Boolean);
     return parts.join(' / ') || asset.assetTag;
   }
-  return [asset.assetTag, asset.type, asset.notes].filter(Boolean).join(' · ');
+  if (asset.type === 'monitor') {
+    return [asset.brand, asset.assetTag, asset.notes].filter(Boolean).join(' · ') || asset.assetTag;
+  }
+  return [asset.brand, asset.assetTag, asset.type, asset.notes].filter(Boolean).join(' · ');
 }
 
 const Asset = mongoose.models.Asset || mongoose.model('Asset', AssetSchema);

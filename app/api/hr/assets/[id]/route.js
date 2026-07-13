@@ -72,6 +72,7 @@ export async function PATCH(req, { params }) {
       $set.type = type;
     }
 
+    if (body.brand !== undefined) $set.brand = String(body.brand || '').trim();
     if (body.processor !== undefined) $set.processor = String(body.processor || '').trim();
     if (body.ram !== undefined) $set.ram = String(body.ram || '').trim();
     if (body.rom !== undefined) $set.rom = String(body.rom || '').trim();

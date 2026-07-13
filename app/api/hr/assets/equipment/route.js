@@ -18,6 +18,84 @@ function bool(value, fallback = false) {
   return fallback;
 }
 
+const ACCESSORY_TYPES = ['mouse', 'keyboard', 'charger', 'monitor', 'headset'];
+
+async function syncAccessoryInventory(employee, fields, performedBy) {
+  const missing = [];
+
+  for (const type of ACCESSORY_TYPES) {
+    const flagKey = type === 'headset' ? 'headphone' : type;
+    const wanted = !!fields[flagKey];
+
+    const already = await Asset.find({
+      type,
+      assignedToEmpCode: employee.empCode,
+      status: 'assigned',
+    })
+      .lean()
+      .maxTimeMS(1500);
+
+    if (wanted && already.length === 0) {
+      const stock = await Asset.findOneAndUpdate(
+        { type, status: 'in_stock' },
+        {
+          $set: {
+            status: 'assigned',
+            assignedToEmpCode: employee.empCode,
+            assignedToName: employee.name || '',
+            assignedAt: new Date(),
+            assignedBy: performedBy,
+          },
+        },
+        { new: true, sort: { createdAt: 1 } }
+      ).maxTimeMS(1500);
+
+      if (stock) {
+        await AssetAssignmentHistory.create({
+          assetId: stock._id,
+          assetTag: stock.assetTag,
+          action: 'assign',
+          empCode: employee.empCode,
+          employeeName: employee.name || '',
+          notes: `auto from ${flagKey} checkbox`,
+          performedBy,
+        });
+      } else {
+        missing.push(flagKey === 'headphone' ? 'Headphone' : flagKey.charAt(0).toUpperCase() + flagKey.slice(1));
+      }
+    }
+
+    if (!wanted && already.length > 0) {
+      for (const item of already) {
+        await Asset.findByIdAndUpdate(item._id, {
+          $set: {
+            status: 'in_stock',
+            assignedToEmpCode: null,
+            assignedToName: '',
+            assignedAt: null,
+            assignedBy: '',
+          },
+        });
+        await AssetAssignmentHistory.create({
+          assetId: item._id,
+          assetTag: item.assetTag,
+          action: 'return',
+          empCode: employee.empCode,
+          employeeName: employee.name || '',
+          notes: `cleared ${flagKey} checkbox`,
+          performedBy,
+        });
+      }
+    }
+  }
+
+  if (missing.length) {
+    throw new ValidationError(
+      `Not enough inventory in stock for: ${missing.join(', ')}. Add items under Inventory first.`
+    );
+  }
+}
+
 function sanitizeBody(body = {}) {
   return {
     devicePassword: String(body.devicePassword ?? '').trim(),
@@ -28,8 +106,12 @@ function sanitizeBody(body = {}) {
     mouse: bool(body.mouse),
     keyboard: bool(body.keyboard),
     monitor: bool(body.monitor),
+    charger: bool(body.charger),
     extraEquipment: String(body.extraEquipment ?? '').trim(),
-    laptopPermission: String(body.laptopPermission ?? '').trim(),
+    takeHomeAllowed: bool(body.takeHomeAllowed),
+    laptopPermission: bool(body.takeHomeAllowed)
+      ? 'Take home allowed'
+      : String(body.laptopPermission ?? '').trim(),
     notes: String(body.notes ?? '').trim(),
     laptopAssetId: body.laptopAssetId || null,
   };
@@ -68,6 +150,8 @@ export async function GET(req) {
       withKeyboard: rows.filter((r) => r.keyboard).length,
       withHeadphone: rows.filter((r) => r.headphone).length,
       withMonitor: rows.filter((r) => r.monitor).length,
+      withCharger: rows.filter((r) => r.charger).length,
+      takeHomeAllowed: rows.filter((r) => r.takeHomeAllowed || /take\s*home/i.test(r.laptopPermission || '')).length,
     };
 
     return successResponse({ rows, stats }, 'IT equipment list', HTTP_STATUS.OK);
@@ -134,6 +218,7 @@ export async function POST(req) {
           fields.keyboard ? 'keyboard' : null,
           fields.headphone ? 'headphone' : null,
           fields.monitor ? 'monitor' : null,
+          fields.charger ? 'charger' : null,
           fields.extraEquipment || null,
         ]
           .filter(Boolean)
@@ -143,6 +228,8 @@ export async function POST(req) {
 
       assetId = asset._id;
     }
+
+    await syncAccessoryInventory(employee, fields, performedBy);
 
     const row = await EmployeeItEquipment.findOneAndUpdate(
       { empCode: employee.empCode },
@@ -187,6 +274,15 @@ export async function PATCH(req) {
       .select('empCode name department')
       .lean()
       .maxTimeMS(1500);
+
+    await syncAccessoryInventory(
+      {
+        empCode,
+        name: employee?.name || existing.employeeName,
+      },
+      fields,
+      performedBy
+    );
 
     const row = await EmployeeItEquipment.findOneAndUpdate(
       { empCode },

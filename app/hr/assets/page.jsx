@@ -16,15 +16,26 @@ const ASSET_TYPES = [
   { value: 'keyboard', label: 'Keyboard' },
   { value: 'mouse', label: 'Mouse' },
   { value: 'headset', label: 'Headphone' },
+  { value: 'charger', label: 'Charger' },
   { value: 'dock', label: 'Dock / Hub' },
   { value: 'phone', label: 'Phone' },
   { value: 'other', label: 'Other' },
 ];
 
 const COMPUTE_TYPES = new Set(['laptop', 'desktop']);
+const BRAND_TYPES = new Set(['laptop', 'desktop', 'monitor']);
+const BULK_TYPES = new Set(['keyboard', 'mouse', 'charger']);
 
 function isComputeType(type) {
   return COMPUTE_TYPES.has(type);
+}
+
+function wantsBrand(type) {
+  return BRAND_TYPES.has(type);
+}
+
+function isBulkType(type) {
+  return BULK_TYPES.has(type);
 }
 
 function typeLabel(type) {
@@ -35,6 +46,7 @@ function formatAssetLabel(asset) {
   if (!asset) return '';
   if (isComputeType(asset.type)) {
     return [
+      asset.brand || null,
       asset.assetTag,
       asset.processor ? `CPU ${asset.processor}` : null,
       asset.ram ? `RAM ${asset.ram}` : null,
@@ -43,7 +55,10 @@ function formatAssetLabel(asset) {
       .filter(Boolean)
       .join(' / ');
   }
-  return [asset.assetTag, typeLabel(asset.type), asset.notes].filter(Boolean).join(' · ');
+  if (asset.type === 'monitor') {
+    return [asset.brand, asset.assetTag, asset.notes].filter(Boolean).join(' · ');
+  }
+  return [asset.brand, asset.assetTag, typeLabel(asset.type), asset.notes].filter(Boolean).join(' · ');
 }
 
 const emptyEquipForm = () => ({
@@ -56,8 +71,9 @@ const emptyEquipForm = () => ({
   mouse: false,
   keyboard: false,
   monitor: false,
+  charger: false,
+  takeHomeAllowed: false,
   extraEquipment: '',
-  laptopPermission: '',
   notes: '',
   laptopAssetId: '',
 });
@@ -65,9 +81,11 @@ const emptyEquipForm = () => ({
 const emptyInventoryForm = () => ({
   assetTag: '',
   type: 'laptop',
+  brand: '',
   processor: '',
   ram: '',
   rom: '',
+  quantity: 1,
   notes: '',
 });
 
@@ -133,6 +151,8 @@ export default function ItAssetsPage() {
 
   const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
   const showComputeFields = isComputeType(invForm.type);
+  const showBrandField = wantsBrand(invForm.type) || isBulkType(invForm.type);
+  const showBulkField = isBulkType(invForm.type);
 
   const inputStyle = useMemo(
     () => ({
@@ -268,6 +288,7 @@ export default function ItAssetsPage() {
     setSelectedEmpLabel('');
     setShowPassword(false);
     loadStockLaptops();
+    loadInventory(); // refresh stock counts for accessory checkboxes
     setModal('assign');
   }
 
@@ -282,8 +303,10 @@ export default function ItAssetsPage() {
       mouse: !!row.mouse,
       keyboard: !!row.keyboard,
       monitor: !!row.monitor,
+      charger: !!row.charger,
+      takeHomeAllowed:
+        !!row.takeHomeAllowed || /take\s*home/i.test(String(row.laptopPermission || '')),
       extraEquipment: row.extraEquipment || '',
-      laptopPermission: row.laptopPermission || '',
       notes: row.notes || '',
       laptopAssetId: row.laptopAssetId ? String(row.laptopAssetId) : '',
     });
@@ -292,6 +315,7 @@ export default function ItAssetsPage() {
     setEmployeeHits([]);
     setShowPassword(false);
     loadStockLaptops();
+    loadInventory();
     setModal('edit');
   }
 
@@ -317,10 +341,11 @@ export default function ItAssetsPage() {
     setInvForm((f) => ({
       ...f,
       type,
-      // Clear compute fields when switching to accessory
+      brand: wantsBrand(type) || isBulkType(type) ? f.brand : '',
       processor: isComputeType(type) ? f.processor : '',
       ram: isComputeType(type) ? f.ram : '',
       rom: isComputeType(type) ? f.rom : '',
+      quantity: isBulkType(type) ? f.quantity || 1 : 1,
     }));
   }
 
@@ -369,6 +394,10 @@ export default function ItAssetsPage() {
       showToast('error', 'Asset tag is required');
       return;
     }
+    if (wantsBrand(invForm.type) && !invForm.brand.trim()) {
+      showToast('error', 'Brand name is required for laptop, PC, and monitor');
+      return;
+    }
     if (isComputeType(invForm.type) && !invForm.processor && !invForm.ram && !invForm.rom) {
       showToast('error', 'Enter Processor, RAM, or ROM for laptop/PC');
       return;
@@ -381,10 +410,14 @@ export default function ItAssetsPage() {
         type: invForm.type,
         notes: invForm.notes.trim(),
       };
+      if (showBrandField) payload.brand = invForm.brand.trim();
       if (isComputeType(invForm.type)) {
         payload.processor = invForm.processor.trim();
         payload.ram = invForm.ram.trim();
         payload.rom = invForm.rom.trim();
+      }
+      if (isBulkType(invForm.type)) {
+        payload.quantity = Math.min(100, Math.max(1, parseInt(invForm.quantity, 10) || 1));
       }
 
       const res = await fetch('/api/hr/assets', {
@@ -394,7 +427,13 @@ export default function ItAssetsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || 'Failed to add asset');
-      showToast('success', `${typeLabel(invForm.type)} added to inventory`);
+      const count = data.data?.count || 1;
+      showToast(
+        'success',
+        count > 1
+          ? `Added ${count} ${typeLabel(invForm.type)} items`
+          : `${typeLabel(invForm.type)} added to inventory`
+      );
       setModal(null);
       setTab('inventory');
       await loadInventory();
@@ -478,31 +517,69 @@ export default function ItAssetsPage() {
     boxShadow: colors.glass.shadow,
   };
 
-  const checkRow = (key, label) => (
-    <label
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '10px 12px',
-        borderRadius: 10,
-        border: `1px solid ${colors.border.default}`,
-        background: isDark ? 'rgba(255,255,255,0.03)' : colors.background.secondary,
-        cursor: 'pointer',
-        fontSize: 13,
-        color: colors.text.primary,
-        fontWeight: 600,
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={!!form[key]}
-        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))}
-        style={{ width: 16, height: 16 }}
-      />
-      {label}
-    </label>
-  );
+  const ACCESSORY_STOCK_KEY = {
+    headphone: 'headset',
+    mouse: 'mouse',
+    keyboard: 'keyboard',
+    monitor: 'monitor',
+    charger: 'charger',
+  };
+
+  function stockCountFor(flagKey) {
+    const type = ACCESSORY_STOCK_KEY[flagKey];
+    if (!type) return 0;
+    return byType?.[type]?.in_stock || 0;
+  }
+
+  function toggleAccessory(flagKey, checked) {
+    if (checked && !form[flagKey] && stockCountFor(flagKey) < 1) {
+      const labels = {
+        headphone: 'Headphone',
+        mouse: 'Mouse',
+        keyboard: 'Keyboard',
+        monitor: 'Monitor',
+        charger: 'Charger',
+      };
+      showToast(
+        'error',
+        `No ${labels[flagKey] || flagKey} in stock. Add some under Inventory first.`
+      );
+      return;
+    }
+    setForm((f) => ({ ...f, [flagKey]: checked }));
+  }
+
+  const checkRow = (key, label) => {
+    const stock = stockCountFor(key);
+    return (
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 12px',
+          borderRadius: 10,
+          border: `1px solid ${colors.border.default}`,
+          background: isDark ? 'rgba(255,255,255,0.03)' : colors.background.secondary,
+          cursor: 'pointer',
+          fontSize: 13,
+          color: colors.text.primary,
+          fontWeight: 600,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={!!form[key]}
+          onChange={(e) => toggleAccessory(key, e.target.checked)}
+          style={{ width: 16, height: 16 }}
+        />
+        <span style={{ flex: 1 }}>{label}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: colors.text.muted }}>
+          {form[key] ? 'assigned' : `${stock} in stock`}
+        </span>
+      </label>
+    );
+  };
 
   const tabBtn = (id, label) => (
     <button
@@ -687,8 +764,9 @@ export default function ItAssetsPage() {
                       'Mouse',
                       'Keyboard',
                       'Monitor',
+                      'Charger',
+                      'Take Home',
                       'Extra Equipment',
-                      'Laptop Permission',
                       'Actions',
                     ].map((h) => (
                       <th
@@ -710,14 +788,14 @@ export default function ItAssetsPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={14} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
+                      <td colSpan={15} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
                         Loading…
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={14} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
-                        No equipment rows yet. Assign a laptop/PC and tick mouse / keyboard / headphone / monitor.
+                      <td colSpan={15} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
+                        No equipment rows yet. Assign a laptop/PC and tick accessories.
                       </td>
                     </tr>
                   ) : (
@@ -762,11 +840,21 @@ export default function ItAssetsPage() {
                         <td style={{ padding: '10px' }}>
                           <BoolPill value={row.monitor} colors={colors} isDark={isDark} />
                         </td>
+                        <td style={{ padding: '10px' }}>
+                          <BoolPill value={row.charger} colors={colors} isDark={isDark} />
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          <BoolPill
+                            value={
+                              !!row.takeHomeAllowed ||
+                              /take\s*home/i.test(String(row.laptopPermission || ''))
+                            }
+                            colors={colors}
+                            isDark={isDark}
+                          />
+                        </td>
                         <td style={{ padding: '10px', color: colors.text.secondary, maxWidth: 160 }}>
                           {row.extraEquipment || '—'}
-                        </td>
-                        <td style={{ padding: '10px', color: colors.text.secondary }}>
-                          {row.laptopPermission || '—'}
                         </td>
                         <td style={{ padding: '10px' }}>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -806,6 +894,7 @@ export default function ItAssetsPage() {
                 { key: 'mouse', label: 'Mouse' },
                 { key: 'keyboard', label: 'Keyboard' },
                 { key: 'monitor', label: 'Screen / Monitor' },
+                { key: 'charger', label: 'Charger' },
                 { key: 'headset', label: 'Headphone' },
               ].map((card) => {
                 const t = byType[card.key] || { in_stock: 0, assigned: 0, total: 0 };
@@ -891,7 +980,7 @@ export default function ItAssetsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 720 }}>
               <thead>
                 <tr style={{ background: isDark ? '#1e293b' : 'rgba(59,130,246,0.08)' }}>
-                  {['Tag', 'Type', 'Processor', 'RAM', 'ROM', 'Status', 'Notes', 'Actions'].map((h) => (
+                  {['Tag', 'Type', 'Brand', 'Processor', 'RAM', 'ROM', 'Status', 'Notes', 'Actions'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -911,14 +1000,14 @@ export default function ItAssetsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
+                    <td colSpan={9} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
                       Loading inventory…
                     </td>
                   </tr>
                 ) : inventory.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
-                      No inventory yet. Add a laptop/PC (with processor / RAM / ROM) or a mouse / keyboard / monitor.
+                    <td colSpan={9} style={{ padding: 28, textAlign: 'center', color: colors.text.secondary }}>
+                      No inventory yet. Add laptops (with brand + specs) or bulk mouse / keyboard / charger.
                     </td>
                   </tr>
                 ) : (
@@ -942,6 +1031,9 @@ export default function ItAssetsPage() {
                         </td>
                         <td style={{ padding: '10px 12px', color: colors.text.secondary }}>
                           {typeLabel(asset.type)}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: colors.text.secondary }}>
+                          {asset.brand || '—'}
                         </td>
                         <td style={{ padding: '10px 12px', color: colors.text.secondary }}>
                           {compute ? asset.processor || '—' : '—'}
@@ -983,7 +1075,7 @@ export default function ItAssetsPage() {
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 4px', color: colors.text.primary, fontSize: 17 }}>Add asset</h3>
             <p style={{ margin: '0 0 14px', fontSize: 12, color: colors.text.secondary }}>
-              Fields change by type — laptop/PC show Processor / RAM / ROM; mouse &amp; keyboard stay simple.
+              Laptop/PC/Monitor need brand. Mouse, keyboard &amp; charger support bulk quantity.
             </p>
             <form onSubmit={handleSaveInventory} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
@@ -1008,17 +1100,58 @@ export default function ItAssetsPage() {
                   value={invForm.assetTag}
                   onChange={(e) => setInvForm((f) => ({ ...f, assetTag: e.target.value }))}
                   placeholder={
-                    showComputeFields
-                      ? 'e.g. LAP-0042'
-                      : invForm.type === 'mouse'
-                        ? 'e.g. MOU-001'
-                        : invForm.type === 'keyboard'
-                          ? 'e.g. KEY-001'
-                          : 'e.g. AST-001'
+                    showBulkField
+                      ? 'e.g. MOU (bulk becomes MOU-01, MOU-02…)'
+                      : showComputeFields
+                        ? 'e.g. LAP-0042'
+                        : 'e.g. MON-001'
                   }
                   style={inputStyle}
                 />
               </div>
+
+              {showBrandField && (
+                <div>
+                  <label style={labelStyle}>
+                    Brand name{wantsBrand(invForm.type) ? ' *' : ' (optional)'}
+                  </label>
+                  <input
+                    required={wantsBrand(invForm.type)}
+                    value={invForm.brand}
+                    onChange={(e) => setInvForm((f) => ({ ...f, brand: e.target.value }))}
+                    placeholder={
+                      invForm.type === 'monitor'
+                        ? 'e.g. Dell, LG, Samsung'
+                        : showBulkField
+                          ? 'e.g. Logitech, HP'
+                          : 'e.g. Dell, HP, Lenovo, Toshiba'
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+              )}
+
+              {showBulkField && (
+                <div>
+                  <label style={labelStyle}>Quantity (bulk) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={invForm.quantity}
+                    onChange={(e) =>
+                      setInvForm((f) => ({
+                        ...f,
+                        quantity: Math.min(100, Math.max(1, parseInt(e.target.value, 10) || 1)),
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                  <div style={{ marginTop: 6, fontSize: 11, color: colors.text.muted }}>
+                    Adds multiple in-stock items at once (max 100).
+                  </div>
+                </div>
+              )}
 
               {showComputeFields ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
@@ -1052,7 +1185,7 @@ export default function ItAssetsPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : !showBulkField ? (
                 <div
                   style={{
                     padding: '10px 12px',
@@ -1062,25 +1195,17 @@ export default function ItAssetsPage() {
                     fontSize: 12,
                   }}
                 >
-                  {typeLabel(invForm.type)} only needs a tag (and optional notes). Processor / RAM / ROM are
-                  hidden for accessories.
+                  {typeLabel(invForm.type)} uses tag
+                  {showBrandField ? ' + brand' : ''} and optional notes.
                 </div>
-              )}
+              ) : null}
 
               <div>
                 <label style={labelStyle}>Notes (optional)</label>
                 <input
                   value={invForm.notes}
                   onChange={(e) => setInvForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder={
-                    showComputeFields
-                      ? 'Optional extra detail'
-                      : invForm.type === 'mouse'
-                        ? 'e.g. Logitech wireless'
-                        : invForm.type === 'keyboard'
-                          ? 'e.g. Mechanical / USB'
-                          : 'Optional detail'
-                  }
+                  placeholder="Optional extra detail"
                   style={inputStyle}
                 />
               </div>
@@ -1099,7 +1224,11 @@ export default function ItAssetsPage() {
                     border: 'none',
                   }}
                 >
-                  {saving ? 'Saving…' : 'Add to inventory'}
+                  {saving
+                    ? 'Saving…'
+                    : showBulkField && Number(invForm.quantity) > 1
+                      ? `Add ${invForm.quantity} to inventory`
+                      : 'Add to inventory'}
                 </button>
               </div>
             </form>
@@ -1314,19 +1443,43 @@ export default function ItAssetsPage() {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label style={labelStyle}>Laptop permission</label>
-                  <input
-                    value={form.laptopPermission}
-                    onChange={(e) => setForm((f) => ({ ...f, laptopPermission: e.target.value }))}
-                    placeholder="e.g. Admin / Restricted"
-                    style={inputStyle}
-                  />
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: `1px solid ${colors.border.default}`,
+                      background: isDark ? 'rgba(255,255,255,0.03)' : colors.background.secondary,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      color: colors.text.primary,
+                      fontWeight: 600,
+                      boxSizing: 'border-box',
+                      minHeight: 42,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!form.takeHomeAllowed}
+                      onChange={(e) => setForm((f) => ({ ...f, takeHomeAllowed: e.target.checked }))}
+                      style={{ width: 16, height: 16 }}
+                    />
+                    Take laptop home
+                  </label>
                 </div>
+              </div>
+              <div style={{ fontSize: 11, color: colors.text.muted, marginTop: -4 }}>
+                Turn on if this employee is allowed to take the company laptop home.
               </div>
 
               <div>
-                <div style={{ ...labelStyle, marginBottom: 8 }}>Accessories (separate checkboxes)</div>
+                <div style={{ ...labelStyle, marginBottom: 8 }}>
+                  Accessories (checks inventory stock)
+                </div>
                 <div
                   style={{
                     display: 'grid',
@@ -1338,6 +1491,7 @@ export default function ItAssetsPage() {
                   {checkRow('mouse', 'Mouse')}
                   {checkRow('keyboard', 'Keyboard')}
                   {checkRow('monitor', 'Monitor')}
+                  {checkRow('charger', 'Charger')}
                 </div>
               </div>
 

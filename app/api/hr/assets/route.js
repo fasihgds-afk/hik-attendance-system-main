@@ -5,6 +5,8 @@ import Asset, {
   ASSET_STATUSES,
   ASSET_CONDITIONS,
   COMPUTE_ASSET_TYPES,
+  BRAND_ASSET_TYPES,
+  BULK_ASSET_TYPES,
 } from '../../../../models/Asset';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
@@ -52,6 +54,7 @@ export async function GET(req) {
       const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       filter.$or = [
         { assetTag: re },
+        { brand: re },
         { processor: re },
         { ram: re },
         { rom: re },
@@ -123,47 +126,90 @@ export async function GET(req) {
   }
 }
 
-// POST /api/hr/assets — create asset
+// POST /api/hr/assets — create asset (supports bulk for mouse/keyboard/charger)
 export async function POST(req) {
   try {
     await requirePermission('assets', 'create');
     await connectDB();
 
     const body = await req.json();
-    const assetTag = String(body.assetTag || '').trim();
-    if (!assetTag) throw new ValidationError('assetTag is required');
+    const baseTag = String(body.assetTag || '').trim();
+    if (!baseTag) throw new ValidationError('assetTag is required');
 
     const type = normalizeType(body.type);
     if (!type) throw new ValidationError(`type must be one of: ${ASSET_TYPES.join(', ')}`);
 
-    const existing = await Asset.findOne({ assetTag }).lean().maxTimeMS(1500);
-    if (existing) throw new ValidationError(`Asset tag "${assetTag}" already exists`);
-
     const isCompute = COMPUTE_ASSET_TYPES.includes(type);
+    const wantsBrand = BRAND_ASSET_TYPES.includes(type);
+    const isBulkType = BULK_ASSET_TYPES.includes(type);
+
+    const brand = wantsBrand || isBulkType ? String(body.brand || '').trim() : '';
     const processor = isCompute ? String(body.processor || '').trim() : '';
     const ram = isCompute ? String(body.ram || '').trim() : '';
     const rom = isCompute ? String(body.rom || '').trim() : '';
+    const notes = String(body.notes || '').trim();
+    const condition = normalizeCondition(body.condition);
 
     if (isCompute && !processor && !ram && !rom) {
       throw new ValidationError('For laptop/desktop, enter at least Processor, RAM, or ROM');
     }
+    if (wantsBrand && !brand) {
+      throw new ValidationError('Brand name is required for laptop, PC, and monitor');
+    }
 
-    const doc = await Asset.create({
-      assetTag,
-      type,
-      processor,
-      ram,
-      rom,
-      status: 'in_stock',
-      condition: normalizeCondition(body.condition),
-      notes: String(body.notes || '').trim(),
-      assignedToEmpCode: null,
-      assignedToName: '',
-      assignedAt: null,
-      assignedBy: '',
-    });
+    let quantity = 1;
+    if (isBulkType) {
+      quantity = Math.min(100, Math.max(1, parseInt(body.quantity || '1', 10) || 1));
+    }
 
-    return successResponse({ asset: doc.toObject() }, 'Asset created', HTTP_STATUS.CREATED);
+    const pad = (n) => String(n).padStart(quantity > 99 ? 3 : 2, '0');
+    const tags = [];
+    if (quantity === 1) {
+      tags.push(baseTag);
+    } else {
+      for (let i = 1; i <= quantity; i += 1) {
+        tags.push(`${baseTag}-${pad(i)}`);
+      }
+    }
+
+    const collisions = await Asset.find({ assetTag: { $in: tags } })
+      .select('assetTag')
+      .lean()
+      .maxTimeMS(2000);
+    if (collisions.length) {
+      throw new ValidationError(
+        `Tag already exists: ${collisions.map((c) => c.assetTag).join(', ')}`
+      );
+    }
+
+    const docs = await Asset.insertMany(
+      tags.map((assetTag) => ({
+        assetTag,
+        type,
+        brand,
+        processor,
+        ram,
+        rom,
+        status: 'in_stock',
+        condition,
+        notes,
+        assignedToEmpCode: null,
+        assignedToName: '',
+        assignedAt: null,
+        assignedBy: '',
+      }))
+    );
+
+    return successResponse(
+      {
+        assets: docs.map((d) => d.toObject()),
+        count: docs.length,
+      },
+      quantity > 1
+        ? `Added ${docs.length} ${type} items to inventory`
+        : 'Asset created',
+      HTTP_STATUS.CREATED
+    );
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     if (err?.code === 11000) {

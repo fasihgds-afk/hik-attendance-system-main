@@ -59,10 +59,12 @@ export async function POST(req, { params }) {
     const mouse = bool(body.mouse);
     const keyboard = bool(body.keyboard);
     const monitor = bool(body.monitor);
+    const charger = bool(body.charger);
+    const takeHomeAllowed = bool(body.takeHomeAllowed);
     const extraEquipment = String(body.extraEquipment || '').trim();
     const ip = String(body.ip || '').trim();
     const workLocation = String(body.workLocation || 'Work From Office').trim() || 'Work From Office';
-    const laptopPermission = String(body.laptopPermission || '').trim();
+    const laptopPermission = takeHomeAllowed ? 'Take home allowed' : '';
     const devicePassword = String(body.devicePassword || '').trim();
 
     asset.status = 'assigned';
@@ -78,6 +80,8 @@ export async function POST(req, { params }) {
       keyboard ? 'keyboard' : null,
       headphone ? 'headphone' : null,
       monitor ? 'monitor' : null,
+      charger ? 'charger' : null,
+      takeHomeAllowed ? 'take-home' : null,
       extraEquipment || null,
     ]
       .filter(Boolean)
@@ -113,6 +117,8 @@ export async function POST(req, { params }) {
           mouse,
           keyboard,
           monitor,
+          charger,
+          takeHomeAllowed,
           extraEquipment,
           laptopPermission,
           notes,
