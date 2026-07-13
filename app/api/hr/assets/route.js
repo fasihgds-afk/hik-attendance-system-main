@@ -1,6 +1,11 @@
 // app/api/hr/assets/route.js — list + create IT assets
 import { connectDB } from '../../../../lib/db';
-import Asset, { ASSET_TYPES, ASSET_STATUSES, ASSET_CONDITIONS } from '../../../../models/Asset';
+import Asset, {
+  ASSET_TYPES,
+  ASSET_STATUSES,
+  ASSET_CONDITIONS,
+  COMPUTE_ASSET_TYPES,
+} from '../../../../models/Asset';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -21,12 +26,6 @@ function normalizeStatus(value) {
 function normalizeCondition(value) {
   const c = String(value || '').trim().toLowerCase();
   return ASSET_CONDITIONS.includes(c) ? c : 'good';
-}
-
-function parseOptionalDate(value) {
-  if (!value) return undefined;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 // GET /api/hr/assets?status=&type=&q=&empCode=&page=&limit=
@@ -53,15 +52,16 @@ export async function GET(req) {
       const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       filter.$or = [
         { assetTag: re },
-        { brand: re },
-        { model: re },
-        { serialNumber: re },
+        { processor: re },
+        { ram: re },
+        { rom: re },
+        { notes: re },
         { assignedToName: re },
         { assignedToEmpCode: re },
       ];
     }
 
-    const [total, assets, statusAgg] = await Promise.all([
+    const [total, assets, statusAgg, typeStatusAgg] = await Promise.all([
       Asset.countDocuments(filter).maxTimeMS(2500),
       Asset.find(filter)
         .sort({ updatedAt: -1 })
@@ -71,6 +71,14 @@ export async function GET(req) {
         .maxTimeMS(2500),
       Asset.aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]).option({ maxTimeMS: 2500 }),
+      Asset.aggregate([
+        {
+          $group: {
+            _id: { type: '$type', status: '$status' },
+            count: { $sum: 1 },
+          },
+        },
       ]).option({ maxTimeMS: 2500 }),
     ]);
 
@@ -82,8 +90,22 @@ export async function GET(req) {
       }
     }
 
+    const byType = {};
+    for (const t of ASSET_TYPES) {
+      byType[t] = { in_stock: 0, assigned: 0, repair: 0, retired: 0, total: 0 };
+    }
+    for (const row of typeStatusAgg) {
+      const type = row?._id?.type;
+      const status = row?._id?.status;
+      if (!type || !byType[type]) continue;
+      if (status && byType[type][status] !== undefined) {
+        byType[type][status] = row.count;
+      }
+      byType[type].total += row.count;
+    }
+
     return successResponse(
-      { assets, stats },
+      { assets, stats, byType },
       'Assets retrieved',
       HTTP_STATUS.OK,
       {
@@ -117,22 +139,23 @@ export async function POST(req) {
     const existing = await Asset.findOne({ assetTag }).lean().maxTimeMS(1500);
     if (existing) throw new ValidationError(`Asset tag "${assetTag}" already exists`);
 
-    const serialNumber = String(body.serialNumber || '').trim();
-    if (serialNumber) {
-      const dupSerial = await Asset.findOne({ serialNumber }).lean().maxTimeMS(1500);
-      if (dupSerial) throw new ValidationError(`Serial number "${serialNumber}" already exists`);
+    const isCompute = COMPUTE_ASSET_TYPES.includes(type);
+    const processor = isCompute ? String(body.processor || '').trim() : '';
+    const ram = isCompute ? String(body.ram || '').trim() : '';
+    const rom = isCompute ? String(body.rom || '').trim() : '';
+
+    if (isCompute && !processor && !ram && !rom) {
+      throw new ValidationError('For laptop/desktop, enter at least Processor, RAM, or ROM');
     }
 
     const doc = await Asset.create({
       assetTag,
       type,
-      brand: String(body.brand || '').trim(),
-      model: String(body.model || '').trim(),
-      serialNumber,
+      processor,
+      ram,
+      rom,
       status: 'in_stock',
       condition: normalizeCondition(body.condition),
-      purchaseDate: parseOptionalDate(body.purchaseDate),
-      warrantyExpiry: parseOptionalDate(body.warrantyExpiry),
       notes: String(body.notes || '').trim(),
       assignedToEmpCode: null,
       assignedToName: '',
@@ -144,7 +167,7 @@ export async function POST(req) {
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     if (err?.code === 11000) {
-      return errorResponse('Asset tag or serial number already exists', 400);
+      return errorResponse('Asset tag already exists', 400);
     }
     return errorResponseFromException(err, req);
   }

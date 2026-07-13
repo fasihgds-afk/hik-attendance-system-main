@@ -17,6 +17,9 @@ export const ASSET_STATUSES = ['in_stock', 'assigned', 'repair', 'retired'];
 
 export const ASSET_CONDITIONS = ['new', 'good', 'fair', 'poor'];
 
+/** Types that use processor / RAM / ROM specs */
+export const COMPUTE_ASSET_TYPES = ['laptop', 'desktop'];
+
 const AssetSchema = new mongoose.Schema(
   {
     assetTag: {
@@ -32,9 +35,14 @@ const AssetSchema = new mongoose.Schema(
       enum: ASSET_TYPES,
       index: true,
     },
+    /** Specs for laptop / desktop */
+    processor: { type: String, default: '', trim: true },
+    ram: { type: String, default: '', trim: true },
+    rom: { type: String, default: '', trim: true },
+    /** Kept optional for legacy rows; not used in new form */
     brand: { type: String, default: '', trim: true },
     model: { type: String, default: '', trim: true },
-    serialNumber: { type: String, default: '', trim: true, index: true },
+    serialNumber: { type: String, default: '', trim: true },
     status: {
       type: String,
       required: true,
@@ -47,10 +55,7 @@ const AssetSchema = new mongoose.Schema(
       enum: ASSET_CONDITIONS,
       default: 'good',
     },
-    purchaseDate: { type: Date },
-    warrantyExpiry: { type: Date },
     notes: { type: String, default: '', trim: true },
-    /** Currently assigned employee (null when in stock / retired / repair without holder) */
     assignedToEmpCode: { type: String, default: null, index: true },
     assignedToName: { type: String, default: '' },
     assignedAt: { type: Date },
@@ -61,6 +66,21 @@ const AssetSchema = new mongoose.Schema(
 
 AssetSchema.index({ status: 1, type: 1 });
 AssetSchema.index({ assignedToEmpCode: 1, status: 1 });
+
+/** Human-readable label from type-specific fields */
+export function formatAssetLabel(asset) {
+  if (!asset) return '';
+  if (COMPUTE_ASSET_TYPES.includes(asset.type)) {
+    const parts = [
+      asset.assetTag,
+      asset.processor ? `CPU ${asset.processor}` : null,
+      asset.ram ? `RAM ${asset.ram}` : null,
+      asset.rom ? `ROM ${asset.rom}` : null,
+    ].filter(Boolean);
+    return parts.join(' / ') || asset.assetTag;
+  }
+  return [asset.assetTag, asset.type, asset.notes].filter(Boolean).join(' · ');
+}
 
 const Asset = mongoose.models.Asset || mongoose.model('Asset', AssetSchema);
 export default Asset;

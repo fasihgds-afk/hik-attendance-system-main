@@ -1,8 +1,9 @@
-// app/api/hr/assets/[id]/assign/route.js — assign asset to employee
+// app/api/hr/assets/[id]/assign/route.js — assign asset + optional accessories sheet fields
 import { connectDB } from '../../../../../../lib/db';
-import Asset from '../../../../../../models/Asset';
+import Asset, { formatAssetLabel } from '../../../../../../models/Asset';
 import AssetAssignmentHistory from '../../../../../../models/AssetAssignmentHistory';
 import Employee from '../../../../../../models/Employee';
+import EmployeeItEquipment from '../../../../../../models/EmployeeItEquipment';
 import { mergeActiveFilter } from '../../../../../../lib/employees/activeFilter';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../../lib/api/response';
 import { requirePermission } from '../../../../../../lib/auth/requireAuth';
@@ -11,6 +12,12 @@ import mongoose from 'mongoose';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function bool(value, fallback = false) {
+  if (value === true || value === 'true' || value === 'TRUE' || value === 1 || value === '1') return true;
+  if (value === false || value === 'false' || value === 'FALSE' || value === 0 || value === '0') return false;
+  return fallback;
+}
 
 export async function POST(req, { params }) {
   try {
@@ -39,14 +46,24 @@ export async function POST(req, { params }) {
     }
 
     const employee = await Employee.findOne(mergeActiveFilter({ empCode }))
-      .select('empCode name')
+      .select('empCode name department')
       .lean()
       .maxTimeMS(1500);
     if (!employee) throw new NotFoundError(`Employee ${empCode}`);
 
-    const fromEmpCode = asset.assignedToEmpCode || null;
     const notes = String(body.notes || '').trim();
     const performedBy = user.email || user.id || '';
+    const fromEmpCode = asset.assignedToEmpCode || null;
+
+    const headphone = bool(body.headphone);
+    const mouse = bool(body.mouse);
+    const keyboard = bool(body.keyboard);
+    const monitor = bool(body.monitor);
+    const extraEquipment = String(body.extraEquipment || '').trim();
+    const ip = String(body.ip || '').trim();
+    const workLocation = String(body.workLocation || 'Work From Office').trim() || 'Work From Office';
+    const laptopPermission = String(body.laptopPermission || '').trim();
+    const devicePassword = String(body.devicePassword || '').trim();
 
     asset.status = 'assigned';
     asset.assignedToEmpCode = employee.empCode;
@@ -56,6 +73,16 @@ export async function POST(req, { params }) {
     if (notes) asset.notes = notes;
     await asset.save();
 
+    const accessoryNote = [
+      mouse ? 'mouse' : null,
+      keyboard ? 'keyboard' : null,
+      headphone ? 'headphone' : null,
+      monitor ? 'monitor' : null,
+      extraEquipment || null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
     await AssetAssignmentHistory.create({
       assetId: asset._id,
       assetTag: asset.assetTag,
@@ -63,11 +90,43 @@ export async function POST(req, { params }) {
       empCode: employee.empCode,
       employeeName: employee.name || '',
       fromEmpCode,
-      notes,
+      notes: [notes, accessoryNote].filter(Boolean).join(' | '),
       performedBy,
     });
 
-    return successResponse({ asset: asset.toObject() }, 'Asset assigned', HTTP_STATUS.OK);
+    // Upsert sheet row for this employee (laptop + extras)
+    const laptopLabel = String(body.laptop || '').trim() || formatAssetLabel(asset);
+
+    const equipment = await EmployeeItEquipment.findOneAndUpdate(
+      { empCode: employee.empCode },
+      {
+        $set: {
+          empCode: employee.empCode,
+          employeeName: employee.name || '',
+          department: employee.department || '',
+          laptop: laptopLabel,
+          laptopAssetId: asset._id,
+          devicePassword,
+          ip,
+          workLocation,
+          headphone,
+          mouse,
+          keyboard,
+          monitor,
+          extraEquipment,
+          laptopPermission,
+          notes,
+          updatedBy: performedBy,
+        },
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return successResponse(
+      { asset: asset.toObject(), equipment },
+      'Asset assigned with accessories',
+      HTTP_STATUS.OK
+    );
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);

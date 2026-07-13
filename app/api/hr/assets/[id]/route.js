@@ -1,6 +1,11 @@
 // app/api/hr/assets/[id]/route.js — get / update / delete one asset
 import { connectDB } from '../../../../../lib/db';
-import Asset, { ASSET_TYPES, ASSET_STATUSES, ASSET_CONDITIONS } from '../../../../../models/Asset';
+import Asset, {
+  ASSET_TYPES,
+  ASSET_STATUSES,
+  ASSET_CONDITIONS,
+  COMPUTE_ASSET_TYPES,
+} from '../../../../../models/Asset';
 import AssetAssignmentHistory from '../../../../../models/AssetAssignmentHistory';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../../lib/api/response';
 import { requirePermission } from '../../../../../lib/auth/requireAuth';
@@ -9,13 +14,6 @@ import mongoose from 'mongoose';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function parseOptionalDate(value) {
-  if (value === null || value === '') return null;
-  if (!value) return undefined;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? undefined : d;
-}
 
 async function loadAsset(id) {
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -74,17 +72,9 @@ export async function PATCH(req, { params }) {
       $set.type = type;
     }
 
-    if (body.brand !== undefined) $set.brand = String(body.brand || '').trim();
-    if (body.model !== undefined) $set.model = String(body.model || '').trim();
-
-    if (body.serialNumber !== undefined) {
-      const serialNumber = String(body.serialNumber || '').trim();
-      if (serialNumber && serialNumber !== existing.serialNumber) {
-        const dup = await Asset.findOne({ serialNumber }).lean().maxTimeMS(1500);
-        if (dup) throw new ValidationError(`Serial number "${serialNumber}" already exists`);
-      }
-      $set.serialNumber = serialNumber;
-    }
+    if (body.processor !== undefined) $set.processor = String(body.processor || '').trim();
+    if (body.ram !== undefined) $set.ram = String(body.ram || '').trim();
+    if (body.rom !== undefined) $set.rom = String(body.rom || '').trim();
 
     if (body.condition !== undefined) {
       const condition = String(body.condition || '').trim().toLowerCase();
@@ -96,16 +86,11 @@ export async function PATCH(req, { params }) {
 
     if (body.notes !== undefined) $set.notes = String(body.notes || '').trim();
 
-    if (body.purchaseDate !== undefined) {
-      const d = parseOptionalDate(body.purchaseDate);
-      if (body.purchaseDate && d === undefined) throw new ValidationError('Invalid purchaseDate');
-      $set.purchaseDate = d === undefined ? existing.purchaseDate : d;
-    }
-
-    if (body.warrantyExpiry !== undefined) {
-      const d = parseOptionalDate(body.warrantyExpiry);
-      if (body.warrantyExpiry && d === undefined) throw new ValidationError('Invalid warrantyExpiry');
-      $set.warrantyExpiry = d === undefined ? existing.warrantyExpiry : d;
+    const nextType = $set.type || existing.type;
+    if (!COMPUTE_ASSET_TYPES.includes(nextType)) {
+      $set.processor = '';
+      $set.ram = '';
+      $set.rom = '';
     }
 
     // Status changes that don't go through assign/return (repair / retired / restock when free)
