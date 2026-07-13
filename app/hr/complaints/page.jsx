@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -8,6 +8,8 @@ import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/c
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
+import PaginationControls from '@/components/common/PaginationControls';
 
 const STATUS_LABELS = {
   open: 'Open',
@@ -38,12 +40,16 @@ export default function HrComplaintsPage() {
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [viewId, setViewId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [respondForm, setRespondForm] = useState({ status: '', hrResponse: '', internalNote: '' });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState({ type: '', text: '' });
+  const skipSearchPageReset = useRef(true);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -59,18 +65,29 @@ export default function HrComplaintsPage() {
     setTimeout(() => setToast((prev) => (prev.text === text ? { type: '', text: '' } : prev)), 3000);
   }
 
-  async function loadComplaints(silent = false) {
+  const loadComplaints = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set('page', String(currentPage));
+      params.set('limit', '50');
       if (filterStatus) params.set('status', filterStatus);
       if (filterPeriod && filterPeriod !== 'all') params.set('period', filterPeriod);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
-      const res = await fetch(`/api/hr/complaints?${params.toString()}`, { cache: 'no-store' });
-      const data = await res.json();
-      if (res.ok && data.success) {
+
+      const data = await api.get(`/api/hr/complaints?${params.toString()}`, {
+        requestKey: 'hr-complaints-list',
+      });
+
+      if (data.aborted) return;
+
+      if (data.success) {
         setComplaints(data.data?.complaints || []);
-      } else {
+        setPagination(
+          data.meta?.pagination ||
+            data.data?.pagination || { page: currentPage, limit: 50, total: 0, totalPages: 1 }
+        );
+      } else if (!silent) {
         showToast('error', data.error || 'Failed to load complaints');
       }
     } catch (err) {
@@ -78,13 +95,25 @@ export default function HrComplaintsPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }
+  }, [currentPage, filterStatus, filterPeriod, searchQuery]);
 
   const isHrPortal = ['HR', 'ADMIN'].includes(String(session?.user?.role || '').toUpperCase());
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      if (skipSearchPageReset.current) {
+        skipSearchPageReset.current = false;
+      } else {
+        setCurrentPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
     if (isHrPortal && canView) loadComplaints();
-  }, [isHrPortal, canView, filterStatus, filterPeriod, searchQuery]);
+  }, [isHrPortal, canView, loadComplaints]);
 
   useEffect(() => {
     if (!isHrPortal || !canView) return;
@@ -92,7 +121,7 @@ export default function HrComplaintsPage() {
       if (document.visibilityState === 'visible') loadComplaints(true);
     }, 45000);
     return () => clearInterval(interval);
-  }, [isHrPortal, canView, filterStatus, filterPeriod, searchQuery]);
+  }, [isHrPortal, canView, loadComplaints]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -100,7 +129,7 @@ export default function HrComplaintsPage() {
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [isHrPortal, canView, filterStatus, filterPeriod, searchQuery]);
+  }, [isHrPortal, canView, loadComplaints]);
 
   useEffect(() => {
     const id = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('id');
@@ -110,9 +139,11 @@ export default function HrComplaintsPage() {
   async function loadDetail(id) {
     if (!id) return;
     try {
-      const res = await fetch(`/api/hr/complaints/${id}`, { cache: 'no-store' });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await api.get(`/api/hr/complaints/${id}`, {
+        requestKey: `hr-complaint-detail-${id}`,
+      });
+      if (data.aborted) return;
+      if (data.success) {
         const c = data.data?.complaint || null;
         setDetail(c);
         setRespondForm({
@@ -136,18 +167,13 @@ export default function HrComplaintsPage() {
     if (!viewId || !canUpdate) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/hr/complaints/${viewId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: respondForm.status || undefined,
-          hrResponse: respondForm.hrResponse,
-          internalNote: respondForm.internalNote,
-          hrRespondedBy: session?.user?.name || session?.user?.email || 'HR',
-        }),
+      const data = await api.patch(`/api/hr/complaints/${viewId}`, {
+        status: respondForm.status || undefined,
+        hrResponse: respondForm.hrResponse,
+        internalNote: respondForm.internalNote,
+        hrRespondedBy: session?.user?.name || session?.user?.email || 'HR',
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      if (data.success) {
         showToast('success', 'Response saved');
         setDetail(data.data?.complaint || detail);
         loadComplaints();
@@ -239,7 +265,10 @@ export default function HrComplaintsPage() {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, fontWeight: 500, minWidth: 160 }}
           >
             <option value="">All statuses</option>
@@ -249,7 +278,10 @@ export default function HrComplaintsPage() {
           </select>
           <select
             value={filterPeriod}
-            onChange={(e) => setFilterPeriod(e.target.value)}
+            onChange={(e) => {
+              setFilterPeriod(e.target.value);
+              setCurrentPage(1);
+            }}
             style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, fontWeight: 500, minWidth: 180 }}
           >
             <option value="all">All time</option>
@@ -259,8 +291,8 @@ export default function HrComplaintsPage() {
           <input
             type="text"
             placeholder="Search by employee, designation, subject..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, minWidth: 300, flex: 1, maxWidth: 400 }}
           />
         </div>
@@ -326,6 +358,15 @@ export default function HrComplaintsPage() {
           </table>
         )}
       </div>
+
+      <PaginationControls
+        currentPage={pagination.page || currentPage}
+        totalPages={pagination.totalPages || 1}
+        totalItems={pagination.total || 0}
+        itemsPerPage={pagination.limit || 50}
+        onPageChange={setCurrentPage}
+        loading={loading}
+      />
       </GlassCard>
 
       {/* View / Respond modal – professional hierarchy */}

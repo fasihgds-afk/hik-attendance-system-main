@@ -41,7 +41,7 @@ export async function GET(req) {
     const search = (searchParams.get('search') || '').trim();
     const status = (searchParams.get('status') || 'all').toLowerCase();
 
-    const { filter } = buildEmployeeFilter({ search, shift: '', department: '' });
+    const { filter, useTextScore } = buildEmployeeFilter({ search, shift: '', department: '' });
 
     if (status === 'active') {
       filter.portalEnabled = { $ne: false };
@@ -52,10 +52,17 @@ export async function GET(req) {
     const skip = (page - 1) * limit;
     const queryFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
 
+    const listProjection = useTextScore
+      ? { ...LIST_PROJECTION, score: { $meta: 'textScore' } }
+      : LIST_PROJECTION;
+    const sort = useTextScore
+      ? { score: { $meta: 'textScore' }, empCode: 1 }
+      : { empCode: 1 };
+
     const [items, total, blockedCount, activeCount] = await Promise.all([
       Employee.find(queryFilter)
-        .select(LIST_PROJECTION)
-        .sort({ empCode: 1 })
+        .select(listProjection)
+        .sort(sort)
         .skip(skip)
         .limit(limit)
         .lean()

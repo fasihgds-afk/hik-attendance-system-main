@@ -124,17 +124,16 @@ export async function GET(req) {
     }
 
     // Build filter
-    const { filter, sortOptions } = buildEmployeeFilter({ search, shift, department });
+    const { filter, sortOptions, useTextScore } = buildEmployeeFilter({ search, shift, department });
     const skip = (page - 1) * limit;
     
     // Use direct Mongoose queries instead of aggregation for simplicity and reliability
     const queryFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
     
-    // OPTIMIZATION: Use empCode index for sorting (faster than department+empCode compound)
+    // OPTIMIZATION: Use empCode index for sorting; textScore when using $text search
     const optimizedSort = sortOptions || { empCode: 1 };
     
     // OPTIMIZATION: Minimal projection for list view - exclude heavy fields
-    // Exclude profileImageUrl (can be large), cnic (not needed for list), phoneNumber (not needed)
     const listProjection = {
       _id: 1,
       empCode: 1,
@@ -148,32 +147,26 @@ export async function GET(req) {
       saturdayGroup: 1,
       allowWebClockIn: 1,
       portalEnabled: 1,
-      // Excluded: profileImageUrl, cnic, phoneNumber, createdAt, updatedAt
     };
-    
-    // OPTIMIZATION: Run find query first, then count only if needed
-    // For first page without filters, we can estimate total to save time
-    const employees = await Employee.find(queryFilter)
-      .select(listProjection)
-      .sort(optimizedSort)
-      .skip(skip)
-      .limit(limit)
-      .lean()
-      .maxTimeMS(2000) // Further reduced timeout
-      .exec();
-    
-    // OPTIMIZATION: Only count if we need exact total (pagination beyond page 1 or with filters)
-    const needsExactCount = page > 1 || search || shift || department;
-    let total;
-    
-    if (needsExactCount) {
-      total = await Employee.countDocuments(queryFilter)
-        .maxTimeMS(1500) // Further reduced timeout
-        .exec();
-    } else {
-      // Estimate: if we got full page, assume there are more; otherwise use actual count
-      total = employees.length === limit ? limit * 10 : employees.length;
+
+    if (useTextScore) {
+      listProjection.score = { $meta: 'textScore' };
     }
+    
+    // Always run find + exact count in parallel for accurate pagination
+    const [employees, total] = await Promise.all([
+      Employee.find(queryFilter)
+        .select(listProjection)
+        .sort(optimizedSort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .maxTimeMS(2000)
+        .exec(),
+      Employee.countDocuments(queryFilter)
+        .maxTimeMS(1500)
+        .exec(),
+    ]);
     
     // OPTIMIZATION: Fast shift normalization - skip lookup if shift is already a code
     // Most employees have shift codes (not ObjectIds), so we can skip the lookup in most cases

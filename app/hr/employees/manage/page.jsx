@@ -11,6 +11,8 @@ import Modal from '../../../../components/ui/Modal';
 import Toast from '../../../../components/common/Toast';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
+import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { spinnerRingStyle } from '@/lib/theme/styles';
 
@@ -25,7 +27,8 @@ export default function EmployeeShiftPage() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState(''); // Search query only
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -33,6 +36,7 @@ export default function EmployeeShiftPage() {
     total: 0,
     totalPages: 1,
   });
+  const skipSearchPageReset = React.useRef(true);
 
   const [toast, setToast] = useState({ type: '', text: '' });
 
@@ -65,27 +69,17 @@ export default function EmployeeShiftPage() {
 
   async function loadShifts() {
     try {
-      const res = await fetch('/api/hr/shifts?activeOnly=true', {
-        cache: 'no-store', // Always get fresh shifts
-      });
-      if (res.ok) {
-        const response = await res.json();
-        
-        // Handle standardized API response format
-        let shifts = [];
-        if (response.success !== undefined) {
-          if (!response.success) {
-            console.error('Failed to load shifts:', response.error || response.message);
-            return;
-          }
-          shifts = response.data?.shifts || [];
-        } else {
-          // Legacy format (backward compatibility)
-          shifts = response.shifts || [];
+      const shiftsList = await getCachedLookup(LOOKUP_KEYS.shiftsActive, async () => {
+        const response = await api.get('/api/hr/shifts?activeOnly=true', {
+          requestKey: 'hr-shifts-active',
+        });
+        if (!response.success) {
+          console.error('Failed to load shifts:', response.error || response.message);
+          return [];
         }
-        
-        setShifts(shifts);
-      }
+        return response.data?.shifts || response.data?.items || [];
+      });
+      setShifts(Array.isArray(shiftsList) ? shiftsList : []);
     } catch (err) {
       console.error('Failed to load shifts:', err);
     }
@@ -93,112 +87,46 @@ export default function EmployeeShiftPage() {
 
   async function loadDepartments() {
     try {
-      const res = await fetch('/api/hr/departments', { cache: 'no-store' });
-      if (res.ok) {
-        const response = await res.json();
-        const list = response.data?.departments ?? response.departments ?? [];
-        setDepartments(Array.isArray(list) ? list : []);
-      }
+      const list = await getCachedLookup(LOOKUP_KEYS.departments, async () => {
+        const response = await api.get('/api/hr/departments', {
+          requestKey: 'hr-departments',
+        });
+        if (!response.success) return [];
+        return response.data?.departments ?? [];
+      });
+      setDepartments(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error('Failed to load departments:', err);
     }
   }
 
-  async function loadEmployees(forceRefresh = false) {
+  async function loadEmployees() {
     setLoading(true);
 
     try {
-      // Build query parameters - only search, no filters
       const params = new URLSearchParams();
       params.set('page', currentPage.toString());
-      params.set('limit', '50'); // 50 employees per page
+      params.set('limit', '50');
       if (searchQuery) {
         params.set('search', searchQuery);
       }
-      
-      // Log request for debugging
-      console.log('🔍 Loading employees with params:', {
-        page: currentPage,
-        limit: 50,
-        search: searchQuery || '(none)',
-        url: `/api/employee?${params.toString()}`,
+
+      const response = await api.get(`/api/employee?${params.toString()}`, {
+        requestKey: 'employee-list',
       });
-      
-      // Add cache-busting parameter to bypass server-side cache
-      if (forceRefresh) {
-        params.set('_t', Date.now().toString()); // Server will bypass cache when this is present
+
+      if (response.aborted) return;
+
+      if (!response.success) {
+        throw new Error(response.error || response.message || 'Failed to load employees');
       }
 
-      // Add version parameter to force fresh data (cache busting)
-      params.set('v', '2.0'); // Version 2.0 = no shift filter
-      
-      const res = await fetch(`/api/employee?${params.toString()}`, {
-        cache: 'no-store', // Always bypass browser cache
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
-      
-      if (!res.ok) {
-        const text = await res.text();
-        let errorMessage = text || `Failed to load employees (${res.status})`;
-        
-        // Try to parse JSON error if available
-        try {
-          const errorData = JSON.parse(text);
-          errorMessage = errorData.error || errorMessage;
-          if (errorData.details) {
-            console.error('API Error Details:', errorData.details);
-          }
-        } catch (e) {
-          // Not JSON, use text as is
-        }
-        
-        console.error('Employee API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          error: errorMessage,
-          url: res.url,
-        });
-        
-        throw new Error(errorMessage);
-      }
-      const response = await res.json();
-      
-      // Handle standardized API response format
-      // New format: { success, message, data: { items }, error, meta: { pagination } }
-      // Old format (backward compatibility): { items, pagination }
-      let items = [];
-      let pagination = null;
-      
-      if (response.success !== undefined) {
-        // New standardized format
-        if (!response.success) {
-          throw new Error(response.error || response.message || 'Failed to load employees');
-        }
-        items = response.data?.items || [];
-        pagination = response.meta?.pagination || null;
-      } else {
-        // Legacy format (backward compatibility)
-        items = response.items || [];
-        pagination = response.pagination || null;
-      }
-      
-      // Log if no employees found (for debugging)
-      if (!items || items.length === 0) {
-        console.warn('⚠️ No employees found in API response:', {
-          items: items,
-          pagination: pagination,
-          total: pagination?.total,
-          responseFormat: response.success !== undefined ? 'standardized' : 'legacy',
-          url: res.url,
-        });
-      }
-      
+      const items = response.data?.items || [];
+      const paginationMeta = response.meta?.pagination || response.data?.pagination || null;
+
       setEmployees(items);
-      if (pagination) {
-        setPagination(pagination);
+      if (paginationMeta) {
+        setPagination(paginationMeta);
       }
     } catch (err) {
       console.error(err);
@@ -208,19 +136,29 @@ export default function EmployeeShiftPage() {
     }
   }
 
-  // OPTIMIZATION: Load shifts, departments, and employees in parallel on mount
+  // OPTIMIZATION: Load shifts and departments once on mount (TTL-cached)
   useEffect(() => {
     loadShifts();
     loadDepartments();
-    loadEmployees(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload employees when page or search changes
+  // Debounce search and reset page together so we only fire one list request
   useEffect(() => {
-    // Skip initial load (handled above)
-    if (currentPage === 1 && !searchQuery) return;
-    loadEmployees(true);
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      if (skipSearchPageReset.current) {
+        skipSearchPageReset.current = false;
+      } else {
+        setCurrentPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reload employees when page or debounced search changes
+  useEffect(() => {
+    loadEmployees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, searchQuery]);
 
@@ -325,7 +263,7 @@ export default function EmployeeShiftPage() {
       // Refresh the list to ensure we have the latest data from server
       // Use forceRefresh to bypass cache
       setTimeout(() => {
-        loadEmployees(true);
+        loadEmployees();
       }, 500);
     } catch (err) {
       console.error(err);
@@ -452,7 +390,7 @@ export default function EmployeeShiftPage() {
       setEditingEmployee(null);
       
       // Force refresh to get latest data from server (bypass cache)
-      loadEmployees(true);
+      loadEmployees();
     } catch (err) {
       console.error(err);
       showToast('error', err.message || 'Failed to save employee');
@@ -577,7 +515,7 @@ export default function EmployeeShiftPage() {
       </button>
       <button
         type="button"
-        onClick={() => loadEmployees(true)}
+        onClick={() => loadEmployees()}
         disabled={loading}
         className="manage-button"
         style={{
@@ -726,10 +664,9 @@ export default function EmployeeShiftPage() {
               </p>
             </div>
             <EmployeeFilters
-              searchQuery={searchQuery}
+              searchQuery={searchInput}
               onSearchChange={(value) => {
-                setSearchQuery(value);
-                setCurrentPage(1);
+                setSearchInput(value);
               }}
             />
           </div>
@@ -926,7 +863,7 @@ export default function EmployeeShiftPage() {
                 setDeleteConfirm({ isOpen: false, employee: null });
                 setDeleteReason('Resigned');
                 setLastWorkingDay('');
-                loadEmployees(true);
+                loadEmployees();
               } catch (err) {
                 console.error(err);
                 showToast('error', err.message || 'Failed to deactivate employee');

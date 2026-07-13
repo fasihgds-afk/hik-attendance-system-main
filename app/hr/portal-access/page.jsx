@@ -8,6 +8,7 @@ import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles, AppShell }
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
 
 const STATUS_FILTERS = [
   { id: 'all', label: 'All' },
@@ -57,9 +58,13 @@ export default function HrPortalAccessPage() {
       });
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`/api/hr/portal-access?${params.toString()}`, { cache: 'no-store' });
-      const body = await res.json();
-      if (!res.ok) {
+      const body = await api.get(`/api/hr/portal-access?${params.toString()}`, {
+        requestKey: 'portal-access-list',
+      });
+
+      if (body.aborted) return;
+
+      if (!body.success) {
         throw new Error(body.error || body.message || 'Failed to load employees');
       }
 
@@ -94,13 +99,11 @@ export default function HrPortalAccessPage() {
   async function togglePortalAccess(emp, nextEnabled) {
     setTogglingId(emp.empCode);
     try {
-      const res = await fetch('/api/hr/portal-access', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empCode: emp.empCode, portalEnabled: nextEnabled }),
+      const body = await api.patch('/api/hr/portal-access', {
+        empCode: emp.empCode,
+        portalEnabled: nextEnabled,
       });
-      const body = await res.json();
-      if (!res.ok) {
+      if (!body.success) {
         throw new Error(body.error || body.message || 'Failed to update access');
       }
 

@@ -32,7 +32,10 @@ export default function HrDashboardPage() {
   const canViewLeaves = can("leaves");
   const canViewLeavePolicy = can("leavePolicy");
   const canViewComplaints = can("complaints");
+  const canViewAssets = can("assets");
   const canViewAttendanceTab = canViewDaily || canViewMonthly || canViewSalary;
+  const showHrOverviewStats =
+    canViewEmployees || canViewDepartments || canViewLeaves || canViewDaily || canViewMonthly;
 
   // Auto logout after 30 minutes of inactivity (with 5 minute warning)
   const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
@@ -174,7 +177,7 @@ export default function HrDashboardPage() {
 
   // Load data when overview tab is clicked or after a short delay (lazy loading)
   useEffect(() => {
-    if (!session) return;
+    if (!session || !showHrOverviewStats) return;
 
     // If overview tab is active, load data after a short delay (non-blocking)
     if (tab === "overview" && !dataLoaded && !statsLoading) {
@@ -191,7 +194,7 @@ export default function HrDashboardPage() {
       loadDepartmentStats();
       loadLeaveStats();
     }
-  }, [tab, session, dataLoaded, statsLoading]);
+  }, [tab, session, dataLoaded, statsLoading, showHrOverviewStats]);
 
 
   // 📊 Compute stats from employees + department counts from API
@@ -293,6 +296,10 @@ export default function HrDashboardPage() {
     router.push("/hr/users");
   }
 
+  function openAssetsPage() {
+    router.push("/hr/assets");
+  }
+
   /** Overview hub cards — same visual language as stats row (kicker, headline, icon, one CTA) */
   const hub = useMemo(() => {
     const isDark = theme === "dark";
@@ -347,6 +354,7 @@ export default function HrDashboardPage() {
       settings: hubVariant,
       portal: hubVariant,
       complaints: hubVariant,
+      assets: hubVariant,
     };
 
     const card = (key) => {
@@ -537,6 +545,14 @@ export default function HrDashboardPage() {
 
   const headerActions = (
     <HrHeaderActions>
+      {canViewAssets && (
+        <button type="button" onClick={openAssetsPage} style={glossPill("neutral")}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          IT Assets
+        </button>
+      )}
       {canViewDepartments && (
         <button type="button" onClick={openDepartmentPolicies} style={glossPill("neutral")}>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -553,19 +569,23 @@ export default function HrDashboardPage() {
           Violation Rules
         </button>
       )}
-      <button type="button" onClick={openCompanySettings} style={glossPill("slate")}>
+      {canViewSettings && (
+        <button type="button" onClick={openCompanySettings} style={glossPill("slate")}>
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         Company Settings
       </button>
-      <button type="button" onClick={openPortalAccess} style={glossPill("rose")}>
+      )}
+      {canViewPortal && (
+        <button type="button" onClick={openPortalAccess} style={glossPill("rose")}>
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
         Portal Access
       </button>
+      )}
       <button type="button" onClick={handleLogout} style={glossPill("neutral")}>
         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -761,12 +781,13 @@ export default function HrDashboardPage() {
                 lineHeight: 1.6,
               }}
             >
-              Live snapshot of your workforce – headcount, departments and quick
-              access to employee &amp; attendance tools.
+              {showHrOverviewStats
+                ? "Live snapshot of your workforce – headcount, departments and quick access to employee & attendance tools."
+                : "Quick access to the modules available on your account."}
             </p>
             
             {/* Trigger data load when overview tab is viewed */}
-            {!dataLoaded && !statsLoading && (
+            {showHrOverviewStats && !dataLoaded && !statsLoading && (
               <div style={{ 
                 padding: "20px", 
                 textAlign: "center",
@@ -793,7 +814,7 @@ export default function HrDashboardPage() {
             )}
 
             {/* Show loading spinner while loading */}
-            {statsLoading && (
+            {showHrOverviewStats && statsLoading && (
               <div style={{ 
                 padding: "40px", 
                 textAlign: "center",
@@ -815,7 +836,7 @@ export default function HrDashboardPage() {
             )}
 
             {/* Overview insights — unified metrics + departments */}
-            {dataLoaded && !statsLoading && (
+            {showHrOverviewStats && dataLoaded && !statsLoading && (
             <div className="overview-insights" style={overviewInsightsPanel}>
               <div aria-hidden="true" style={{ height: 3, background: colors.gradient.primary }} />
               <div className="overview-metrics-strip">
@@ -1233,6 +1254,46 @@ export default function HrDashboardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     View All Leaves
+                  </button>
+                </div>
+              </div>
+              </>
+              )}
+
+
+              {canViewAssets && (
+              <>
+              <div style={hub.card("assets")} {...hub.hoverProps("assets")}>
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("assets")}>IT Admin</div>
+                    <h3 style={hub.headline("assets")}>IT Assets</h3>
+                    <div style={hub.hint("assets")}>Laptops, PCs &amp; accessories</div>
+                  </div>
+                  <div style={hub.icon48("assets")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("assets")} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                </div>
+                <p style={hub.desc("assets")}>
+                  Manage company hardware inventory and assign laptops, desktops, monitors, keyboards, mice and related gear to employees.
+                </p>
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={openAssetsPage}
+                    style={hub.btn("assets")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    Open IT Assets
                   </button>
                 </div>
               </div>

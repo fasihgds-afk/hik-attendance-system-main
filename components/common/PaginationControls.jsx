@@ -37,7 +37,7 @@ export default function PaginationControls({
           color: '#6b7280',
         }}
       >
-        Showing {startItem} to {endItem} of {totalItems} employees
+        Showing {startItem} to {endItem} of {totalItems}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button

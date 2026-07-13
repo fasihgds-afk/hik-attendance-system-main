@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { spinnerRingStyle } from '@/lib/theme/styles';
 import { calculateAwayDeductionDays, calculateAwayDeductionAmount } from '@/lib/calculations/awayDeduction';
 import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
+import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
 
 // Styles will be generated dynamically based on theme
 
@@ -355,6 +356,7 @@ export default function MonthlyHrPage() {
   const [editAwayNote, setEditAwayNote] = useState('');
   const [editAwayReportedBy, setEditAwayReportedBy] = useState('');
 
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   // ---- Bulk holiday (e.g. Eid) – mark selected days for ALL employees -------
@@ -437,25 +439,14 @@ export default function MonthlyHrPage() {
 
   async function loadShifts() {
     try {
-      const res = await fetch('/api/hr/shifts?activeOnly=true');
-      if (res.ok) {
-        const response = await res.json();
-        
-        // Handle standardized API response format
-        let shifts = [];
-        if (response.success !== undefined) {
-          if (!response.success) {
-            console.error('Failed to load shifts:', response.error || response.message);
-            return;
-          }
-          shifts = response.data?.shifts || [];
-        } else {
-          // Legacy format (backward compatibility)
-          shifts = response.shifts || [];
-        }
-        
-        setShifts(shifts);
-      }
+      const shiftsList = await getCachedLookup(LOOKUP_KEYS.shiftsActive, async () => {
+        const response = await api.get('/api/hr/shifts?activeOnly=true', {
+          requestKey: 'hr-shifts-active',
+        });
+        if (!response.success) return [];
+        return response.data?.shifts || [];
+      });
+      setShifts(Array.isArray(shiftsList) ? shiftsList : []);
     } catch (err) {
       console.error('Failed to load shifts:', err);
     }
@@ -465,42 +456,31 @@ export default function MonthlyHrPage() {
     loadShifts();
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   async function loadMonth(forceRefresh = false) {
     try {
       setLoading(true);
-      // Add cache-busting parameter if force refresh is needed
-      const url = forceRefresh 
-        ? `/api/hr/monthly-attendance?month=${month}&_t=${Date.now()}`
-        : `/api/hr/monthly-attendance?month=${month}`;
-      
-      const res = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store', // Always fresh so changes from HR Leaves page reflect here
+      const params = new URLSearchParams({ month });
+      if (searchTerm) params.set('search', searchTerm);
+      if (forceRefresh) params.set('_t', String(Date.now()));
+
+      const response = await api.get(`/api/hr/monthly-attendance?${params.toString()}`, {
+        requestKey: 'monthly-attendance',
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Request failed (${res.status})`);
+      if (response.aborted) return;
+
+      if (!response.success) {
+        throw new Error(response.error || response.message || 'Failed to load monthly attendance');
       }
 
-      const response = await res.json();
-      
-      // Handle standardized API response format
-      // New format: { success, message, data: { employees, month, daysInMonth }, error }
-      // Old format (backward compatibility): { employees, month, daysInMonth }
-      let data = {};
-      if (response.success !== undefined) {
-        // New standardized format
-        if (!response.success) {
-          throw new Error(response.error || response.message || 'Failed to load monthly attendance');
-        }
-        data = response.data || {};
-      } else {
-        // Legacy format (backward compatibility)
-        data = response;
-      }
-      
-      setData(data);
+      setData(response.data || {});
     } catch (err) {
       console.error(err);
       showToast('error', err.message || 'Failed to load monthly attendance');
@@ -512,7 +492,7 @@ export default function MonthlyHrPage() {
   useEffect(() => {
     loadMonth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month]);
+  }, [month, searchTerm]);
 
   // Refetch when user returns to this tab (e.g. after changing leave on HR Leaves page) so both pages stay in sync
   useEffect(() => {
@@ -521,7 +501,8 @@ export default function MonthlyHrPage() {
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [month]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month, searchTerm]);
 
   function openCellModal(emp, day) {
     setSelected({ emp, day });
@@ -688,21 +669,11 @@ export default function MonthlyHrPage() {
     }
   }
 
-  // Search / filter employees
+  // Search is applied server-side; keep shift filter on the client
   const filteredEmployees = (data.employees || []).filter((emp) => {
-    // Shift filter
     if (selectedShift && emp.shift !== selectedShift) {
       return false;
     }
-    
-    // Search filter
-    if (searchTerm.trim()) {
-      const term = searchTerm.trim().toLowerCase();
-      const code = String(emp.empCode || '').toLowerCase();
-      const name = String(emp.name || '').toLowerCase();
-      return code.includes(term) || name.includes(term);
-    }
-    
     return true;
   });
 
@@ -747,6 +718,7 @@ export default function MonthlyHrPage() {
     }
 
     try {
+      const ExcelJS = (await import('exceljs')).default;
       let bankMap = new Map();
       if (exportIncludeBankDetails) {
         let bankRes = await fetch('/api/hr/employees/bank-details', {
@@ -1682,8 +1654,8 @@ export default function MonthlyHrPage() {
                   </span>
                   <input
                     type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Search by code or name…"
                     style={{
                       padding: '7px 10px 7px 28px',

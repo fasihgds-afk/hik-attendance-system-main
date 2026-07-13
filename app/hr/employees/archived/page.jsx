@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import EmployeeFilters from '../../../../components/employees/EmployeeFilters';
 import EmployeeAvatar from '../../../../components/employees/EmployeeAvatar';
@@ -10,6 +10,7 @@ import ConfirmDialog from '../../../../components/ui/ConfirmDialog';
 import Modal from '../../../../components/ui/Modal';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { usePermissions } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { spinnerRingStyle } from '@/lib/theme/styles';
 
@@ -38,6 +39,7 @@ export default function FormerEmployeesPage() {
   const { colors, theme } = useTheme();
   const { canUpdate } = usePermissions('archivedEmployees');
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [employees, setEmployees] = useState([]);
@@ -46,6 +48,7 @@ export default function FormerEmployeesPage() {
   const [restoringId, setRestoringId] = useState(null);
   const [viewEmployee, setViewEmployee] = useState(null);
   const [restoreConfirm, setRestoreConfirm] = useState({ isOpen: false, employee: null });
+  const skipNextPageReset = useRef(true);
 
   const isDark = theme === 'dark';
   const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
@@ -64,9 +67,13 @@ export default function FormerEmployeesPage() {
       });
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`/api/hr/employees/archived?${params.toString()}`, { cache: 'no-store' });
-      const body = await res.json();
-      if (!res.ok) {
+      const body = await api.get(`/api/hr/employees/archived?${params.toString()}`, {
+        requestKey: 'archived-employees-list',
+      });
+
+      if (body.aborted) return;
+
+      if (!body.success) {
         throw new Error(body.error || body.message || 'Failed to load former employees');
       }
 
@@ -80,6 +87,18 @@ export default function FormerEmployeesPage() {
       setLoading(false);
     }
   }, [currentPage, searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      if (skipNextPageReset.current) {
+        skipNextPageReset.current = false;
+      } else {
+        setCurrentPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     loadEmployees();
@@ -213,10 +232,9 @@ export default function FormerEmployeesPage() {
               </p>
             </div>
             <EmployeeFilters
-              searchQuery={searchQuery}
+              searchQuery={searchInput}
               onSearchChange={(value) => {
-                setSearchQuery(value);
-                setCurrentPage(1);
+                setSearchInput(value);
               }}
             />
           </div>

@@ -306,9 +306,14 @@ export default function RegisterUserForm({
               style={{ ...inputStyle, cursor: 'pointer' }}
               {...focusHandlers}
             >
-              <option value="HR">HR (module permissions)</option>
+              <option value="HR">HR / Staff (module permissions)</option>
               <option value="EMPLOYEE">Employee (self-service)</option>
             </select>
+            {role === 'HR' && (
+              <p style={{ margin: '6px 0 0', fontSize: 11, color: colors.text.muted, lineHeight: 1.4 }}>
+                For IT Admin: choose role HR, then pick the <strong>IT Admin</strong> permission preset — they only see IT Assets.
+              </p>
+            )}
           </div>
 
           {role === 'EMPLOYEE' && (

@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
+import PaginationControls from '@/components/common/PaginationControls';
+import { api } from '@/lib/api/client';
+import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
 
 export default function EmployeeDirectoryPage() {
   const router = useRouter();
@@ -13,77 +16,98 @@ export default function EmployeeDirectoryPage() {
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('ALL');
   const [collapsedDepartments, setCollapsedDepartments] = useState({});
-  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [departments, setDepartments] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 1,
+  });
+  const skipSearchPageReset = useRef(true);
 
-  async function loadEmployees() {
+  const loadDepartments = useCallback(async () => {
+    try {
+      const list = await getCachedLookup(LOOKUP_KEYS.departments, async () => {
+        const response = await api.get('/api/hr/departments', {
+          requestKey: 'hr-departments',
+        });
+        if (!response.success) return [];
+        return response.data?.departments ?? [];
+      });
+      setDepartments(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Failed to load departments:', error);
+      setDepartments([]);
+    }
+  }, []);
+
+  const loadEmployees = useCallback(async () => {
     setLoading(true);
     try {
-      const firstRes = await fetch('/api/hr/employees?page=1&limit=50', {
-        cache: 'no-store',
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: '50',
       });
-      if (!firstRes.ok) throw new Error(`Failed to load directory (${firstRes.status})`);
-
-      const firstResponse = await firstRes.json();
-      if (!firstResponse.success) throw new Error(firstResponse.error || 'Failed to load employees');
-
-      const firstItems = firstResponse.data?.employees || [];
-      const meta = firstResponse.meta || {};
-      const totalPages = Math.max(1, Number(meta.totalPages || 1));
-      const total = Number(meta.total || firstItems.length || 0);
-
-      if (totalPages <= 1) {
-        setRows(firstItems);
-        setTotalEmployees(total);
-      } else {
-        const pageRequests = [];
-        for (let pageNumber = 2; pageNumber <= totalPages; pageNumber++) {
-          pageRequests.push(
-            fetch(`/api/hr/employees?page=${pageNumber}&limit=50`, { cache: 'no-store' }).then((r) => r.json())
-          );
-        }
-        const pageResponses = await Promise.all(pageRequests);
-        const extraItems = pageResponses.flatMap((r) => (r?.success ? r.data?.employees || [] : []));
-        setRows([...firstItems, ...extraItems]);
-        setTotalEmployees(total);
+      if (searchQuery) params.set('search', searchQuery);
+      if (selectedDepartment && selectedDepartment !== 'ALL') {
+        params.set('department', selectedDepartment);
       }
+
+      const response = await api.get(`/api/hr/employees?${params.toString()}`, {
+        requestKey: 'hr-directory-list',
+      });
+
+      if (response.aborted) return;
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to load employees');
+      }
+
+      const items = response.data?.employees || [];
+      const meta = response.meta || {};
+      setRows(items);
+      setPagination({
+        page: meta.page || currentPage,
+        limit: meta.limit || 50,
+        total: meta.total || items.length,
+        totalPages: meta.totalPages || 1,
+      });
     } catch (error) {
       console.error('Directory load error:', error);
       setRows([]);
-      setTotalEmployees(0);
+      setPagination({ page: 1, limit: 50, total: 0, totalPages: 1 });
     } finally {
       setLoading(false);
     }
-  }
+  }, [currentPage, searchQuery, selectedDepartment]);
+
+  useEffect(() => {
+    loadDepartments();
+  }, [loadDepartments]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      if (skipSearchPageReset.current) {
+        skipSearchPageReset.current = false;
+      } else {
+        setCurrentPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     loadEmployees();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadEmployees]);
 
-  const visibleRows = useMemo(() => {
-    if (!search.trim()) return rows;
-    const query = search.trim().toLowerCase();
-    return rows.filter((employee) => {
-      const text = [
-        employee.empCode,
-        employee.name,
-        employee.department,
-        employee.designation,
-        employee.shift,
-        employee.email,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return text.includes(query);
-    });
-  }, [rows, search]);
-
-  const visibleRowsByDepartment = useMemo(() => {
-    const grouped = visibleRows.reduce((acc, employee) => {
+  const rowsByDepartment = useMemo(() => {
+    const grouped = rows.reduce((acc, employee) => {
       const departmentName = employee.department || 'Unassigned';
       if (!acc[departmentName]) acc[departmentName] = [];
       acc[departmentName].push(employee);
@@ -102,27 +126,32 @@ export default function EmployeeDirectoryPage() {
           return String(a.empCode || '').localeCompare(String(b.empCode || ''));
         }),
       }));
-  }, [visibleRows]);
+  }, [rows]);
 
   const departmentCount = useMemo(
-    () => new Set(visibleRows.map((employee) => employee.department || 'Unassigned')).size,
-    [visibleRows]
+    () => new Set(rows.map((employee) => employee.department || 'Unassigned')).size,
+    [rows]
   );
+
+  const departmentChips = useMemo(() => {
+    const names = departments
+      .map((d) => (typeof d === 'string' ? d : d?.name))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return names.length > 0
+      ? names
+      : rowsByDepartment.map((g) => g.departmentName);
+  }, [departments, rowsByDepartment]);
 
   useEffect(() => {
     setCollapsedDepartments((prev) => {
       const next = {};
-      visibleRowsByDepartment.forEach((group) => {
+      rowsByDepartment.forEach((group) => {
         next[group.departmentName] = prev[group.departmentName] ?? false;
       });
       return next;
     });
-  }, [visibleRowsByDepartment]);
-
-  const filteredDepartmentGroups = useMemo(() => {
-    if (selectedDepartment === 'ALL') return visibleRowsByDepartment;
-    return visibleRowsByDepartment.filter((group) => group.departmentName === selectedDepartment);
-  }, [visibleRowsByDepartment, selectedDepartment]);
+  }, [rowsByDepartment]);
 
   function toggleDepartment(departmentName) {
     setCollapsedDepartments((prev) => ({
@@ -133,7 +162,7 @@ export default function EmployeeDirectoryPage() {
 
   function setAllDepartmentsCollapsed(isCollapsed) {
     const next = {};
-    visibleRowsByDepartment.forEach((group) => {
+    rowsByDepartment.forEach((group) => {
       next[group.departmentName] = isCollapsed;
     });
     setCollapsedDepartments(next);
@@ -193,11 +222,11 @@ export default function EmployeeDirectoryPage() {
         >
           <div style={{ padding: 10, borderRadius: 10, background: colors.background?.secondary }}>
             <div style={{ fontSize: 11, color: colors.text?.muted }}>Employees on This Page</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{visibleRows.length}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{rows.length}</div>
           </div>
           <div style={{ padding: 10, borderRadius: 10, background: colors.background?.secondary }}>
             <div style={{ fontSize: 11, color: colors.text?.muted }}>Total Employees</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{totalEmployees}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: colors.text?.primary }}>{pagination.total}</div>
           </div>
           <div style={{ padding: 10, borderRadius: 10, background: colors.background?.secondary }}>
             <div style={{ fontSize: 11, color: colors.text?.muted }}>Departments in View</div>
@@ -207,9 +236,9 @@ export default function EmployeeDirectoryPage() {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
           <input
-            value={search}
+            value={searchInput}
             onChange={(event) => {
-              setSearch(event.target.value);
+              setSearchInput(event.target.value);
             }}
             placeholder="Search by code, name, email..."
             style={{
@@ -229,19 +258,25 @@ export default function EmployeeDirectoryPage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           <button
             type="button"
-            onClick={() => setSelectedDepartment('ALL')}
+            onClick={() => {
+              setSelectedDepartment('ALL');
+              setCurrentPage(1);
+            }}
             style={chipStyle(selectedDepartment === 'ALL')}
           >
             All Departments
           </button>
-          {visibleRowsByDepartment.map((group) => (
+          {departmentChips.map((name) => (
             <button
-              key={`chip-${group.departmentName}`}
+              key={`chip-${name}`}
               type="button"
-              onClick={() => setSelectedDepartment(group.departmentName)}
-              style={chipStyle(selectedDepartment === group.departmentName)}
+              onClick={() => {
+                setSelectedDepartment(name);
+                setCurrentPage(1);
+              }}
+              style={chipStyle(selectedDepartment === name)}
             >
-              {group.departmentName} ({group.employees.length})
+              {name}
             </button>
           ))}
         </div>
@@ -319,7 +354,7 @@ export default function EmployeeDirectoryPage() {
                     Loading directory...
                   </td>
                 </tr>
-              ) : visibleRows.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
@@ -335,7 +370,7 @@ export default function EmployeeDirectoryPage() {
                   </td>
                 </tr>
               ) : (
-                filteredDepartmentGroups.flatMap((group) => [
+                rowsByDepartment.flatMap((group) => [
                   <tr key={`group-${group.departmentName}`}>
                     <td
                       colSpan={8}
@@ -421,6 +456,15 @@ export default function EmployeeDirectoryPage() {
             </tbody>
           </table>
         </div>
+
+        <PaginationControls
+          currentPage={pagination.page || currentPage}
+          totalPages={pagination.totalPages || 1}
+          totalItems={pagination.total || 0}
+          itemsPerPage={pagination.limit || 50}
+          onPageChange={setCurrentPage}
+          loading={loading}
+        />
       </GlassCard>
     </HrPageShell>
   );

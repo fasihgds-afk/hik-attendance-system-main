@@ -59,19 +59,27 @@ export async function GET(req) {
     const empCode = (searchParams.get('empCode') || '').trim();
 
     let queryFilter;
+    let useTextScore = false;
     if (empCode) {
       queryFilter = mergeArchivedFilter({ empCode });
     } else {
-      const { filter } = buildEmployeeFilter({ search, shift: '', department: '' });
-      queryFilter = mergeArchivedFilter(Object.keys(filter).length > 0 ? filter : {});
+      const built = buildEmployeeFilter({ search, shift: '', department: '' });
+      useTextScore = !!built.useTextScore;
+      queryFilter = mergeArchivedFilter(Object.keys(built.filter).length > 0 ? built.filter : {});
     }
 
     const skip = (page - 1) * limit;
+    const listProjection = useTextScore
+      ? { ...LIST_PROJECTION, score: { $meta: 'textScore' } }
+      : LIST_PROJECTION;
+    const sort = useTextScore
+      ? { score: { $meta: 'textScore' }, deletedAt: -1 }
+      : { deletedAt: -1, empCode: 1 };
 
     const [items, total] = await Promise.all([
       Employee.find(queryFilter)
-        .select(LIST_PROJECTION)
-        .sort({ deletedAt: -1, empCode: 1 })
+        .select(listProjection)
+        .sort(sort)
         .skip(skip)
         .limit(limit)
         .lean()

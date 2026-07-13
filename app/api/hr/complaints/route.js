@@ -1,10 +1,9 @@
 // app/api/hr/complaints/route.js
-// List all complaints with optional filters (status, category, search)
+// List all complaints with optional filters (status, category, search) + pagination
 import { connectDB } from '../../../../lib/db';
 import Complaint from '../../../../models/Complaint';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
-import { ValidationError } from '../../../../lib/errors/errorHandler';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,8 +16,7 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// GET /api/hr/complaints?status=...&search=...&period=all|week|month
-// period: all = all time, week = last 7 days, month = last 30 days. Results sorted latest first.
+// GET /api/hr/complaints?status=...&search=...&period=all|week|month&page=1&limit=50
 export async function GET(req) {
   try {
     await requirePermission('complaints', 'view');
@@ -28,6 +26,9 @@ export async function GET(req) {
     const category = (searchParams.get('category') || '').trim();
     const search = (searchParams.get('search') || '').trim();
     const period = (searchParams.get('period') || 'all').toLowerCase();
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+    const skip = (page - 1) * limit;
 
     const filter = {};
     if (status && VALID_STATUSES.includes(status)) filter.status = status;
@@ -35,7 +36,6 @@ export async function GET(req) {
     if (search) {
       const safeSearch = escapeRegex(search);
       if (EMP_CODE_ONLY_REGEX.test(search)) {
-        // Prefer exact/indexed lookup when searching by employee code.
         filter.empCode = search;
       } else {
         filter.$or = [
@@ -55,12 +55,31 @@ export async function GET(req) {
       filter.createdAt = { $gte: since };
     }
 
-    const list = await Complaint.find(filter)
-      .sort({ createdAt: -1 })
-      .lean()
-      .maxTimeMS(3000);
+    const [list, total] = await Promise.all([
+      Complaint.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .maxTimeMS(3000),
+      Complaint.countDocuments(filter).maxTimeMS(2000),
+    ]);
 
-    return successResponse({ complaints: list }, 'Complaints retrieved', HTTP_STATUS.OK);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    return successResponse(
+      { complaints: list },
+      'Complaints retrieved',
+      HTTP_STATUS.OK,
+      {
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+        },
+      }
+    );
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err, req);

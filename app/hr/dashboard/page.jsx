@@ -4,7 +4,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import ExcelJS from 'exceljs';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { getTableStyles, getGlossPillStyles, spinnerRingStyle } from '@/lib/theme/styles';
 import {
@@ -19,6 +18,8 @@ import {
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
+import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
 
 // Styles will be generated dynamically based on theme
 
@@ -88,25 +89,14 @@ export default function HrDashboardPage() {
 
   async function loadShifts() {
     try {
-      const res = await fetch('/api/hr/shifts?activeOnly=true');
-      if (res.ok) {
-        const response = await res.json();
-        
-        // Handle standardized API response format
-        let shifts = [];
-        if (response.success !== undefined) {
-          if (!response.success) {
-            console.error('Failed to load shifts:', response.error || response.message);
-            return;
-          }
-          shifts = response.data?.shifts || [];
-        } else {
-          // Legacy format (backward compatibility)
-          shifts = response.shifts || [];
-        }
-        
-        setShifts(shifts);
-      }
+      const shiftsList = await getCachedLookup(LOOKUP_KEYS.shiftsActive, async () => {
+        const response = await api.get('/api/hr/shifts?activeOnly=true', {
+          requestKey: 'hr-shifts-active',
+        });
+        if (!response.success) return [];
+        return response.data?.shifts || [];
+      });
+      setShifts(Array.isArray(shiftsList) ? shiftsList : []);
     } catch (err) {
       console.error('Failed to load shifts:', err);
     }
@@ -314,6 +304,7 @@ export default function HrDashboardPage() {
     }
 
     try {
+      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
 
       // Workbook properties (nice touch)

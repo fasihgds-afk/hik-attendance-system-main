@@ -2,14 +2,14 @@
 import { connectDB } from "../../../../lib/db";
 import Employee from "../../../../models/Employee";
 import { mergeActiveFilter } from "../../../../lib/employees/activeFilter";
+import { buildEmployeeFilter } from "../../../../lib/db/queryOptimizer";
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from "../../../../lib/api/response";
 import { requirePermission } from "../../../../lib/auth/requireAuth";
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// OPTIMIZATION: Minimal field selection for list views (excludes heavy fields like profileImageUrl, cnic)
-// Removed: profileImageUrl (large), cnic (not needed for list), phoneNumber (not needed for stats)
+// OPTIMIZATION: Minimal field selection for list views
 const EMPLOYEE_LIST_FIELDS = 'empCode name email monthlySalary salaryHistory shift shiftId department designation saturdayGroup';
 
 export async function GET(req) {
@@ -17,34 +17,46 @@ export async function GET(req) {
   
   try {
     await requirePermission('employees', 'view');
-    // OPTIMIZATION: Connect DB (cached singleton, no reconnection per request)
     await connectDB();
 
-    // OPTIMIZATION: Parse pagination params with defaults and limits
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
+    const search = (searchParams.get('search') || '').trim();
+    const department = (searchParams.get('department') || '').trim();
     const skip = (page - 1) * limit;
 
-    // OPTIMIZATION: Run count and data queries in parallel for faster response
-    // MongoDB will auto-select the compound index { department: 1, empCode: 1 } for sorting
-    const activeFilter = mergeActiveFilter({});
+    const { filter, sortOptions, useTextScore } = buildEmployeeFilter({
+      search,
+      shift: '',
+      department: department && department !== 'ALL' ? department : '',
+    });
+
+    const activeFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
+
+    const selectFields = useTextScore
+      ? { empCode: 1, name: 1, email: 1, monthlySalary: 1, salaryHistory: 1, shift: 1, shiftId: 1, department: 1, designation: 1, saturdayGroup: 1, score: { $meta: 'textScore' } }
+      : EMPLOYEE_LIST_FIELDS;
+
+    // Prefer department+empCode sort for directory browsing; textScore when searching
+    const sort = useTextScore
+      ? sortOptions
+      : (department ? { empCode: 1 } : { department: 1, empCode: 1 });
+
     const [total, employees] = await Promise.all([
-      Employee.countDocuments(activeFilter)
-        .maxTimeMS(2500), // Reduced timeout
+      Employee.countDocuments(activeFilter).maxTimeMS(2500),
       Employee.find(activeFilter)
-        .select(EMPLOYEE_LIST_FIELDS)
-        .sort({ department: 1, empCode: 1 }) // Uses compound index { department: 1, empCode: 1 }
+        .select(selectFields)
+        .sort(sort)
         .skip(skip)
         .limit(limit)
         .lean()
-        .maxTimeMS(2500) // Reduced timeout
+        .maxTimeMS(2500),
     ]);
 
     const hasNext = skip + employees.length < total;
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    // OPTIMIZATION: Response size control - log payload size
     const responseData = { employees };
     const meta = {
       total,
@@ -52,31 +64,20 @@ export async function GET(req) {
       limit,
       totalPages,
       hasNext,
-      hasPrev: page > 1
+      hasPrev: page > 1,
     };
 
-    const responseJson = JSON.stringify({ ...responseData, meta });
-    const responseSizeKB = Buffer.byteLength(responseJson, 'utf8') / 1024;
-    
-    // Log response time and size for monitoring
     const responseTime = Date.now() - startTime;
-    if (responseSizeKB > 100) {
-      console.warn(`[employees] Large response: ${responseSizeKB.toFixed(2)}KB (${employees.length} employees)`);
-    }
     if (responseTime > 1000) {
       console.warn(`[employees] Slow response: ${responseTime}ms`);
     }
-    
-    // OPTIMIZATION: Add cache headers for Next.js revalidation
-    // Pass meta as 4th parameter to successResponse (top-level in response)
-    const response = successResponse(
+
+    return successResponse(
       responseData,
       'Employees retrieved successfully',
       HTTP_STATUS.OK,
       meta
     );
-
-    return response;
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     const responseTime = Date.now() - startTime;

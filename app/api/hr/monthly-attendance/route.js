@@ -426,6 +426,7 @@ export async function GET(req) {
     }
     const { searchParams } = new URL(req.url);
     let month = searchParams.get('month');
+    const search = (searchParams.get('search') || '').trim();
 
     if (!month) {
       const now = new Date();
@@ -496,7 +497,7 @@ export async function GET(req) {
     const monthEndDate = `${monthPrefix}-${String(daysInMonth).padStart(2, '0')}`;
 
     // OPTIMIZATION: Run queries in parallel; employees scoped to one row when viewer is EMPLOYEE
-    const [shiftCount, employees, departmentDocs] = await Promise.all([
+    const [shiftCount, employeesRaw, departmentDocs] = await Promise.all([
       Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
       isEmployeeViewer
         ? Employee.find({ empCode: myEmpCode })
@@ -513,6 +514,8 @@ export async function GET(req) {
       Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
     ]);
 
+    let employees = employeesRaw || [];
+
     const useDynamicShifts = shiftCount > 0;
     const departmentPolicyMap = new Map();
     (departmentDocs || []).forEach((d) => {
@@ -527,6 +530,16 @@ export async function GET(req) {
       });
     });
 
+    // Server-side search: narrow employees before loading month attendance (much cheaper)
+    if (search && !isEmployeeViewer) {
+      const term = search.toLowerCase();
+      employees = employees.filter((emp) => {
+        const code = String(emp.empCode || '').toLowerCase();
+        const name = String(emp.name || '').toLowerCase();
+        return code.includes(term) || name.includes(term);
+      });
+    }
+
     // Dynamic weekly off days (default [0] = Sunday). Saturday (6) is handled
     // separately by department policy below, so it is excluded here.
     const companySettings = await getCompanySettings();
@@ -537,6 +550,10 @@ export async function GET(req) {
     };
     if (isEmployeeViewer) {
       shiftAttendanceFilter.empCode = myEmpCode;
+    } else if (search) {
+      const codes = employees.map((e) => e.empCode).filter(Boolean);
+      // No matches → skip heavy attendance scan
+      shiftAttendanceFilter.empCode = { $in: codes.length ? codes : ['__none__'] };
     }
 
     const shiftDocs = await ShiftAttendance.find(shiftAttendanceFilter)
