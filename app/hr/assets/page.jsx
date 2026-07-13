@@ -6,6 +6,8 @@ import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { usePermissions } from '@/hooks/usePermissions';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import CenterAlert from '@/components/ui/CenterAlert';
 
 const WORK_LOCATIONS = ['Work From Office', 'Work From Home', 'Hybrid', 'Other'];
 
@@ -136,7 +138,9 @@ export default function ItAssetsPage() {
   const [filterType, setFilterType] = useState('');
   const [stockAssets, setStockAssets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState({ type: '', text: '' });
+  const [toast, setToast] = useState({ type: '', text: '', title: '' });
+  const [confirmState, setConfirmState] = useState(null); // { title, message, onConfirm }
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [searchQ, setSearchQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
 
@@ -177,9 +181,16 @@ export default function ItAssetsPage() {
     display: 'block',
   };
 
-  function showToast(type, text) {
-    setToast({ type, text });
-    setTimeout(() => setToast((prev) => (prev.text === text ? { type: '', text: '' } : prev)), 3200);
+  function showToast(type, text, title = '') {
+    setToast({ type, text, title });
+  }
+
+  function closeToast() {
+    setToast({ type: '', text: '', title: '' });
+  }
+
+  function askConfirm({ title, message, confirmText = 'Delete', onConfirm }) {
+    setConfirmState({ title, message, confirmText, onConfirm });
   }
 
   useEffect(() => {
@@ -378,7 +389,7 @@ export default function ItAssetsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || 'Save failed');
-      showToast('success', modal === 'edit' ? 'Updated' : 'Assigned to employee');
+      showToast('success', modal === 'edit' ? 'Equipment details were saved.' : 'Laptop and accessories assigned to employee.', modal === 'edit' ? 'Updated' : 'Assigned');
       setModal(null);
       await loadSheet();
     } catch (err) {
@@ -431,8 +442,9 @@ export default function ItAssetsPage() {
       showToast(
         'success',
         count > 1
-          ? `Added ${count} ${typeLabel(invForm.type)} items`
-          : `${typeLabel(invForm.type)} added to inventory`
+          ? `Added ${count} ${typeLabel(invForm.type)} items to inventory.`
+          : `${typeLabel(invForm.type)} added to inventory.`,
+        'Inventory updated'
       );
       setModal(null);
       setTab('inventory');
@@ -444,35 +456,58 @@ export default function ItAssetsPage() {
     }
   }
 
-  async function handleDeleteRow(row) {
+  function handleDeleteRow(row) {
     if (!canDelete) return;
-    if (!window.confirm(`Remove IT equipment row for ${row.employeeName || row.empCode}?`)) return;
-    try {
-      const res = await fetch(
-        `/api/hr/assets/equipment?empCode=${encodeURIComponent(row.empCode)}`,
-        { method: 'DELETE' }
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Delete failed');
-      showToast('success', 'Row removed');
-      await loadSheet();
-    } catch (err) {
-      showToast('error', err.message || 'Delete failed');
-    }
+    askConfirm({
+      title: 'Remove equipment row?',
+      message: `Remove IT equipment for ${row.employeeName || row.empCode}? Linked accessories will return to stock when possible.`,
+      confirmText: 'Remove',
+      onConfirm: async () => {
+        try {
+          setConfirmBusy(true);
+          const res = await fetch(
+            `/api/hr/assets/equipment?empCode=${encodeURIComponent(row.empCode)}`,
+            { method: 'DELETE' }
+          );
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || data.message || 'Delete failed');
+          setConfirmState(null);
+          showToast('success', 'Employee equipment row removed.', 'Deleted');
+          await loadSheet();
+          await loadInventory();
+        } catch (err) {
+          setConfirmState(null);
+          showToast('error', err.message || 'Delete failed', 'Delete failed');
+        } finally {
+          setConfirmBusy(false);
+        }
+      },
+    });
   }
 
-  async function handleDeleteAsset(asset) {
+  function handleDeleteAsset(asset) {
     if (!canDelete) return;
-    if (!window.confirm(`Delete ${asset.assetTag} from inventory?`)) return;
-    try {
-      const res = await fetch(`/api/hr/assets/${asset._id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Delete failed');
-      showToast('success', 'Asset deleted');
-      await loadInventory();
-    } catch (err) {
-      showToast('error', err.message || 'Delete failed');
-    }
+    askConfirm({
+      title: 'Delete inventory item?',
+      message: `Delete ${asset.assetTag} (${typeLabel(asset.type)}) from inventory? This cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          setConfirmBusy(true);
+          const res = await fetch(`/api/hr/assets/${asset._id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || data.message || 'Delete failed');
+          setConfirmState(null);
+          showToast('success', `${asset.assetTag} deleted from inventory.`, 'Deleted');
+          await loadInventory();
+        } catch (err) {
+          setConfirmState(null);
+          showToast('error', err.message || 'Delete failed', 'Delete failed');
+        } finally {
+          setConfirmBusy(false);
+        }
+      },
+    });
   }
 
   const handleLogout = async () => {
@@ -612,32 +647,28 @@ export default function ItAssetsPage() {
 
   return (
     <HrPageShell subtitle="IT Assets — inventory & employee equipment" actions={headerActions}>
-      {toast.text && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 18,
-            right: 18,
-            zIndex: 100,
-            padding: '10px 14px',
-            borderRadius: 10,
-            background:
-              toast.type === 'error'
-                ? isDark
-                  ? 'rgba(239,68,68,0.2)'
-                  : '#fef2f2'
-                : isDark
-                  ? 'rgba(34,197,94,0.2)'
-                  : '#f0fdf4',
-            color: toast.type === 'error' ? colors.error : colors.success,
-            border: `1px solid ${toast.type === 'error' ? colors.error : colors.success}55`,
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {toast.text}
-        </div>
-      )}
+      <CenterAlert
+        isOpen={!!toast.text}
+        type={toast.type || 'info'}
+        title={toast.title}
+        message={toast.text}
+        onClose={closeToast}
+        autoCloseMs={toast.type === 'error' ? 0 : 2800}
+      />
+
+      <ConfirmDialog
+        isOpen={!!confirmState}
+        title={confirmState?.title}
+        message={confirmState?.message}
+        confirmText={confirmState?.confirmText || 'Confirm'}
+        cancelText="Cancel"
+        variant="danger"
+        loading={confirmBusy}
+        onClose={() => {
+          if (!confirmBusy) setConfirmState(null);
+        }}
+        onConfirm={confirmState?.onConfirm}
+      />
 
       <GlassCard padding="18px 20px 22px" borderRadius={22} style={{ width: '100%' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
