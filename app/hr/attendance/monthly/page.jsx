@@ -442,12 +442,19 @@ export default function MonthlyHrPage() {
       const shiftsList = await getCachedLookup(LOOKUP_KEYS.shiftsActive, async () => {
         const response = await api.get('/api/hr/shifts?activeOnly=true', {
           requestKey: 'hr-shifts-active',
+          abortDuplicate: false,
         });
-        if (!response.success) return [];
+        if (response.aborted) {
+          throw Object.assign(new Error('aborted'), { aborted: true });
+        }
+        if (!response.success) {
+          throw new Error(response.error || response.message || 'Failed to load shifts');
+        }
         return response.data?.shifts || [];
       });
       setShifts(Array.isArray(shiftsList) ? shiftsList : []);
     } catch (err) {
+      if (err?.aborted) return;
       console.error('Failed to load shifts:', err);
     }
   }

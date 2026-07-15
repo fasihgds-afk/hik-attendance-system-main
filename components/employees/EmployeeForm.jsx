@@ -37,6 +37,7 @@ export default function EmployeeForm({
     effectiveFromDate: employee ? todayStr() : '',
     department: employee?.department || '',
     designation: employee?.designation || '',
+    joinDate: employee?.joinDate || (employee ? '' : todayStr()),
     phoneNumber: employee?.phoneNumber || '',
     cnic: employee?.cnic || '',
     bankDetails: {
@@ -118,6 +119,7 @@ export default function EmployeeForm({
         effectiveFromDate: todayStr(),
         department: employee.department || '',
         designation: employee.designation || '',
+        joinDate: employee.joinDate || '',
         phoneNumber: employee.phoneNumber || '',
         cnic: employee.cnic || '',
         bankDetails: {
@@ -142,6 +144,7 @@ export default function EmployeeForm({
         effectiveFromDate: '',
         department: '',
         designation: '',
+        joinDate: todayStr(),
         phoneNumber: '',
         cnic: '',
         bankDetails: {
@@ -398,6 +401,19 @@ export default function EmployeeForm({
                 value={formData.designation}
                 onChange={(e) => handleChange('designation', e.target.value)}
                 placeholder="e.g. Manager, Developer, Lead"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Join Date <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={formData.joinDate || ''}
+                onChange={(e) => handleChange('joinDate', e.target.value)}
                 style={inputStyle}
               />
             </div>

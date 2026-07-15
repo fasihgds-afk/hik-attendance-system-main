@@ -57,6 +57,9 @@ const EmployeeSchema = new mongoose.Schema(
     department: String,
     designation: String,
 
+    /** Employee joining date (YYYY-MM-DD). */
+    joinDate: { type: String, default: null },
+
     phoneNumber: String,
     cnic: String,
 

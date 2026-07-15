@@ -72,15 +72,20 @@ export default function EmployeeShiftPage() {
       const shiftsList = await getCachedLookup(LOOKUP_KEYS.shiftsActive, async () => {
         const response = await api.get('/api/hr/shifts?activeOnly=true', {
           requestKey: 'hr-shifts-active',
+          // Static lookup — don't abort concurrent mounts (e.g. React Strict Mode)
+          abortDuplicate: false,
         });
+        if (response.aborted) {
+          throw Object.assign(new Error('aborted'), { aborted: true });
+        }
         if (!response.success) {
-          console.error('Failed to load shifts:', response.error || response.message);
-          return [];
+          throw new Error(response.error || response.message || 'Failed to load shifts');
         }
         return response.data?.shifts || response.data?.items || [];
       });
       setShifts(Array.isArray(shiftsList) ? shiftsList : []);
     } catch (err) {
+      if (err?.aborted) return;
       console.error('Failed to load shifts:', err);
     }
   }
@@ -90,12 +95,19 @@ export default function EmployeeShiftPage() {
       const list = await getCachedLookup(LOOKUP_KEYS.departments, async () => {
         const response = await api.get('/api/hr/departments', {
           requestKey: 'hr-departments',
+          abortDuplicate: false,
         });
-        if (!response.success) return [];
+        if (response.aborted) {
+          throw Object.assign(new Error('aborted'), { aborted: true });
+        }
+        if (!response.success) {
+          throw new Error(response.error || response.message || 'Failed to load departments');
+        }
         return response.data?.departments ?? [];
       });
       setDepartments(Array.isArray(list) ? list : []);
     } catch (err) {
+      if (err?.aborted) return;
       console.error('Failed to load departments:', err);
     }
   }
@@ -343,6 +355,7 @@ export default function EmployeeShiftPage() {
         shift: formData.shift || '',
         department: (formData.department ?? '').trim(),
         designation: formData.designation || undefined,
+        joinDate: formData.joinDate || undefined,
         phoneNumber: formData.phoneNumber || undefined,
         cnic: formData.cnic || undefined,
         bankDetails: formData.bankDetails || undefined,

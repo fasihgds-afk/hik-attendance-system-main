@@ -52,6 +52,12 @@ export default function EmployeeQuickInfo({ employee, children }) {
                 <span style={{ color: '#111827', marginLeft: 8 }}>{employee.designation}</span>
               </div>
             )}
+            {employee.joinDate && (
+              <div style={{ fontSize: 12 }}>
+                <span style={{ color: '#6b7280', fontWeight: 600 }}>Join Date:</span>
+                <span style={{ color: '#111827', marginLeft: 8 }}>{employee.joinDate}</span>
+              </div>
+            )}
             {employee.phoneNumber && (
               <div style={{ fontSize: 12 }}>
                 <span style={{ color: '#6b7280', fontWeight: 600 }}>Phone:</span>
