@@ -5,11 +5,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
-import ThemeToggle from "@/components/ui/ThemeToggle";
 import Modal from "@/components/ui/Modal";
 import EmployeeProfileEdit from "@/components/employees/EmployeeProfileEdit";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/components/ui/AutoLogoutWarning";
+import {
+  HrPageShell,
+  HrHeaderActions,
+  HrHeaderBadge,
+  GlassCard,
+  GlossOverlay,
+  getCardStyles,
+  getGlossPillStyles,
+  withLeftAccent,
+} from "@/components/glass";
 
 // Convert number to words (for amount in words)
 function numberToWords(num) {
@@ -865,26 +874,25 @@ function renderEmployeeAvatar(emp, size = 88) {
 }
 
 function SummaryItem({ label, value, color, hint }) {
-  const { colors, theme } = useTheme();
+  const { colors } = useTheme();
   const accent = color || colors.primary[500];
+  const cardStyle = withLeftAccent(
+    getCardStyles(colors, { padding: 0, borderRadius: 14 }),
+    accent,
+    3
+  );
   return (
     <div
       style={{
-        borderRadius: 14,
+        ...cardStyle,
         padding: "10px 12px",
-        backgroundColor:
-          theme === "dark" ? "rgba(15, 23, 42, 0.65)" : colors.background.secondary,
-        border: `1px solid ${colors.border.default}`,
-        borderLeft: `3px solid ${accent}`,
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
         gap: 4,
         minHeight: 72,
-        boxShadow:
-          theme === "dark"
-            ? "0 4px 16px rgba(0,0,0,0.2)"
-            : "0 2px 10px rgba(15,23,42,0.06)",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
       <div
@@ -1528,65 +1536,106 @@ export default function EmployeeDashboardPage() {
     }
   }, [showSalarySlip, salarySlipMonth, empCode]);
 
+  const glossPill = (variant = "neutral") => getGlossPillStyles(colors, variant);
+  // Same glass surface tokens as HR dashboard
+  const nestedGlassCard = getCardStyles(colors, { padding: 0, borderRadius: 16 });
+
+  const headerMeta = (
+    <>
+      <HrHeaderBadge>{displayName || "Employee"}</HrHeaderBadge>
+      <HrHeaderBadge>Code {empCode || "—"}</HrHeaderBadge>
+    </>
+  );
+
+  const headerSelectStyle = {
+    ...glossPill("neutral"),
+    height: 42,
+    cursor: "pointer",
+    fontWeight: 600,
+    outline: "none",
+  };
+
+  const headerActions = (
+    <HrHeaderActions>
+      <select
+        value={month.slice(0, 4)}
+        onChange={(e) => {
+          const newYear = e.target.value;
+          setMonth(`${newYear}-${month.slice(5, 7)}`);
+        }}
+        aria-label="Select Year"
+        title="Select Year"
+        style={{ ...headerSelectStyle, minWidth: 96 }}
+      >
+        {Array.from({ length: 10 }, (_, i) => {
+          const y = new Date().getFullYear() - 2 + i;
+          return (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          );
+        })}
+      </select>
+      <select
+        value={month.slice(5, 7)}
+        onChange={(e) => {
+          const newMonth = e.target.value;
+          setMonth(`${month.slice(0, 4)}-${newMonth}`);
+        }}
+        aria-label="Select Month"
+        title="Select Month"
+        style={{ ...headerSelectStyle, minWidth: 124 }}
+      >
+        {Array.from({ length: 12 }, (_, i) => {
+          const m = String(i + 1).padStart(2, "0");
+          const monthName = new Date(0, i).toLocaleString("en-US", { month: "long" });
+          return (
+            <option key={m} value={m}>
+              {monthName}
+            </option>
+          );
+        })}
+      </select>
+      <button
+        type="button"
+        onClick={() => router.push("/employee/complaints")}
+        style={glossPill("slate")}
+      >
+        Complaints
+      </button>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            await signOut({
+              redirect: false,
+              callbackUrl: "/login?role=employee",
+            });
+            router.push("/login?role=employee");
+          } catch (error) {
+            console.error("Logout error:", error);
+            router.push("/login?role=employee");
+          }
+        }}
+        style={glossPill("rose")}
+      >
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
   // -------------- UI ------------------
   return (
-    <div
+    <HrPageShell
+      subtitle="Employee attendance & profile"
+      meta={headerMeta}
+      actions={headerActions}
       className="employee-dashboard-container"
-      style={{
-        minHeight: "100vh",
-        width: "100%",
-        maxWidth: "100%",
-        boxSizing: "border-box",
-        padding: "26px 28px 40px",
-        background: colors.gradient.overlay,
-        color: colors.text.primary,
-        fontFamily:
-          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      }}
     >
-      <style jsx>{`
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media (max-width: 768px) {
-          .employee-dashboard-container {
-            padding: 16px !important;
-          }
-          .employee-header {
-            flex-direction: column !important;
-            align-items: stretch !important;
-            gap: 16px !important;
-            padding: 16px !important;
-          }
-          .employee-header-left {
-            width: 100% !important;
-            flex: 1 1 auto !important;
-          }
-          .employee-header-logo {
-            width: 60px !important;
-            height: 60px !important;
-          }
-          .employee-header-title {
-            font-size: 18px !important;
-          }
-          .employee-header-subtitle {
-            font-size: 11px !important;
-          }
-          .employee-header-right {
-            width: 100% !important;
-            flex-direction: column !important;
-            gap: 12px !important;
-          }
-          .employee-header-right > div {
-            width: 100% !important;
-          }
-          .employee-header-right input {
-            width: 100% !important;
-            min-width: auto !important;
-          }
-          .employee-header-right button {
-            width: 100% !important;
-          }
-          .employee-main-card {
-            padding: 16px !important;
-          }
           .employee-top-row {
             grid-template-columns: 1fr !important;
             gap: 10px !important;
@@ -1630,15 +1679,6 @@ export default function EmployeeDashboardPage() {
           }
         }
         @media (max-width: 480px) {
-          .employee-dashboard-container {
-            padding: 12px !important;
-          }
-          .employee-header-title {
-            font-size: 16px !important;
-          }
-          .employee-main-card {
-            padding: 10px !important;
-          }
           .employee-summary-grid {
             grid-template-columns: 1fr !important;
           }
@@ -1646,414 +1686,13 @@ export default function EmployeeDashboardPage() {
             min-width: 450px !important;
             font-size: 10px !important;
           }
-          .employee-table th,
-          .employee-table td {
-            padding: 4px 3px !important;
-            font-size: 10px !important;
-          }
         }
-        
-        /* Laptop & Desktop Responsive Styles */
-        /* Desktop: full width with padding - no empty side strips */
-        @media (min-width: 1024px) {
-          .employee-dashboard-inner {
-            max-width: 100% !important;
-            width: 100% !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-          }
-        }
-        @media (min-width: 1441px) {
-          .employee-dashboard-inner {
-            max-width: 100% !important;
-          }
-        }
-        @media (min-width: 1024px) and (max-width: 1366px) {
-          .employee-dashboard-container {
-            padding: 20px 16px !important;
-          }
-          .employee-header {
-            padding: 16px 22px !important;
-          }
-          .employee-header-logo {
-            width: 75px !important;
-            height: 75px !important;
-          }
-          .employee-header-title {
-            font-size: 20px !important;
-          }
-          .employee-header-right {
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-          }
-          .employee-header-right input,
-          .employee-header-right select {
-            min-width: 150px !important;
-            font-size: 12px !important;
-          }
-          .employee-header-right button {
-            padding: 8px 16px !important;
-            font-size: 12px !important;
-          }
-          .employee-main-card {
-            padding: 18px 22px !important;
-          }
-          .employee-table {
-            font-size: 12px !important;
-          }
-          .employee-table th,
-          .employee-table td {
-            padding: 8px 6px !important;
-            font-size: 12px !important;
-          }
-        }
-        
-        @media (min-width: 1367px) and (max-width: 1440px) {
-          .employee-dashboard-container {
-            padding: 22px 18px !important;
-          }
-          .employee-header {
-            padding: 18px 24px !important;
-          }
-          .employee-table {
-            font-size: 12.5px !important;
-          }
-        }
-        
-        @media (min-width: 1441px) and (max-width: 1920px) {
-          .employee-dashboard-container {
-            padding: 24px 28px !important;
-          }
-          .employee-table {
-            font-size: 13px !important;
-          }
-        }
-        
-        @media (min-width: 1921px) {
-          .employee-dashboard-container {
-            padding: 28px 32px !important;
-          }
-          .employee-header-title {
-            font-size: 24px !important;
-          }
-          .employee-header-logo {
-            width: 76px !important;
-            height: 76px !important;
-          }
-          .employee-table {
-            font-size: 14px !important;
-          }
-          .employee-table th,
-          .employee-table td {
-            padding: 10px 8px !important;
-            font-size: 14px !important;
-          }
-        }
-      `}</style>
-      <style jsx global>{`
-        /* Style for Year and Month dropdown options */
-        .employee-header-right select option {
-          background-color: ${theme === 'dark' ? '#1e293b' : '#ffffff'};
-          color: ${theme === 'dark' ? '#f1f5f9' : '#0f172a'};
-          padding: 8px 12px;
-        }
-        .employee-header-right select:focus {
-          border-color: rgba(255, 255, 255, 0.5) !important;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
-        }
-      `}</style>
-      <div className="container-responsive employee-dashboard-inner" style={{ margin: "0 auto 24px auto", width: "100%" }}>
-        {/* HEADER */}
-        <div
-          className="employee-header"
-          style={{
-            position: "relative",
-            overflow: "hidden",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 16,
-            padding: "20px 26px",
-            borderRadius: 20,
-            background: colors.gradient.header,
-            color: "#f8fafc",
-            boxShadow:
-              theme === "dark"
-                ? "0 20px 50px rgba(19, 168, 229, 0.22), 0 8px 24px rgba(0,0,0,0.35)"
-                : "0 16px 40px rgba(37, 99, 235, 0.2), 0 4px 16px rgba(0,0,0,0.08)",
-            border: `1px solid ${theme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.35)"}`,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage:
-                "radial-gradient(circle at 18% 40%, rgba(255,255,255,0.12) 0%, transparent 45%)",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            className="employee-header-left"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              position: "relative",
-              zIndex: 1,
-              flex: "1 1 280px",
-              minWidth: 0,
-            }}
-          >
-            <div
-              className="employee-header-logo"
-              style={{
-                width: 68,
-                height: 68,
-                borderRadius: 16,
-                overflow: "hidden",
-                backgroundColor: "rgba(255,255,255,0.12)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-                border: "2px solid rgba(255,255,255,0.2)",
-              }}
-            >
-              <img
-                src="/gds.png"
-                alt="Global Digital Solutions logo"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div
-                className="employee-header-title"
-                style={{
-                  fontSize: 22,
-                  fontWeight: 800,
-                  letterSpacing: 0.35,
-                  lineHeight: 1.2,
-                  textShadow: "0 2px 10px rgba(0,0,0,0.15)",
-                }}
-              >
-                Global Digital Solutions
-              </div>
-              <div
-                className="employee-header-subtitle"
-                style={{
-                  fontSize: 13,
-                  opacity: 0.92,
-                  fontWeight: 500,
-                  marginTop: 2,
-                }}
-              >
-                Employee attendance &amp; profile
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  fontSize: 12,
-                  color: "rgba(255,255,255,0.92)",
-                  backgroundColor: "rgba(0,0,0,0.2)",
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  backdropFilter: "blur(8px)",
-                }}
-              >
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.85, flexShrink: 0 }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span style={{ fontWeight: 600 }}>{displayName}</span>
-                <span style={{ opacity: 0.5 }}>·</span>
-                <span>
-                  Code <strong style={{ letterSpacing: 0.4 }}>{empCode}</strong>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="employee-header-right"
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-              position: "relative",
-              zIndex: 1,
-              flexShrink: 0,
-            }}
-          >
-            <ThemeToggle />
-            <select
-              value={month.slice(0, 4)} // Extract year from YYYY-MM
-              onChange={(e) => {
-                const newYear = e.target.value;
-                setMonth(`${newYear}-${month.slice(5, 7)}`); // Reconstruct YYYY-MM
-              }}
-              aria-label="Select Year"
-              title="Select Year"
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid rgba(255, 255, 255, 0.28)",
-                backgroundColor: theme === "dark" ? "rgba(15, 23, 42, 0.55)" : "rgba(255, 255, 255, 0.95)",
-                color: theme === "dark" ? "#f1f5f9" : "#0f172a",
-                minWidth: 104,
-                fontSize: 13,
-                outline: "none",
-                cursor: "pointer",
-                backdropFilter: "blur(10px)",
-                fontWeight: 600,
-                height: "42px",
-              }}
-            >
-              {Array.from({ length: 10 }, (_, i) => {
-                const y = new Date().getFullYear() - 2 + i; // 2 years back, 7 years forward
-                return <option key={y} value={y}>{y}</option>;
-              })}
-            </select>
-            <select
-              value={month.slice(5, 7)} // Extract month from YYYY-MM
-              onChange={(e) => {
-                const newMonth = e.target.value;
-                setMonth(`${month.slice(0, 4)}-${newMonth}`); // Reconstruct YYYY-MM
-              }}
-              aria-label="Select Month"
-              title="Select Month"
-              style={{
-                padding: "10px 14px",
-                borderRadius: 10,
-                border: "1px solid rgba(255, 255, 255, 0.28)",
-                backgroundColor: theme === "dark" ? "rgba(15, 23, 42, 0.55)" : "rgba(255, 255, 255, 0.95)",
-                color: theme === "dark" ? "#f1f5f9" : "#0f172a",
-                minWidth: 128,
-                fontSize: 13,
-                outline: "none",
-                cursor: "pointer",
-                backdropFilter: "blur(10px)",
-                fontWeight: 600,
-                height: "42px",
-              }}
-            >
-              {Array.from({ length: 12 }, (_, i) => {
-                const m = String(i + 1).padStart(2, '0');
-                const monthName = new Date(0, i).toLocaleString('en-US', { month: 'long' });
-                return <option key={m} value={m}>{monthName}</option>;
-              })}
-            </select>
-            <button
-              type="button"
-              onClick={() => router.push("/employee/complaints")}
-              style={{
-                padding: "10px 16px",
-                borderRadius: 10,
-                border: "1px solid rgba(255, 255, 255, 0.28)",
-                backgroundColor: "rgba(255, 255, 255, 0.14)",
-                color: "#ffffff",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.15)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                transition: "all 0.2s",
-                whiteSpace: "nowrap",
-                height: "42px",
-                backdropFilter: "blur(8px)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.22)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.14)";
-              }}
-            >
-              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Complaints
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await signOut({ 
-                    redirect: false,
-                    callbackUrl: '/login?role=employee'
-                  });
-                  router.push('/login?role=employee');
-                } catch (error) {
-                  console.error('Logout error:', error);
-                  router.push('/login?role=employee');
-                }
-              }}
-              style={{
-                padding: "10px 18px",
-                borderRadius: 10,
-                border: "1px solid rgba(255, 255, 255, 0.28)",
-                backgroundColor: "rgba(255, 255, 255, 0.16)",
-                color: "#ffffff",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 4px 14px rgba(0, 0, 0, 0.18)",
-                backdropFilter: "blur(10px)",
-                transition: "all 0.2s",
-                whiteSpace: "nowrap",
-                height: "42px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.26)";
-                e.currentTarget.style.transform = "translateY(-1px)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.16)";
-                e.currentTarget.style.transform = "translateY(0)";
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
+      `,
+        }}
+      />
 
       {/* MAIN CARD */}
-      <div
-        className="employee-main-card container-responsive employee-dashboard-inner"
-        style={{
-          margin: "0 auto",
-          width: "100%",
-          borderRadius: 22,
-          background: colors.gradient.card,
-          boxShadow:
-            theme === "dark"
-              ? "0 20px 60px rgba(15,23,42,0.85), 0 0 0 1px rgba(59,130,246,0.06)"
-              : "0 16px 48px rgba(15,23,42,0.08), 0 0 0 1px rgba(15,23,42,0.04)",
-          padding: "22px 24px 28px",
-          border: `1px solid ${colors.border.default}`,
-        }}
-      >
+      <GlassCard className="employee-main-card" style={{ marginTop: 18 }} padding={22}>
         {errorMsg && (
           <div
               style={{
@@ -2085,27 +1724,21 @@ export default function EmployeeDashboardPage() {
           <div
             className="employee-profile-card"
               style={{
-                borderRadius: 16,
+                ...withLeftAccent(nestedGlassCard, colors.primary[500], 4),
                 padding: "16px 18px",
                 height: "100%",
                 minHeight: 0,
                 boxSizing: "border-box",
-                background:
-                  theme === "dark"
-                    ? "linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%)"
-                    : colors.background.secondary,
-                border: `1px solid ${colors.border.default}`,
-                borderLeft: `4px solid ${colors.primary[500]}`,
-                boxShadow:
-                  theme === "dark"
-                    ? "0 8px 28px rgba(0,0,0,0.35)"
-                    : "0 6px 24px rgba(15,23,42,0.07)",
                 display: "flex",
                 gap: 14,
                 alignItems: "flex-start",
+                position: "relative",
+                overflow: "hidden",
                 transition: "box-shadow 0.2s ease",
               }}
             >
+            <GlossOverlay />
+            <div style={{ position: "relative", zIndex: 1, display: "flex", gap: 14, alignItems: "flex-start", width: "100%" }}>
             <div className="employee-profile-avatar" style={{ flexShrink: 0, position: 'relative' }}>
               {renderEmployeeAvatar(avatarSource, 64)}
               <button
@@ -2562,33 +2195,28 @@ export default function EmployeeDashboardPage() {
                 </div>
               )}
             </div>
+            </div>
           </div>
 
           {/* COMPENSATION CARD */}
           <div
             className="employee-comp-card"
             style={{
-              borderRadius: 16,
+              ...withLeftAccent(nestedGlassCard, colors.success, 4),
               padding: "16px 18px",
               height: "100%",
               minHeight: 0,
               boxSizing: "border-box",
-              background:
-                theme === "dark"
-                  ? "linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%)"
-                  : colors.background.secondary,
-              border: `1px solid ${colors.border.default}`,
-              borderLeft: `4px solid ${colors.success}`,
-              boxShadow:
-                theme === "dark"
-                  ? "0 8px 28px rgba(0,0,0,0.35)"
-                  : "0 6px 24px rgba(15,23,42,0.07)",
               display: "flex",
               flexDirection: "column",
               gap: 8,
+              position: "relative",
+              overflow: "hidden",
               transition: "box-shadow 0.2s ease",
             }}
           >
+            <GlossOverlay />
+            <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 8, height: "100%" }}>
             <div
               style={{
                 fontSize: 11,
@@ -2768,7 +2396,7 @@ export default function EmployeeDashboardPage() {
                 Salary Slip
               </button>
             </div>
-
+            </div>
           </div>
         </div>
 
@@ -2784,20 +2412,21 @@ export default function EmployeeDashboardPage() {
           {/* SUMMARY */}
           <div
               style={{
-                borderRadius: 18,
+                ...withLeftAccent(
+                  { ...nestedGlassCard, borderRadius: 18 },
+                  colors.primary[500],
+                  3
+                ),
                 padding: "18px 18px 16px",
-                background:
-                  theme === "dark"
-                    ? "linear-gradient(160deg, rgba(30,41,59,0.55) 0%, rgba(15,23,42,0.9) 100%)"
-                    : colors.background.secondary,
-                border: `1px solid ${colors.border.default}`,
-                borderTop: `3px solid ${colors.primary[500]}`,
-                boxShadow:
-                  theme === "dark"
-                    ? "0 8px 28px rgba(0,0,0,0.25)"
-                    : "0 4px 20px rgba(15,23,42,0.06)",
+                borderTopWidth: "3px",
+                borderTopStyle: "solid",
+                borderTopColor: colors.primary[500],
+                position: "relative",
+                overflow: "hidden",
               }}
             >
+              <GlossOverlay />
+              <div style={{ position: "relative", zIndex: 1 }}>
               <div
                 style={{
                   fontSize: 10,
@@ -2984,26 +2613,28 @@ export default function EmployeeDashboardPage() {
                 </div>
               </>
             )}
+              </div>
           </div>
 
           {/* DAY-BY-DAY ROW */}
           <div>
             <div
                 style={{
-                  borderRadius: 18,
+                  ...withLeftAccent(
+                    { ...nestedGlassCard, borderRadius: 18 },
+                    colors.secondary[500],
+                    3
+                  ),
                   padding: "18px 18px 14px",
-                  background:
-                    theme === "dark"
-                      ? "linear-gradient(160deg, rgba(30,41,59,0.55) 0%, rgba(15,23,42,0.9) 100%)"
-                      : colors.background.secondary,
-                  border: `1px solid ${colors.border.default}`,
-                  borderTop: `3px solid ${colors.secondary[500]}`,
-                  boxShadow:
-                    theme === "dark"
-                      ? "0 8px 28px rgba(0,0,0,0.25)"
-                      : "0 4px 20px rgba(15,23,42,0.06)",
+                  borderTopWidth: "3px",
+                  borderTopStyle: "solid",
+                  borderTopColor: colors.secondary[500],
+                  position: "relative",
+                  overflow: "hidden",
                 }}
               >
+                <GlossOverlay />
+                <div style={{ position: "relative", zIndex: 1 }}>
                 <div
                   style={{
                     fontSize: 10,
@@ -3260,10 +2891,11 @@ export default function EmployeeDashboardPage() {
                   </tbody>
                 </table>
               </div>
+                </div>
             </div>
           </div>
         </div>
-      </div>
+      </GlassCard>
 
       {/* Salary Slip Modal */}
       <SalarySlipModal
@@ -3336,6 +2968,6 @@ export default function EmployeeDashboardPage() {
           onLogout={autoLogout}
         />
       )}
-    </div>
+    </HrPageShell>
   );
 }

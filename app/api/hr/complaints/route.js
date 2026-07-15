@@ -55,7 +55,11 @@ export async function GET(req) {
       filter.createdAt = { $gte: since };
     }
 
-    const [list, total] = await Promise.all([
+    // Summary counts ignore status filter so KPI cards stay stable when filtering by status
+    const summaryFilter = { ...filter };
+    delete summaryFilter.status;
+
+    const [list, total, statusGroups] = await Promise.all([
       Complaint.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -63,12 +67,30 @@ export async function GET(req) {
         .lean()
         .maxTimeMS(3000),
       Complaint.countDocuments(filter).maxTimeMS(2000),
+      Complaint.aggregate([
+        { $match: summaryFilter },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]).option({ maxTimeMS: 2000 }),
     ]);
+
+    const summary = {
+      open: 0,
+      in_progress: 0,
+      resolved: 0,
+      closed: 0,
+      total: 0,
+    };
+    for (const row of statusGroups) {
+      if (row?._id && Object.prototype.hasOwnProperty.call(summary, row._id)) {
+        summary[row._id] = row.count || 0;
+      }
+      summary.total += row.count || 0;
+    }
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return successResponse(
-      { complaints: list },
+      { complaints: list, summary },
       'Complaints retrieved',
       HTTP_STATUS.OK,
       {

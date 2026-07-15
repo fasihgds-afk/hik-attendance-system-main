@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
+import {
+  HrPageShell,
+  HrHeaderActions,
+  GlassCard,
+  getGlossPillStyles,
+} from '@/components/glass';
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 
@@ -22,6 +27,13 @@ function formatDate(d) {
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function getStatusTone(status, primary, successColor, warningColor) {
+  if (status === 'resolved') return { color: successColor, bg: `${successColor}22` };
+  if (status === 'closed') return { color: '#64748b', bg: 'rgba(100,116,139,0.2)' };
+  if (status === 'in_progress') return { color: warningColor, bg: `${warningColor}22` };
+  return { color: primary, bg: `${primary}22` };
+}
+
 export default function EmployeeComplaintsPage() {
   const { colors, theme } = useTheme();
   const router = useRouter();
@@ -37,6 +49,7 @@ export default function EmployeeComplaintsPage() {
 
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [viewId, setViewId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -47,7 +60,6 @@ export default function EmployeeComplaintsPage() {
     if (status === 'loading') return;
     if (status === 'unauthenticated' || (session && session.user?.role !== 'EMPLOYEE')) {
       router.replace('/login?role=employee');
-      return;
     }
   }, [session, status, router]);
 
@@ -60,14 +72,16 @@ export default function EmployeeComplaintsPage() {
     if (!empCode) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/employee/complaints?empCode=${encodeURIComponent(empCode)}`, { cache: 'no-store' });
+      const res = await fetch(`/api/employee/complaints?empCode=${encodeURIComponent(empCode)}`, {
+        cache: 'no-store',
+      });
       const data = await res.json();
       if (res.ok && data.success) {
         setComplaints(data.data?.complaints || []);
       } else {
         showToast('error', data.error || 'Failed to load complaints');
       }
-    } catch (err) {
+    } catch (_) {
       showToast('error', 'Failed to load complaints');
     } finally {
       setLoading(false);
@@ -86,7 +100,10 @@ export default function EmployeeComplaintsPage() {
   async function loadDetail(id) {
     if (!id || !empCode) return;
     try {
-      const res = await fetch(`/api/employee/complaints/${id}?empCode=${encodeURIComponent(empCode)}`, { cache: 'no-store' });
+      const res = await fetch(
+        `/api/employee/complaints/${id}?empCode=${encodeURIComponent(empCode)}`,
+        { cache: 'no-store' }
+      );
       const data = await res.json();
       if (res.ok && data.success) setDetail(data.data?.complaint || null);
       else setDetail(null);
@@ -111,7 +128,11 @@ export default function EmployeeComplaintsPage() {
       const res = await fetch('/api/employee/complaints', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empCode, subject: form.subject.trim(), description: form.description.trim() }),
+        body: JSON.stringify({
+          empCode,
+          subject: form.subject.trim(),
+          description: form.description.trim(),
+        }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -122,7 +143,7 @@ export default function EmployeeComplaintsPage() {
       } else {
         showToast('error', data.error || 'Failed to submit complaint');
       }
-    } catch (err) {
+    } catch (_) {
       showToast('error', 'Failed to submit complaint');
     } finally {
       setLoading(false);
@@ -138,218 +159,412 @@ export default function EmployeeComplaintsPage() {
     }
   };
 
-  if (status === 'loading' || !empCode) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: colors.background?.page }}>
-        <span style={{ color: colors.text?.secondary }}>Loading...</span>
-      </div>
-    );
-  }
-
-  const bgPage = colors.background?.page ?? colors.background?.default ?? colors.background?.secondary;
-  const bgCard = colors.background?.card ?? colors.background?.tertiary;
   const border = colors.border?.default;
   const textPrimary = colors.text?.primary;
   const textSecondary = colors.text?.secondary;
+  const textTertiary = colors.text?.tertiary ?? textSecondary;
   const primary = typeof colors.primary === 'object' ? colors.primary?.[500] : colors.primary;
-  const successColor = colors.success ?? (typeof colors.secondary === 'object' ? colors.secondary?.[600] : colors.secondary) ?? '#22c55e';
-  const warningColor = colors.warning ?? (typeof colors.accent === 'object' ? colors.accent?.yellow : undefined) ?? '#fbbf24';
+  const successColor =
+    colors.success ??
+    (typeof colors.secondary === 'object' ? colors.secondary?.[600] : colors.secondary) ??
+    '#22c55e';
+  const warningColor =
+    colors.warning ??
+    (typeof colors.accent === 'object' ? colors.accent?.yellow : undefined) ??
+    '#fbbf24';
+  const inputBg = colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc');
+  const bgCard = colors.background?.card ?? colors.background?.tertiary;
+
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  const summary = useMemo(() => {
+    const counts = { open: 0, in_progress: 0, resolved: 0, closed: 0, total: complaints.length };
+    for (const c of complaints) {
+      if (Object.prototype.hasOwnProperty.call(counts, c.status)) counts[c.status] += 1;
+    }
+    return counts;
+  }, [complaints]);
+
+  const filteredComplaints = useMemo(() => {
+    if (!filterStatus) return complaints;
+    return complaints.filter((c) => c.status === filterStatus);
+  }, [complaints, filterStatus]);
+
+  function setStatusFilter(next) {
+    setFilterStatus((prev) => (prev === next ? '' : next));
+  }
+
+  const summaryCards = [
+    { id: '', label: 'Total', value: summary.total, tone: textPrimary, borderColor: border },
+    { id: 'open', label: 'Open', value: summary.open, tone: primary, borderColor: `${primary}55` },
+    {
+      id: 'in_progress',
+      label: 'In Progress',
+      value: summary.in_progress,
+      tone: warningColor,
+      borderColor: `${warningColor}55`,
+    },
+    {
+      id: 'resolved',
+      label: 'Resolved',
+      value: summary.resolved,
+      tone: successColor,
+      borderColor: `${successColor}55`,
+    },
+    {
+      id: 'closed',
+      label: 'Closed',
+      value: summary.closed,
+      tone: '#64748b',
+      borderColor: 'rgba(100,116,139,0.4)',
+    },
+  ];
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/employee/dashboard')} style={glossPill('neutral')}>
+        Dashboard
+      </button>
+      <button type="button" onClick={() => setShowForm(true)} style={glossPill('slate')}>
+        + New Complaint
+      </button>
+      <button type="button" onClick={handleLogout} style={glossPill('rose')}>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
+  if (status === 'loading' || !empCode) {
+    return (
+      <HrPageShell subtitle="My Complaints" actions={headerActions}>
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
+          <div style={{ padding: 40, textAlign: 'center', color: textSecondary, fontSize: 14 }}>
+            Loading...
+          </div>
+        </GlassCard>
+      </HrPageShell>
+    );
+  }
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px', maxWidth: '100%', margin: 0, background: bgPage, color: textPrimary }}>
-      {/* Header – professional bar */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 32,
-          padding: '20px 24px',
-          borderRadius: 16,
-          background: colors.gradient?.primary ?? (typeof colors.primary === 'object' ? `linear-gradient(135deg, ${colors.primary?.[500]} 0%, ${colors.primary?.[700]} 100%)` : `linear-gradient(135deg, ${primary} 0%, ${primary} 100%)`),
-          border: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'}`,
-          boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(37, 99, 235, 0.2)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📋</div>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>My Complaints</h1>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: '2px 0 0', fontWeight: 400 }}>Submit and track your complaints</p>
-          </div>
+    <HrPageShell subtitle="Submit and track your complaints" actions={headerActions}>
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          {summaryCards.map((card) => {
+            const active = filterStatus === card.id;
+            return (
+              <button
+                key={card.label}
+                type="button"
+                onClick={() => setStatusFilter(card.id)}
+                style={{
+                  textAlign: 'left',
+                  padding: '14px 16px',
+                  borderRadius: 14,
+                  border: `1px solid ${active ? card.tone : card.borderColor}`,
+                  background: `${card.tone}14`,
+                  cursor: 'pointer',
+                  boxShadow: active ? `0 0 0 2px ${card.tone}33` : 'none',
+                }}
+              >
+                <div style={{ fontSize: 12, color: textSecondary, marginBottom: 4, fontWeight: 600 }}>
+                  {card.label}
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: card.tone, lineHeight: 1.1 }}>
+                  {card.value}
+                </div>
+              </button>
+            );
+          })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ThemeToggle />
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+          {[
+            { id: '', label: 'All', count: summary.total },
+            { id: 'open', label: 'Open', count: summary.open },
+            { id: 'in_progress', label: 'In Progress', count: summary.in_progress },
+            { id: 'resolved', label: 'Resolved', count: summary.resolved },
+            { id: 'closed', label: 'Closed', count: summary.closed },
+          ].map((item) => {
+            const active = filterStatus === item.id;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => setStatusFilter(item.id)}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: 999,
+                  border: `1px solid ${active ? primary : border}`,
+                  background: active
+                    ? theme === 'dark'
+                      ? 'rgba(59,130,246,0.2)'
+                      : 'rgba(59,130,246,0.12)'
+                    : inputBg,
+                  color: active ? primary : textSecondary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {item.label} ({item.count})
+              </button>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <p style={{ fontSize: 13, color: textSecondary, margin: 0 }}>
+            {filteredComplaints.length} complaint{filteredComplaints.length === 1 ? '' : 's'}
+            {filterStatus ? ` · ${STATUS_LABELS[filterStatus]}` : ''}
+          </p>
           <button
             type="button"
-            onClick={() => router.push('/employee/dashboard')}
+            onClick={() => setShowForm(true)}
             style={{
               padding: '10px 18px',
               borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.35)',
-              background: 'rgba(255,255,255,0.12)',
+              border: 'none',
+              background: primary,
               color: '#fff',
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)'; }}
           >
-            Dashboard
-          </button>
-          <button
-            type="button"
-            onClick={handleLogout}
-            style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-          >
-            Logout
+            + Submit New Complaint
           </button>
         </div>
-      </header>
 
-      {/* Actions + content card */}
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <p style={{ fontSize: 14, color: textSecondary, margin: 0 }}>View your submitted complaints and HR responses below.</p>
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
+        <div
           style={{
-            padding: '12px 24px',
-            borderRadius: 12,
-            border: 'none',
-            background: primary,
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: `0 2px 12px ${primary}40`,
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            borderRadius: 14,
+            border: `1px solid ${border}`,
+            overflow: 'auto',
+            maxHeight: '60vh',
+            background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 4px 16px ${primary}50`; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 2px 12px ${primary}40`; }}
         >
-          + Submit New Complaint
-        </button>
-      </div>
-
-      {/* List – card with table */}
-      <div
-        style={{
-          borderRadius: 16,
-          border: `1px solid ${border}`,
-          overflow: 'hidden',
-          background: bgCard,
-          boxShadow: theme === 'dark' ? '0 4px 24px rgba(0,0,0,0.2)' : '0 1px 3px rgba(0,0,0,0.06)',
-        }}
-      >
-        {loading && !complaints.length ? (
-          <div style={{ padding: 48, textAlign: 'center', color: textSecondary, fontSize: 14 }}>Loading complaints...</div>
-        ) : complaints.length === 0 ? (
-          <div style={{ padding: 48, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.5 }}>📝</div>
-            <p style={{ fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 6 }}>No complaints yet</p>
-            <p style={{ fontSize: 14, color: textSecondary, marginBottom: 20 }}>Submit a complaint using the button above. HR will review and respond.</p>
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: primary, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Submit your first complaint
-            </button>
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: colors.background?.table?.header ?? primary }}>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subject</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</th>
-                <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {complaints.map((c, i) => (
-                <tr
-                  key={c._id}
+          {loading && !complaints.length ? (
+            <div style={{ padding: 48, textAlign: 'center', color: textSecondary, fontSize: 14 }}>
+              Loading complaints...
+            </div>
+          ) : filteredComplaints.length === 0 ? (
+            <div style={{ padding: 48, textAlign: 'center' }}>
+              <p style={{ fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 6 }}>
+                {filterStatus ? 'No complaints with this status' : 'No complaints yet'}
+              </p>
+              <p style={{ fontSize: 14, color: textSecondary, marginBottom: filterStatus ? 0 : 20 }}>
+                {filterStatus
+                  ? 'Try another filter or clear the selection.'
+                  : 'Submit a complaint and HR will review and respond.'}
+              </p>
+              {!filterStatus && (
+                <button
+                  type="button"
+                  onClick={() => setShowForm(true)}
                   style={{
-                    background: i % 2 === 0 ? (colors.background?.table?.row ?? bgCard) : (colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc')),
-                    borderBottom: i < complaints.length - 1 ? `1px solid ${border}` : 'none',
-                    transition: 'background 0.15s ease',
+                    padding: '10px 20px',
+                    borderRadius: 10,
+                    border: 'none',
+                    background: primary,
+                    color: '#fff',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(51, 65, 85, 0.4)' : '#f1f5f9'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? (colors.background?.table?.row ?? bgCard) : (colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc')); }}
                 >
-                  <td style={{ padding: '14px 20px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 500 }}>{c.subject}</td>
-                  <td style={{ padding: '14px 20px' }}>
-                    <span
+                  Submit your first complaint
+                </button>
+              )}
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: colors.background?.table?.header ?? primary }}>
+                  {['Subject', 'Status', 'Date', 'Action'].map((label, idx) => (
+                    <th
+                      key={label}
                       style={{
-                        display: 'inline-block',
-                        padding: '4px 10px',
-                        borderRadius: 8,
+                        padding: '14px 16px',
+                        textAlign: idx === 3 ? 'right' : 'left',
                         fontSize: 12,
-                        fontWeight: 600,
-                        background: c.status === 'resolved' || c.status === 'closed' ? `${successColor}26` : c.status === 'in_progress' ? `${warningColor}26` : `${primary}26`,
-                        color: c.status === 'resolved' || c.status === 'closed' ? successColor : c.status === 'in_progress' ? warningColor : primary,
+                        fontWeight: 700,
+                        color: colors.text?.table?.header ?? '#fff',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 2,
+                        background: colors.background?.table?.header ?? primary,
                       }}
                     >
-                      {STATUS_LABELS[c.status] || c.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{formatDate(c.createdAt)}</td>
-                  <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                    <button
-                      type="button"
-                      onClick={() => { setViewId(c._id); setDetail(null); loadDetail(c._id); }}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 10,
-                        border: `1px solid ${primary}`,
-                        background: 'transparent',
-                        color: primary,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = `${primary}15`; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      View
-                    </button>
-                  </td>
+                      {label}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {filteredComplaints.map((c, i) => {
+                  const tone = getStatusTone(c.status, primary, successColor, warningColor);
+                  const rowBg =
+                    i % 2 === 0
+                      ? colors.background?.table?.row ?? bgCard
+                      : colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc');
+                  return (
+                    <tr
+                      key={c._id}
+                      style={{
+                        background: rowBg,
+                        borderBottom:
+                          i < filteredComplaints.length - 1 ? `1px solid ${border}` : 'none',
+                      }}
+                    >
+                      <td
+                        style={{
+                          padding: '16px',
+                          fontSize: 14,
+                          color: textPrimary,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {c.subject}
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '5px 11px',
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            background: tone.bg,
+                            color: tone.color,
+                            border: `1px solid ${tone.color}44`,
+                          }}
+                        >
+                          {STATUS_LABELS[c.status] || c.status}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          padding: '16px',
+                          fontSize: 13,
+                          color: textSecondary,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {formatDate(c.createdAt)}
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewId(c._id);
+                            setDetail(null);
+                            loadDetail(c._id);
+                          }}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: 10,
+                            border: `1px solid ${primary}`,
+                            background: theme === 'dark' ? `${primary}18` : `${primary}10`,
+                            color: primary,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </GlassCard>
 
-      {/* Submit form modal – professional */}
       {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: theme === 'dark' ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowForm(false)}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: theme === 'dark' ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setShowForm(false)}
+        >
           <div
             style={{
               background: bgCard,
               borderRadius: 20,
-              padding: 32,
-              minWidth: 440,
-              maxWidth: 540,
+              padding: '32px 36px',
+              width: 'min(920px, 94vw)',
+              minHeight: 'min(640px, 85vh)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               border: `1px solid ${border}`,
-              boxShadow: theme === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.12)',
+              boxShadow:
+                theme === 'dark'
+                  ? '0 25px 50px -12px rgba(0,0,0,0.5)'
+                  : '0 25px 50px -12px rgba(0,0,0,0.12)',
+              display: 'flex',
+              flexDirection: 'column',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ marginBottom: 24, paddingBottom: 20, borderBottom: `2px solid ${border}` }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: textPrimary, letterSpacing: '-0.02em' }}>Submit a Complaint</h2>
-              <p style={{ fontSize: 14, color: textSecondary, marginTop: 8, marginBottom: 0, lineHeight: 1.5 }}>Enter a subject and description. HR will review and respond.</p>
-            </div>
-            <form onSubmit={handleSubmit}>
+            <h2
+              style={{
+                fontSize: 24,
+                fontWeight: 700,
+                margin: '0 0 8px',
+                color: textPrimary,
+              }}
+            >
+              Submit a Complaint
+            </h2>
+            <p style={{ fontSize: 15, color: textSecondary, marginBottom: 28 }}>
+              Enter a subject and description. HR will review and respond.
+            </p>
+            <form
+              onSubmit={handleSubmit}
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 0 }}
+            >
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 8, color: textSecondary }}>Subject</label>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    marginBottom: 10,
+                    color: textSecondary,
+                  }}
+                >
+                  Subject
+                </label>
                 <input
                   type="text"
                   value={form.subject}
@@ -357,84 +572,244 @@ export default function EmployeeComplaintsPage() {
                   placeholder="Brief title for your complaint"
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '14px 18px',
                     borderRadius: 12,
                     border: `1px solid ${border}`,
-                    background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#f8fafc'),
+                    background: inputBg,
                     color: textPrimary,
-                    fontSize: 14,
+                    fontSize: 15,
                     outline: 'none',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                    boxSizing: 'border-box',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = primary; e.target.style.boxShadow = `0 0 0 3px ${primary}25`; }}
-                  onBlur={(e) => { e.target.style.borderColor = border; e.target.style.boxShadow = 'none'; }}
                 />
               </div>
-              <div style={{ marginBottom: 28 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 8, color: textSecondary }}>Description</label>
+              <div style={{ marginBottom: 28, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    marginBottom: 10,
+                    color: textSecondary,
+                  }}
+                >
+                  Description
+                </label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Describe your complaint in detail. Be clear and specific."
-                  rows={5}
+                  placeholder="Describe your complaint in detail."
+                  rows={12}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    flex: 1,
+                    minHeight: 280,
+                    padding: '14px 18px',
                     borderRadius: 12,
                     border: `1px solid ${border}`,
-                    background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#f8fafc'),
+                    background: inputBg,
                     color: textPrimary,
-                    fontSize: 14,
+                    fontSize: 15,
                     resize: 'vertical',
                     outline: 'none',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                    boxSizing: 'border-box',
+                    lineHeight: 1.55,
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = primary; e.target.style.boxShadow = `0 0 0 3px ${primary}25`; }}
-                  onBlur={(e) => { e.target.style.borderColor = border; e.target.style.boxShadow = 'none'; }}
                 />
               </div>
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowForm(false)} style={{ padding: '12px 22px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>Cancel</button>
-                <button type="submit" disabled={loading} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: primary, color: '#fff', fontSize: 14, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, boxShadow: `0 2px 12px ${primary}40`, transition: 'opacity 0.2s' }}>{loading ? 'Submitting...' : 'Submit'}</button>
+              <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  style={{
+                    padding: '14px 28px',
+                    borderRadius: 12,
+                    border: `1px solid ${border}`,
+                    background: 'transparent',
+                    color: textPrimary,
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    padding: '14px 32px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: primary,
+                    color: '#fff',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                >
+                  {loading ? 'Submitting...' : 'Submit'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Detail modal – professional hierarchy */}
       {viewId && (
-        <div style={{ position: 'fixed', inset: 0, background: theme === 'dark' ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => { setViewId(null); setDetail(null); }}>
-          <div style={{ background: bgCard, borderRadius: 20, padding: 28, minWidth: 440, maxWidth: 580, maxHeight: '88vh', overflowY: 'auto', border: `1px solid ${border}`, boxShadow: theme === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.12)' }} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: theme === 'dark' ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => {
+            setViewId(null);
+            setDetail(null);
+          }}
+        >
+          <div
+            style={{
+              background: bgCard,
+              borderRadius: 20,
+              padding: '32px 36px',
+              width: 'min(840px, 94vw)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: `1px solid ${border}`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             {detail ? (
               <>
-                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: textPrimary, paddingBottom: 16, borderBottom: `2px solid ${border}`, letterSpacing: '-0.02em' }}>Complaint Details</h2>
-
-                <div style={{ marginBottom: 24 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Your Complaint · {formatDate(detail.createdAt)}</p>
-                  <p style={{ fontSize: 17, fontWeight: 600, marginBottom: 10, color: textPrimary, lineHeight: 1.4 }}>{detail.subject}</p>
-                  <p style={{ fontSize: 14, color: textPrimary, whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{detail.description}</p>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    marginBottom: 20,
+                    paddingBottom: 14,
+                    borderBottom: `1px solid ${border}`,
+                  }}
+                >
+                  <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: textPrimary }}>
+                    Complaint Details
+                  </h2>
+                  {(() => {
+                    const tone = getStatusTone(detail.status, primary, successColor, warningColor);
+                    return (
+                      <span
+                        style={{
+                          padding: '5px 12px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.color}44`,
+                          height: 'fit-content',
+                        }}
+                      >
+                        {STATUS_LABELS[detail.status]}
+                      </span>
+                    );
+                  })()}
                 </div>
-
-                <div style={{ marginBottom: 24 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</p>
-                  <span style={{ display: 'inline-block', padding: '6px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: detail.status === 'resolved' || detail.status === 'closed' ? `${successColor}26` : `${primary}26`, color: detail.status === 'resolved' || detail.status === 'closed' ? successColor : primary }}>{STATUS_LABELS[detail.status]}</span>
-                </div>
-
+                <p style={{ fontSize: 12, color: textTertiary, marginBottom: 8 }}>
+                  Submitted · {formatDate(detail.createdAt)}
+                </p>
+                <p style={{ fontSize: 17, fontWeight: 600, marginBottom: 10, color: textPrimary }}>
+                  {detail.subject}
+                </p>
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: textPrimary,
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.65,
+                    marginBottom: 24,
+                  }}
+                >
+                  {detail.description}
+                </p>
                 {detail.hrResponse ? (
-                  <div style={{ marginTop: 28, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50`, borderLeft: `4px solid ${successColor}` }}>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: successColor, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Response from HR</p>
-                    <p style={{ fontSize: 14, color: textPrimary, whiteSpace: 'pre-wrap', lineHeight: 1.65, marginBottom: 8 }}>{detail.hrResponse}</p>
-                    {detail.hrRespondedAt && <p style={{ fontSize: 12, color: textSecondary }}>Responded on {formatDate(detail.hrRespondedAt)}</p>}
+                  <div
+                    style={{
+                      padding: 18,
+                      borderRadius: 14,
+                      background: `${successColor}18`,
+                      border: `1px solid ${successColor}50`,
+                      borderLeft: `4px solid ${successColor}`,
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: successColor,
+                        marginBottom: 8,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Response from HR
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 14,
+                        color: textPrimary,
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: 1.65,
+                        margin: 0,
+                      }}
+                    >
+                      {detail.hrResponse}
+                    </p>
+                    {detail.hrRespondedAt && (
+                      <p style={{ fontSize: 12, color: textSecondary, marginTop: 10, marginBottom: 0 }}>
+                        Responded on {formatDate(detail.hrRespondedAt)}
+                      </p>
+                    )}
                   </div>
                 ) : (
-                  <div style={{ marginTop: 28, padding: 20, borderRadius: 16, background: colors.background?.input ?? colors.background?.tertiary, border: `1px dashed ${border}` }}>
-                    <p style={{ fontSize: 14, color: textSecondary, margin: 0 }}>No response from HR yet. You will see remarks here once HR replies.</p>
+                  <div
+                    style={{
+                      padding: 18,
+                      borderRadius: 14,
+                      border: `1px dashed ${border}`,
+                      background: inputBg,
+                    }}
+                  >
+                    <p style={{ fontSize: 14, color: textSecondary, margin: 0 }}>
+                      No response from HR yet.
+                    </p>
                   </div>
                 )}
-
-                <div style={{ marginTop: 28, textAlign: 'right' }}>
-                  <button type="button" onClick={() => { setViewId(null); setDetail(null); }} style={{ padding: '12px 24px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>Close</button>
+                <div style={{ marginTop: 24, textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewId(null);
+                      setDetail(null);
+                    }}
+                    style={{
+                      padding: '12px 24px',
+                      borderRadius: 12,
+                      border: `1px solid ${border}`,
+                      background: 'transparent',
+                      color: textPrimary,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Close
+                  </button>
                 </div>
               </>
             ) : (
@@ -445,11 +820,35 @@ export default function EmployeeComplaintsPage() {
       )}
 
       {toast.text && (
-        <div style={{ position: 'fixed', right: 24, bottom: 24, padding: '14px 20px', borderRadius: 14, background: toast.type === 'error' ? `${colors.error ?? '#ef4444'}20` : `${successColor}20`, border: `1px solid ${toast.type === 'error' ? (colors.error ?? '#ef4444') : successColor}60`, color: toast.type === 'error' ? (colors.error ?? '#dc2626') : successColor, fontSize: 14, fontWeight: 500, zIndex: 50, boxShadow: colors.card?.shadow ?? '0 4px 20px rgba(0,0,0,0.12)' }}>
+        <div
+          style={{
+            position: 'fixed',
+            right: 24,
+            bottom: 24,
+            padding: '14px 20px',
+            borderRadius: 14,
+            background:
+              toast.type === 'error' ? `${colors.error ?? '#ef4444'}20` : `${successColor}20`,
+            border: `1px solid ${
+              toast.type === 'error' ? colors.error ?? '#ef4444' : successColor
+            }60`,
+            color: toast.type === 'error' ? colors.error ?? '#dc2626' : successColor,
+            fontSize: 14,
+            fontWeight: 500,
+            zIndex: 50,
+          }}
+        >
           {toast.text}
         </div>
       )}
-      {showWarning && <AutoLogoutWarning timeRemaining={timeRemaining} onStayLoggedIn={handleStayLoggedIn} onLogout={autoLogout} />}
-    </div>
+
+      {showWarning && (
+        <AutoLogoutWarning
+          timeRemaining={timeRemaining}
+          onStayLoggedIn={handleStayLoggedIn}
+          onLogout={autoLogout}
+        />
+      )}
+    </HrPageShell>
   );
 }

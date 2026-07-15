@@ -25,6 +25,7 @@ export {
   getGlossLayers,
   getGlossPillStyles,
   getTabStyles,
+  withLeftAccent,
 } from '@/lib/theme/styles';
 
 export { default as GlossOverlay } from './GlossOverlay';

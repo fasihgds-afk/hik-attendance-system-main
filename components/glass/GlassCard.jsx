@@ -13,6 +13,7 @@ export default function GlassCard({
   padding = 24,
   borderRadius = 20,
   style,
+  showGloss = true,
   ...rest
 }) {
   const { colors } = useTheme();
@@ -26,7 +27,7 @@ export default function GlassCard({
       }}
       {...rest}
     >
-      <GlossOverlay />
+      {showGloss ? <GlossOverlay /> : null}
       <div
         className="hr-glass-card__body"
         style={{

@@ -1,7 +1,7 @@
 // app/hr/leaves/page.jsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -9,6 +9,46 @@ import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/c
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
+import { getCurrentQuarter } from '@/lib/leave/quarterUtils';
+
+const LOW_BALANCE_THRESHOLD = 2;
+
+/** Active quarter key for balance filters (q1–q4). Past years use Q4; future years use Q1. */
+function getActiveQuarterKey(selectedYear) {
+  const { year: nowYear, quarter } = getCurrentQuarter();
+  if (selectedYear < nowYear) return 'q4';
+  if (selectedYear > nowYear) return 'q1';
+  return `q${quarter}`;
+}
+
+function getYearTotals(leave, leavesPerQuarter) {
+  const entitlement = leavesPerQuarter * 4;
+  const taken =
+    (leave.q1?.taken || 0) +
+    (leave.q2?.taken || 0) +
+    (leave.q3?.taken || 0) +
+    (leave.q4?.taken || 0);
+  const remaining = Math.max(0, entitlement - taken);
+  return { entitlement, taken, remaining };
+}
+
+function getQuarterRemaining(leave, quarterKey, leavesPerQuarter) {
+  const quarterData = leave[quarterKey];
+  if (!quarterData) return leavesPerQuarter;
+  const allocated = quarterData.allocated ?? leavesPerQuarter;
+  const taken = quarterData.taken || 0;
+  return Math.max(0, quarterData.remaining ?? allocated - taken);
+}
+
+function matchesBalanceFilter(leave, filter, leavesPerQuarter, activeQuarterKey) {
+  const { taken } = getYearTotals(leave, leavesPerQuarter);
+  const quarterRemaining = getQuarterRemaining(leave, activeQuarterKey, leavesPerQuarter);
+
+  if (filter === 'low') return quarterRemaining > 0 && quarterRemaining <= LOW_BALANCE_THRESHOLD;
+  if (filter === 'exhausted') return quarterRemaining === 0;
+  if (filter === 'none_taken') return taken === 0;
+  return true;
+}
 
 export default function HrLeavesPage() {
   const { colors, theme } = useTheme();
@@ -38,6 +78,8 @@ export default function HrLeavesPage() {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('all'); // all | low | exhausted | none_taken
+  const activeQuarterKey = getActiveQuarterKey(year);
+  const activeQuarterLabel = activeQuarterKey.toUpperCase();
   const [showMarkLeaveModal, setShowMarkLeaveModal] = useState(false);
   const [markLeaveData, setMarkLeaveData] = useState({
     empCode: '',
@@ -151,70 +193,91 @@ export default function HrLeavesPage() {
     }
   }
 
-  // Filter leaves based on search query (quarter-based: paidLeaves have q1,q2,q3,q4)
-  const filteredLeaves = paidLeaves.filter((leave) => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = (
-      leave.empCode?.toLowerCase().includes(query) ||
-      leave.employeeName?.toLowerCase().includes(query) ||
-      leave.department?.toLowerCase().includes(query)
+  const searchFilteredLeaves = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return paidLeaves;
+    return paidLeaves.filter(
+      (leave) =>
+        leave.empCode?.toLowerCase().includes(query) ||
+        leave.employeeName?.toLowerCase().includes(query) ||
+        leave.department?.toLowerCase().includes(query)
     );
+  }, [paidLeaves, searchQuery]);
 
-    if (!matchesSearch) return false;
-
-    const totalAllocated =
-      (leave.q1?.allocated || leavesPerQuarter) +
-      (leave.q2?.allocated || leavesPerQuarter) +
-      (leave.q3?.allocated || leavesPerQuarter) +
-      (leave.q4?.allocated || leavesPerQuarter);
-    const totalTaken =
-      (leave.q1?.taken || 0) +
-      (leave.q2?.taken || 0) +
-      (leave.q3?.taken || 0) +
-      (leave.q4?.taken || 0);
-    const totalRemaining = Math.max(0, totalAllocated - totalTaken);
-
-    if (balanceFilter === 'low') return totalRemaining > 0 && totalRemaining <= 2;
-    if (balanceFilter === 'exhausted') return totalRemaining === 0;
-    if (balanceFilter === 'none_taken') return totalTaken === 0;
-    return true;
-  });
-
-  const dashboardSummary = filteredLeaves.reduce(
-    (acc, leave) => {
-      const totalAllocated =
-        (leave.q1?.allocated || leavesPerQuarter) +
-        (leave.q2?.allocated || leavesPerQuarter) +
-        (leave.q3?.allocated || leavesPerQuarter) +
-        (leave.q4?.allocated || leavesPerQuarter);
-      const totalTaken =
-        (leave.q1?.taken || 0) +
-        (leave.q2?.taken || 0) +
-        (leave.q3?.taken || 0) +
-        (leave.q4?.taken || 0);
-      const totalRemaining = Math.max(0, totalAllocated - totalTaken);
-
-      acc.allocated += totalAllocated;
-      acc.taken += totalTaken;
-      acc.remaining += totalRemaining;
-      if (totalRemaining === 0) acc.exhausted += 1;
-      if (totalRemaining > 0 && totalRemaining <= 2) acc.lowBalance += 1;
-      return acc;
-    },
-    {
-      allocated: 0,
-      taken: 0,
-      remaining: 0,
-      exhausted: 0,
-      lowBalance: 0,
-    }
+  const filteredLeaves = useMemo(
+    () =>
+      searchFilteredLeaves.filter((leave) =>
+        matchesBalanceFilter(leave, balanceFilter, leavesPerQuarter, activeQuarterKey)
+      ),
+    [searchFilteredLeaves, balanceFilter, leavesPerQuarter, activeQuarterKey]
   );
+
+  const filterCounts = useMemo(() => {
+    let low = 0;
+    let exhausted = 0;
+    let noneTaken = 0;
+    for (const leave of searchFilteredLeaves) {
+      if (matchesBalanceFilter(leave, 'low', leavesPerQuarter, activeQuarterKey)) low += 1;
+      if (matchesBalanceFilter(leave, 'exhausted', leavesPerQuarter, activeQuarterKey)) exhausted += 1;
+      if (matchesBalanceFilter(leave, 'none_taken', leavesPerQuarter, activeQuarterKey)) noneTaken += 1;
+    }
+    return {
+      all: searchFilteredLeaves.length,
+      low,
+      exhausted,
+      none_taken: noneTaken,
+    };
+  }, [searchFilteredLeaves, leavesPerQuarter, activeQuarterKey]);
+
+  // KPIs from search-filtered list only (not balance filter), so counts stay stable
+  const dashboardSummary = useMemo(() => {
+    return searchFilteredLeaves.reduce(
+      (acc, leave) => {
+        const { entitlement, taken, remaining } = getYearTotals(leave, leavesPerQuarter);
+        const quarterRemaining = getQuarterRemaining(leave, activeQuarterKey, leavesPerQuarter);
+
+        acc.allocated += entitlement;
+        acc.taken += taken;
+        acc.remaining += remaining;
+        if (quarterRemaining === 0) acc.exhausted += 1;
+        if (quarterRemaining > 0 && quarterRemaining <= LOW_BALANCE_THRESHOLD) acc.lowBalance += 1;
+        return acc;
+      },
+      {
+        allocated: 0,
+        taken: 0,
+        remaining: 0,
+        exhausted: 0,
+        lowBalance: 0,
+      }
+    );
+  }, [searchFilteredLeaves, leavesPerQuarter, activeQuarterKey]);
 
   function getQuarterCellStyle(remaining, allocated) {
     if (allocated <= 0) return { tone: '#64748b', bg: 'rgba(100,116,139,0.12)' };
     if (remaining <= 0) return { tone: '#dc2626', bg: 'rgba(220,38,38,0.12)' };
-    if (remaining <= 1) return { tone: '#d97706', bg: 'rgba(217,119,6,0.12)' };
+    if (remaining <= LOW_BALANCE_THRESHOLD) return { tone: '#d97706', bg: 'rgba(217,119,6,0.12)' };
     return { tone: '#16a34a', bg: 'rgba(22,163,74,0.12)' };
+  }
+
+  function emptyFilterMessage() {
+    if (balanceFilter === 'low') {
+      return `No employees with low balance (≤${LOW_BALANCE_THRESHOLD} days left) in ${activeQuarterLabel}`;
+    }
+    if (balanceFilter === 'exhausted') {
+      return `No employees with zero balance in ${activeQuarterLabel}`;
+    }
+    if (balanceFilter === 'none_taken') {
+      return 'No employees with zero leave taken this year';
+    }
+    if (searchQuery.trim()) {
+      return 'No employees match your search';
+    }
+    return 'No leave records found';
+  }
+
+  function toggleBalanceFilter(id) {
+    setBalanceFilter((prev) => (prev === id && id !== 'all' ? 'all' : id));
   }
 
   function QuarterUsageCell({ leave, quarter, quarterLabel }) {
@@ -307,21 +370,40 @@ export default function HrLeavesPage() {
 
   // Table styles
   const thStyle = {
-    padding: '12px 14px',
+    padding: '14px 16px',
     textAlign: 'left',
     borderBottom: `1px solid ${colors.border.table}`,
     fontWeight: 600,
     fontSize: 13,
     color: colors.text.table.header,
     backgroundColor: colors.background.table.header,
+    position: 'sticky',
+    top: 0,
+    zIndex: 2,
   };
 
   const tdStyle = {
-    padding: '10px 14px',
+    padding: '14px 16px',
     borderBottom: `1px solid ${colors.border.table}`,
     fontSize: 13,
     color: colors.text.table.cell,
     backgroundColor: colors.background.table.row,
+    verticalAlign: 'top',
+  };
+
+  const filterPillItems = [
+    { id: 'all', label: 'All', count: filterCounts.all },
+    { id: 'low', label: 'Low Balance', count: filterCounts.low },
+    { id: 'exhausted', label: 'Exhausted', count: filterCounts.exhausted },
+    { id: 'none_taken', label: 'No Leave Taken', count: filterCounts.none_taken },
+  ];
+
+  const summaryCardBase = {
+    padding: '16px 18px',
+    borderRadius: 12,
+    border: `1px solid ${colors.border.default}`,
+    background: colors.background.card,
+    minWidth: 0,
   };
 
   const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
@@ -349,18 +431,19 @@ export default function HrLeavesPage() {
       actions={headerActions}
     >
       <GlassCard style={{ marginTop: 18 }} padding={20}>
+      {/* Toolbar: year + search + action */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 20,
-          gap: 16,
+          marginBottom: 12,
+          gap: 12,
           flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ fontSize: 13, color: colors.text.secondary }}>Year:</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          <label style={{ fontSize: 13, color: colors.text.secondary, whiteSpace: 'nowrap' }}>Year:</label>
           <select
             value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
@@ -391,42 +474,11 @@ export default function HrLeavesPage() {
               background: colors.background.input,
               color: colors.text.primary,
               fontSize: 13,
-              minWidth: 300,
+              flex: 1,
+              minWidth: 200,
+              maxWidth: 420,
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {[
-              { id: 'all', label: 'All' },
-              { id: 'low', label: 'Low Balance' },
-              { id: 'exhausted', label: 'Exhausted' },
-              { id: 'none_taken', label: 'No Leave Taken' },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setBalanceFilter(item.id)}
-                style={{
-                  padding: '7px 11px',
-                  borderRadius: 999,
-                  border: `1px solid ${
-                    balanceFilter === item.id ? colors.primary : colors.border.default
-                  }`,
-                  background:
-                    balanceFilter === item.id
-                      ? theme === 'dark'
-                        ? 'rgba(59,130,246,0.2)'
-                        : 'rgba(59,130,246,0.12)'
-                      : colors.background.input,
-                  color: balanceFilter === item.id ? colors.primary : colors.text.secondary,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
         </div>
         {canCreate && (
           <button
@@ -440,6 +492,7 @@ export default function HrLeavesPage() {
               fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
+              whiteSpace: 'nowrap',
             }}
           >
             + Mark Leave
@@ -447,71 +500,167 @@ export default function HrLeavesPage() {
         )}
       </div>
 
+      {/* Filter pills */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          marginBottom: 18,
+        }}
+      >
+        {filterPillItems.map((item) => {
+          const active = balanceFilter === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => toggleBalanceFilter(item.id)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 999,
+                border: `1px solid ${active ? colors.primary : colors.border.default}`,
+                background: active
+                  ? theme === 'dark'
+                    ? 'rgba(59,130,246,0.2)'
+                    : 'rgba(59,130,246,0.12)'
+                  : colors.background.input,
+                color: active ? colors.primary : colors.text.secondary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {item.label} ({item.count})
+            </button>
+          );
+        })}
+      </div>
+
       {/* Leave Summary Cards */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
           gap: 12,
-          marginBottom: 16,
+          marginBottom: 10,
         }}
       >
-        <div
-          style={{
-            padding: '12px 14px',
-            borderRadius: 12,
-            border: `1px solid ${colors.border.default}`,
-            background: colors.background.card,
-          }}
-        >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Employees in List</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: colors.text.primary }}>{filteredLeaves.length}</div>
-        </div>
-        <div
-          style={{
-            padding: '12px 14px',
-            borderRadius: 12,
-            border: `1px solid ${colors.border.default}`,
-            background: colors.background.card,
-          }}
-        >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Total Leave Days Used</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#dc2626' }}>{dashboardSummary.taken}</div>
-        </div>
-        <div
-          style={{
-            padding: '12px 14px',
-            borderRadius: 12,
-            border: `1px solid ${colors.border.default}`,
-            background: colors.background.card,
-          }}
-        >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Total Leave Days Left</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#16a34a' }}>{dashboardSummary.remaining}</div>
-        </div>
-        <div
-          style={{
-            padding: '12px 14px',
-            borderRadius: 12,
-            border: `1px solid ${colors.border.default}`,
-            background: colors.background.card,
-          }}
-        >
-          <div style={{ fontSize: 11, color: colors.text.secondary }}>Low Balance / Zero Balance</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: colors.text.primary }}>
-            {dashboardSummary.lowBalance} / {dashboardSummary.exhausted}
+        <div style={summaryCardBase}>
+          <div style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6 }}>Employees in List</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: colors.text.primary, lineHeight: 1.15 }}>
+            {filteredLeaves.length}
+          </div>
+          <div style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
+            of {searchFilteredLeaves.length} matching search
           </div>
         </div>
+        <div
+          style={{
+            ...summaryCardBase,
+            background: theme === 'dark' ? 'rgba(220,38,38,0.08)' : 'rgba(220,38,38,0.06)',
+            borderColor: 'rgba(220,38,38,0.35)',
+          }}
+        >
+          <div style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6 }}>Total Leave Days Used</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#dc2626', lineHeight: 1.15 }}>
+            {dashboardSummary.taken}
+          </div>
+        </div>
+        <div
+          style={{
+            ...summaryCardBase,
+            background: theme === 'dark' ? 'rgba(22,163,74,0.08)' : 'rgba(22,163,74,0.06)',
+            borderColor: 'rgba(22,163,74,0.35)',
+          }}
+        >
+          <div style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6 }}>Total Leave Days Left</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#16a34a', lineHeight: 1.15 }}>
+            {dashboardSummary.remaining}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => toggleBalanceFilter('low')}
+          style={{
+            ...summaryCardBase,
+            textAlign: 'left',
+            cursor: 'pointer',
+            background: theme === 'dark' ? 'rgba(217,119,6,0.1)' : 'rgba(217,119,6,0.08)',
+            borderColor: balanceFilter === 'low' ? '#d97706' : 'rgba(217,119,6,0.4)',
+            boxShadow: balanceFilter === 'low' ? `0 0 0 2px rgba(217,119,6,0.25)` : 'none',
+          }}
+        >
+          <div style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6 }}>
+            Low Balance ({activeQuarterLabel})
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#d97706', lineHeight: 1.15 }}>
+            {dashboardSummary.lowBalance}
+          </div>
+          <div style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
+            ≤{LOW_BALANCE_THRESHOLD} days left · click to filter
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleBalanceFilter('exhausted')}
+          style={{
+            ...summaryCardBase,
+            textAlign: 'left',
+            cursor: 'pointer',
+            background: theme === 'dark' ? 'rgba(220,38,38,0.1)' : 'rgba(220,38,38,0.06)',
+            borderColor: balanceFilter === 'exhausted' ? '#dc2626' : 'rgba(220,38,38,0.35)',
+            boxShadow: balanceFilter === 'exhausted' ? `0 0 0 2px rgba(220,38,38,0.25)` : 'none',
+          }}
+        >
+          <div style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6 }}>
+            Zero Balance ({activeQuarterLabel})
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#dc2626', lineHeight: 1.15 }}>
+            {dashboardSummary.exhausted}
+          </div>
+          <div style={{ fontSize: 11, color: colors.text.tertiary, marginTop: 4 }}>
+            No days left · click to filter
+          </div>
+        </button>
       </div>
       <div
         style={{
-          marginTop: -4,
-          marginBottom: 12,
+          marginBottom: 14,
           fontSize: 12,
           color: colors.text.secondary,
         }}
       >
-        These totals are calculated for the current year and current filters.
+        Year totals · Low / Zero based on {activeQuarterLabel} for {year}.
+      </div>
+
+      {/* Color legend */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          flexWrap: 'wrap',
+          marginBottom: 10,
+          fontSize: 12,
+          color: colors.text.secondary,
+        }}
+      >
+        <span style={{ fontWeight: 600 }}>Quarter status:</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: '#16a34a' }} />
+          OK
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: '#d97706' }} />
+          Low (≤{LOW_BALANCE_THRESHOLD} left)
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: '#dc2626' }} />
+          Exhausted
+        </span>
       </div>
 
       {/* Table */}
@@ -519,7 +668,8 @@ export default function HrLeavesPage() {
         style={{
           borderRadius: 12,
           border: `1px solid ${colors.border.table}`,
-          overflow: 'hidden',
+          overflow: 'auto',
+          maxHeight: '70vh',
           background: colors.background.card,
         }}
       >
@@ -529,10 +679,32 @@ export default function HrLeavesPage() {
               <th style={thStyle}>Emp Code</th>
               <th style={thStyle}>Name</th>
               <th style={thStyle}>Department</th>
-              <th style={thStyle}>Q1 (Jan–Mar)</th>
-              <th style={thStyle}>Q2 (Apr–Jun)</th>
-              <th style={thStyle}>Q3 (Jul–Sep)</th>
-              <th style={thStyle}>Q4 (Oct–Dec)</th>
+              {['q1', 'q2', 'q3', 'q4'].map((qKey) => {
+                const labels = {
+                  q1: 'Q1 (Jan–Mar)',
+                  q2: 'Q2 (Apr–Jun)',
+                  q3: 'Q3 (Jul–Sep)',
+                  q4: 'Q4 (Oct–Dec)',
+                };
+                const isActive = activeQuarterKey === qKey;
+                const showNowBadge = isActive && year === getCurrentQuarter().year;
+                return (
+                  <th
+                    key={qKey}
+                    style={{
+                      ...thStyle,
+                      ...(isActive ? { boxShadow: `inset 0 -2px 0 ${colors.primary}` } : {}),
+                    }}
+                  >
+                    {labels[qKey]}
+                    {showNowBadge ? (
+                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: colors.primary }}>
+                        NOW
+                      </span>
+                    ) : null}
+                  </th>
+                );
+              })}
               {canCreate && <th style={thStyle}>Actions</th>}
             </tr>
           </thead>
@@ -546,7 +718,7 @@ export default function HrLeavesPage() {
             ) : filteredLeaves.length === 0 ? (
               <tr>
                 <td colSpan={canCreate ? 8 : 7} style={{ ...tdStyle, textAlign: 'center', padding: '40px' }}>
-                  No leave records found
+                  {emptyFilterMessage()}
                 </td>
               </tr>
             ) : (

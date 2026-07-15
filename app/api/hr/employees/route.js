@@ -10,7 +10,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // OPTIMIZATION: Minimal field selection for list views
-const EMPLOYEE_LIST_FIELDS = 'empCode name email monthlySalary salaryHistory shift shiftId department designation saturdayGroup';
+const EMPLOYEE_LIST_FIELDS = 'empCode name email monthlySalary salaryHistory shift shiftId department designation joinDate saturdayGroup';
 
 export async function GET(req) {
   const startTime = Date.now();
@@ -35,7 +35,7 @@ export async function GET(req) {
     const activeFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
 
     const selectFields = useTextScore
-      ? { empCode: 1, name: 1, email: 1, monthlySalary: 1, salaryHistory: 1, shift: 1, shiftId: 1, department: 1, designation: 1, saturdayGroup: 1, score: { $meta: 'textScore' } }
+      ? { empCode: 1, name: 1, email: 1, monthlySalary: 1, salaryHistory: 1, shift: 1, shiftId: 1, department: 1, designation: 1, joinDate: 1, saturdayGroup: 1, score: { $meta: 'textScore' } }
       : EMPLOYEE_LIST_FIELDS;
 
     // Prefer department+empCode sort for directory browsing; textScore when searching

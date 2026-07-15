@@ -25,6 +25,7 @@ function LoginInner() {
 
   const [hrEmail, setHrEmail] = useState("");
   const [hrPassword, setHrPassword] = useState("");
+  const [showHrPassword, setShowHrPassword] = useState(false);
   const [empCode, setEmpCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -172,6 +173,49 @@ function LoginInner() {
   return (
     <AppShell>
       <div className="login-page-wrapper">
+        {/* Floating planets in the page background */}
+        <div className="login-space" aria-hidden="true">
+          <div className="login-stars">
+            {Array.from({ length: 28 }).map((_, i) => (
+              <span key={i} className="login-star" />
+            ))}
+          </div>
+
+          <span className="login-nebula login-nebula--1" />
+          <span className="login-nebula login-nebula--2" />
+
+          <div className="login-orbit-system login-orbit-system--tl">
+            <span className="login-orbit-track login-orbit-track--lg" />
+            <span className="login-orbit-track login-orbit-track--md" />
+            <span className="login-orbit-arm login-orbit-arm--1">
+              <span className="login-planet login-planet--cyan" />
+            </span>
+            <span className="login-orbit-arm login-orbit-arm--2">
+              <span className="login-planet login-planet--amber" />
+            </span>
+          </div>
+
+          <div className="login-orbit-system login-orbit-system--br">
+            <span className="login-orbit-track login-orbit-track--xl" />
+            <span className="login-orbit-track login-orbit-track--sm" />
+            <span className="login-orbit-arm login-orbit-arm--3">
+              <span className="login-planet login-planet--violet login-planet--ringed" />
+            </span>
+            <span className="login-orbit-arm login-orbit-arm--4">
+              <span className="login-planet login-planet--lime" />
+            </span>
+          </div>
+
+          <div className="login-orbit-system login-orbit-system--tr">
+            <span className="login-orbit-arm login-orbit-arm--5">
+              <span className="login-planet login-planet--rose" />
+            </span>
+          </div>
+
+          <span className="login-comet" />
+          <span className="login-comet login-comet--delay" />
+        </div>
+
         <div className="login-theme-toggle">
           <ThemeToggle />
         </div>
@@ -180,9 +224,20 @@ function LoginInner() {
           <GlassCard className="login-card" padding={0} borderRadius={30}>
             {/* LEFT PANEL — brand (same layout as original) */}
             <div className="login-left-panel" style={{ background: leftGradient }}>
-              <div className="login-left-orb login-left-orb--1" style={{ background: leftGradient }} />
-              <div className="login-left-orb login-left-orb--2" style={{ background: leftGradient }} />
-              <div className="login-left-orb login-left-orb--3" style={{ background: leftGradient }} />
+              <div className="login-left-orbit-system" aria-hidden="true">
+                <span className="login-left-sun" />
+                <span className="login-left-path login-left-path--1">
+                  <span className="login-left-orb login-left-orb--1" />
+                </span>
+                <span className="login-left-path login-left-path--2">
+                  <span className="login-left-orb login-left-orb--2" />
+                </span>
+                <span className="login-left-path login-left-path--3">
+                  <span className="login-left-orb login-left-orb--3" />
+                </span>
+                <span className="login-left-orb login-left-orb--float-1" />
+                <span className="login-left-orb login-left-orb--float-2" />
+              </div>
 
               <div className="login-left-content">
                 <div
@@ -325,22 +380,73 @@ function LoginInner() {
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <label style={labelStyle}>PASSWORD</label>
-                    <input
-                      type="password"
-                      value={hrPassword}
-                      onChange={(e) => setHrPassword(e.target.value)}
-                      required
-                      placeholder="Enter your password"
-                      style={inputStyle}
-                      onFocus={(e) => {
-                        e.currentTarget.style.borderColor = colors.primary[500];
-                        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = colors.input.border;
-                        e.currentTarget.style.boxShadow = "none";
-                      }}
-                    />
+                    <div className="login-password-wrap" style={{ position: "relative", width: "100%" }}>
+                      <input
+                        type={showHrPassword ? "text" : "password"}
+                        value={hrPassword}
+                        onChange={(e) => setHrPassword(e.target.value)}
+                        required
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        className="login-password-input"
+                        style={{
+                          ...inputStyle,
+                          paddingRight: 48,
+                          width: "100%",
+                          boxSizing: "border-box",
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = colors.primary[500];
+                          e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary[500]}20`;
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = colors.input.border;
+                          e.currentTarget.style.boxShadow = "none";
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="login-password-toggle"
+                        onClick={() => setShowHrPassword((prev) => !prev)}
+                        aria-label={showHrPassword ? "Hide password" : "Show password"}
+                        title={showHrPassword ? "Hide password" : "Show password"}
+                        style={{
+                          position: "absolute",
+                          right: 8,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          zIndex: 5,
+                          width: 34,
+                          height: 34,
+                          border: `1px solid ${colors.border.default}`,
+                          borderRadius: 8,
+                          background:
+                            theme === "dark" ? "rgba(15, 23, 42, 0.85)" : "rgba(255, 255, 255, 0.95)",
+                          color: colors.input?.color || colors.text.primary,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          lineHeight: 1,
+                          boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                        }}
+                      >
+                        {showHrPassword ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <button
@@ -425,7 +531,7 @@ function LoginInner() {
               )}
 
               <div className="login-copyright">
-                © 2025 Global Digital Solutions Internal Use Only
+                © {new Date().getFullYear()} Global Digital Solutions Internal Use Only
               </div>
             </div>
           </GlassCard>

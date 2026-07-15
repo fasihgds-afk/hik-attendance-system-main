@@ -18,11 +18,20 @@ const STATUS_LABELS = {
   closed: 'Closed',
 };
 
+const EMPTY_SUMMARY = { open: 0, in_progress: 0, resolved: 0, closed: 0, total: 0 };
+
 function formatDate(d) {
   if (!d) return '-';
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function getStatusTone(status, colors, primary, successColor, warningColor) {
+  if (status === 'resolved') return { color: successColor, bg: `${successColor}22` };
+  if (status === 'closed') return { color: '#64748b', bg: 'rgba(100,116,139,0.2)' };
+  if (status === 'in_progress') return { color: warningColor, bg: `${warningColor}22` };
+  return { color: primary, bg: `${primary}22` };
 }
 
 export default function HrComplaintsPage() {
@@ -37,6 +46,7 @@ export default function HrComplaintsPage() {
   });
 
   const [complaints, setComplaints] = useState([]);
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('all');
@@ -83,6 +93,7 @@ export default function HrComplaintsPage() {
 
       if (data.success) {
         setComplaints(data.data?.complaints || []);
+        setSummary({ ...EMPTY_SUMMARY, ...(data.data?.summary || {}) });
         setPagination(
           data.meta?.pagination ||
             data.data?.pagination || { page: currentPage, limit: 50, total: 0, totalPages: 1 }
@@ -202,10 +213,71 @@ export default function HrComplaintsPage() {
   const border = colors.border?.default;
   const textPrimary = colors.text?.primary;
   const textSecondary = colors.text?.secondary;
+  const textTertiary = colors.text?.tertiary ?? textSecondary;
   const primary = typeof colors.primary === 'object' ? colors.primary?.[500] : colors.primary;
   const successColor = colors.success ?? (typeof colors.secondary === 'object' ? colors.secondary?.[600] : colors.secondary) ?? '#22c55e';
+  const warningColor = colors.warning ?? colors.accent?.yellow ?? '#fbbf24';
+  const inputBg = colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc');
 
   const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  function setStatusFilter(next) {
+    setFilterStatus((prev) => (prev === next ? '' : next));
+    setCurrentPage(1);
+  }
+
+  const summaryCards = [
+    {
+      id: '',
+      label: 'Total',
+      value: summary.total,
+      tone: textPrimary,
+      bg: theme === 'dark' ? 'rgba(148,163,184,0.08)' : 'rgba(148,163,184,0.1)',
+      borderColor: border,
+    },
+    {
+      id: 'open',
+      label: 'Open',
+      value: summary.open,
+      tone: primary,
+      bg: `${primary}14`,
+      borderColor: `${primary}55`,
+    },
+    {
+      id: 'in_progress',
+      label: 'In Progress',
+      value: summary.in_progress,
+      tone: warningColor,
+      bg: `${warningColor}14`,
+      borderColor: `${warningColor}55`,
+    },
+    {
+      id: 'resolved',
+      label: 'Resolved',
+      value: summary.resolved,
+      tone: successColor,
+      bg: `${successColor}14`,
+      borderColor: `${successColor}55`,
+    },
+    {
+      id: 'closed',
+      label: 'Closed',
+      value: summary.closed,
+      tone: '#64748b',
+      bg: 'rgba(100,116,139,0.12)',
+      borderColor: 'rgba(100,116,139,0.4)',
+    },
+  ];
+
+  const controlStyle = {
+    padding: '10px 14px',
+    borderRadius: 10,
+    border: `1px solid ${border}`,
+    background: inputBg,
+    color: textPrimary,
+    fontSize: 13,
+    fontWeight: 500,
+  };
 
   const pageSubtitle = canUpdate
     ? 'View and respond to employee complaints'
@@ -260,100 +332,242 @@ export default function HrComplaintsPage() {
           View only — you can open complaints, but cannot change status or send responses.
         </div>
       )}
-      <div style={{ marginBottom: 24, padding: '16px 20px', borderRadius: 16, border: `1px solid ${border}`, background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)' }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: textSecondary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filters</p>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <select
-            value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, fontWeight: 500, minWidth: 160 }}
-          >
-            <option value="">All statuses</option>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <select
-            value={filterPeriod}
-            onChange={(e) => {
-              setFilterPeriod(e.target.value);
-              setCurrentPage(1);
-            }}
-            style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, fontWeight: 500, minWidth: 180 }}
-          >
-            <option value="all">All time</option>
-            <option value="week">Last 7 days (Weekly)</option>
-            <option value="month">Last 30 days (Monthly)</option>
-          </select>
-          <input
-            type="text"
-            placeholder="Search by employee, designation, subject..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            style={{ padding: '10px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14, minWidth: 300, flex: 1, maxWidth: 400 }}
-          />
-        </div>
+
+      {/* Summary KPI cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        {summaryCards.map((card) => {
+          const active = filterStatus === card.id;
+          return (
+            <button
+              key={card.label}
+              type="button"
+              onClick={() => setStatusFilter(card.id)}
+              style={{
+                textAlign: 'left',
+                padding: '16px 18px',
+                borderRadius: 14,
+                border: `1px solid ${active ? card.tone : card.borderColor}`,
+                background: card.bg,
+                cursor: 'pointer',
+                boxShadow: active ? `0 0 0 2px ${card.tone}33` : 'none',
+                transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
+              }}
+            >
+              <div style={{ fontSize: 12, color: textSecondary, marginBottom: 6, fontWeight: 600 }}>{card.label}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: card.tone, lineHeight: 1.1 }}>{card.value}</div>
+              <div style={{ fontSize: 11, color: textTertiary, marginTop: 6 }}>
+                {card.id ? 'Click to filter' : 'All statuses'}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginBottom: 12,
+        }}
+      >
+        <select
+          value={filterPeriod}
+          onChange={(e) => {
+            setFilterPeriod(e.target.value);
+            setCurrentPage(1);
+          }}
+          style={{ ...controlStyle, minWidth: 170 }}
+        >
+          <option value="all">All time</option>
+          <option value="week">Last 7 days</option>
+          <option value="month">Last 30 days</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Search employee, designation, subject..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          style={{ ...controlStyle, flex: 1, minWidth: 220, maxWidth: 420, fontWeight: 400 }}
+        />
+      </div>
+
+      {/* Status pills */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {[
+          { id: '', label: 'All', count: summary.total },
+          { id: 'open', label: 'Open', count: summary.open },
+          { id: 'in_progress', label: 'In Progress', count: summary.in_progress },
+          { id: 'resolved', label: 'Resolved', count: summary.resolved },
+          { id: 'closed', label: 'Closed', count: summary.closed },
+        ].map((item) => {
+          const active = filterStatus === item.id;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => setStatusFilter(item.id)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 999,
+                border: `1px solid ${active ? primary : border}`,
+                background: active
+                  ? theme === 'dark'
+                    ? 'rgba(59,130,246,0.2)'
+                    : 'rgba(59,130,246,0.12)'
+                  : inputBg,
+                color: active ? primary : textSecondary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {item.label} ({item.count})
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 12, color: textSecondary, marginBottom: 12 }}>
+        Showing {pagination.total || 0} complaint{(pagination.total || 0) === 1 ? '' : 's'}
+        {filterStatus ? ` · ${STATUS_LABELS[filterStatus] || filterStatus}` : ''}
+        {filterPeriod !== 'all' ? ` · ${filterPeriod === 'week' ? 'last 7 days' : 'last 30 days'}` : ''}
       </div>
 
       {/* Table */}
-      <div style={{ borderRadius: 16, border: `1px solid ${border}`, overflow: 'hidden', background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)' }}>
+      <div
+        style={{
+          borderRadius: 14,
+          border: `1px solid ${border}`,
+          overflow: 'auto',
+          maxHeight: '65vh',
+          background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)',
+        }}
+      >
         {loading && !complaints.length ? (
           <div style={{ padding: 48, textAlign: 'center', color: textSecondary, fontSize: 14 }}>Loading complaints...</div>
         ) : complaints.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12, opacity: 0.5 }}>📭</div>
             <p style={{ fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 6 }}>No complaints found</p>
-            <p style={{ fontSize: 14, color: textSecondary }}>Complaints from employees will appear here. Use filters to narrow results.</p>
+            <p style={{ fontSize: 14, color: textSecondary, margin: 0 }}>
+              {filterStatus || searchQuery || filterPeriod !== 'all'
+                ? 'Try clearing filters or widening the date range.'
+                : 'Employee complaints will appear here when submitted.'}
+            </p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: colors.background?.table?.header ?? primary }}>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Employee</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Designation</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Department</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subject</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</th>
-                <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Action</th>
+                {['Employee', 'Designation', 'Department', 'Subject', 'Status', 'Date', 'Action'].map((label, idx) => (
+                  <th
+                    key={label}
+                    style={{
+                      padding: '14px 16px',
+                      textAlign: idx === 6 ? 'right' : 'left',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: colors.text?.table?.header ?? '#fff',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 2,
+                      background: colors.background?.table?.header ?? primary,
+                    }}
+                  >
+                    {label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {complaints.map((c, i) => (
-                <tr
-                  key={c._id}
-                  style={{
-                    background: i % 2 === 0 ? (colors.background?.table?.row ?? bgCard) : (colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc')),
-                    borderBottom: i < complaints.length - 1 ? `1px solid ${border}` : 'none',
-                    transition: 'background 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(51, 65, 85, 0.4)' : '#f1f5f9'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? (colors.background?.table?.row ?? bgCard) : (colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc')); }}
-                >
-                  <td style={{ padding: '14px 20px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 500 }}>{c.employeeName || '-'} ({c.empCode})</td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{c.designation || '-'}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{c.department || '-'}</td>
-                  <td style={{ padding: '14px 20px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 500 }}>{c.subject}</td>
-                  <td style={{ padding: '14px 20px' }}>
-                    <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: c.status === 'resolved' || c.status === 'closed' ? `${successColor}26` : c.status === 'in_progress' ? `${colors.warning ?? colors.accent?.yellow ?? '#fbbf24'}26` : `${primary}26`, color: c.status === 'resolved' || c.status === 'closed' ? successColor : c.status === 'in_progress' ? (colors.warning ?? colors.accent?.yellow ?? '#fbbf24') : primary }}>{STATUS_LABELS[c.status] || c.status}</span>
-                  </td>
-                  <td style={{ padding: '14px 20px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{formatDate(c.createdAt)}</td>
-                  <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                    <button
-                      type="button"
-                      onClick={() => { setViewId(c._id); setDetail(null); loadDetail(c._id); }}
-                      style={{ padding: '8px 16px', borderRadius: 10, border: `1px solid ${primary}`, background: 'transparent', color: primary, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s ease' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = `${primary}15`; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      {canUpdate ? 'View / Respond' : 'View'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {complaints.map((c, i) => {
+                const tone = getStatusTone(c.status, colors, primary, successColor, warningColor);
+                const rowBg =
+                  i % 2 === 0
+                    ? colors.background?.table?.row ?? bgCard
+                    : colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc');
+                return (
+                  <tr
+                    key={c._id}
+                    style={{
+                      background: rowBg,
+                      borderBottom: i < complaints.length - 1 ? `1px solid ${border}` : 'none',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = theme === 'dark' ? 'rgba(51, 65, 85, 0.45)' : '#f1f5f9';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = rowBg;
+                    }}
+                  >
+                    <td style={{ padding: '16px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 600 }}>
+                      <div>{c.employeeName || '-'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: textSecondary, marginTop: 2 }}>{c.empCode}</div>
+                    </td>
+                    <td style={{ padding: '16px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{c.designation || '-'}</td>
+                    <td style={{ padding: '16px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{c.department || '-'}</td>
+                    <td style={{ padding: '16px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 500, maxWidth: 260 }}>
+                      {c.subject}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '5px 11px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.color}44`,
+                        }}
+                      >
+                        {STATUS_LABELS[c.status] || c.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px', fontSize: 13, color: colors.text?.cell ?? textSecondary, whiteSpace: 'nowrap' }}>
+                      {formatDate(c.createdAt)}
+                    </td>
+                    <td style={{ padding: '16px', textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewId(c._id);
+                          setDetail(null);
+                          loadDetail(c._id);
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: 10,
+                          border: `1px solid ${primary}`,
+                          background: theme === 'dark' ? `${primary}18` : `${primary}10`,
+                          color: primary,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {canUpdate ? 'Respond' : 'View'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -375,14 +589,36 @@ export default function HrComplaintsPage() {
           <div style={{ background: bgCard, borderRadius: 20, padding: 28, minWidth: 480, maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${border}`, boxShadow: theme === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.12)' }} onClick={(e) => e.stopPropagation()}>
             {detail ? (
               <>
-                <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: textPrimary, paddingBottom: 16, borderBottom: `2px solid ${border}`, letterSpacing: '-0.02em' }}>
-                  {canUpdate ? 'Complaint – View & Respond' : 'Complaint – View'}
-                </h2>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: `2px solid ${border}` }}>
+                  <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: textPrimary, letterSpacing: '-0.02em' }}>
+                    {canUpdate ? 'View & Respond' : 'Complaint details'}
+                  </h2>
+                  {(() => {
+                    const tone = getStatusTone(detail.status, colors, primary, successColor, warningColor);
+                    return (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '5px 12px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.color}44`,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {STATUS_LABELS[detail.status] || detail.status}
+                      </span>
+                    );
+                  })()}
+                </div>
 
-                <div style={{ marginBottom: 24 }}>
+                <div style={{ marginBottom: 24, padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: theme === 'dark' ? 'rgba(15,23,42,0.4)' : 'rgba(248,250,252,0.9)' }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Employee</p>
                   <p style={{ fontSize: 15, fontWeight: 600, color: textPrimary, marginBottom: 4 }}>{detail.employeeName} ({detail.empCode})</p>
-                  <p style={{ fontSize: 13, color: textSecondary }}>{detail.designation || '—'} · {detail.department || '—'} · {formatDate(detail.createdAt)}</p>
+                  <p style={{ fontSize: 13, color: textSecondary, margin: 0 }}>{detail.designation || '—'} · {detail.department || '—'} · {formatDate(detail.createdAt)}</p>
                 </div>
                 <div style={{ marginBottom: 24 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Complaint</p>

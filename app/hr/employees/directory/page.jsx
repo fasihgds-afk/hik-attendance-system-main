@@ -8,6 +8,24 @@ import PaginationControls from '@/components/common/PaginationControls';
 import { api } from '@/lib/api/client';
 import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
 
+function formatJoinDate(value) {
+  if (!value) return '-';
+  const raw = String(value).trim();
+  if (!raw) return '-';
+  // Prefer YYYY-MM-DD already stored as string
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const [y, m, d] = raw.slice(0, 10).split('-');
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    return raw.slice(0, 10);
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function EmployeeDirectoryPage() {
   const router = useRouter();
   const { colors, theme } = useTheme();
@@ -302,7 +320,7 @@ export default function EmployeeDirectoryPage() {
           <table
             style={{
               width: '100%',
-              minWidth: 1080,
+              minWidth: 1200,
               borderCollapse: 'collapse',
               borderRadius: 10,
               overflow: 'hidden',
@@ -316,6 +334,7 @@ export default function EmployeeDirectoryPage() {
                   'Name',
                   'Department',
                   'Designation',
+                  'Join Date',
                   'Shift',
                   'Salary',
                   'Saturday Group',
@@ -342,7 +361,7 @@ export default function EmployeeDirectoryPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     style={{
                       padding: 18,
                       textAlign: 'center',
@@ -357,7 +376,7 @@ export default function EmployeeDirectoryPage() {
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     style={{
                       padding: 18,
                       textAlign: 'center',
@@ -373,7 +392,7 @@ export default function EmployeeDirectoryPage() {
                 rowsByDepartment.flatMap((group) => [
                   <tr key={`group-${group.departmentName}`}>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       style={{
                         padding: '10px 12px',
                         fontSize: 12,
@@ -442,6 +461,9 @@ export default function EmployeeDirectoryPage() {
                           <td style={{ ...cellStyle, fontWeight: 600 }}>{employee.name || '-'}</td>
                           <td style={cellStyle}>{employee.department || '-'}</td>
                           <td style={cellStyle}>{employee.designation || '-'}</td>
+                          <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>
+                            {formatJoinDate(employee.joinDate)}
+                          </td>
                           <td style={cellStyle}>{employee.shift || '-'}</td>
                           <td style={cellStyle}>
                             {employee.monthlySalary != null ? Number(employee.monthlySalary).toLocaleString() : '-'}
