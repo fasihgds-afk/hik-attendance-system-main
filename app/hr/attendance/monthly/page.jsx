@@ -1195,7 +1195,7 @@ export default function MonthlyHrPage() {
                   : '0 12px 32px rgba(10,44,84,0.18)',
                 minWidth: 260,
                 fontSize: 11.5,
-                zIndex: 30,
+                zIndex: 90,
               }}
             >
             <div
@@ -1326,6 +1326,7 @@ export default function MonthlyHrPage() {
   return (
     <HrPageShell
       className="monthly-container"
+      headerClassName="monthly-header-export"
       subtitle="Monthly Attendance · Violation Policy & Payroll Impact"
       actions={headerActions}
     >
@@ -1353,6 +1354,23 @@ export default function MonthlyHrPage() {
           }
           [data-theme="light"] tr.row-hover:hover td {
             background-color: #e5efff !important;
+          }
+
+          /* Let Export settings dropdown escape the glass header (overflow was clipping it under the sheet) */
+          .monthly-container .hr-global-header.monthly-header-export,
+          .monthly-container .glass-page-header.monthly-header-export {
+            overflow: visible !important;
+            z-index: 80;
+          }
+          .monthly-container .hr-global-header__toolbar,
+          .monthly-container .hr-header-actions.monthly-header-actions,
+          .monthly-container .hr-header-actions__group--export {
+            overflow: visible !important;
+            position: relative;
+            z-index: 81;
+          }
+          .monthly-container .monthly-export-dropdown {
+            z-index: 90 !important;
           }
 
           /* Monthly header — single aligned toolbar row on desktop */
