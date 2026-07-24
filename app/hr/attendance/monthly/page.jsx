@@ -2319,7 +2319,7 @@ export default function MonthlyHrPage() {
         </div>
       )}
 
-      {/* Edit Day Modal */}
+      {/* Edit Day Modal — above header (z-index 80) and export dropdown (90) */}
       {modalOpen && selected && (
         <div
           style={{
@@ -2329,7 +2329,7 @@ export default function MonthlyHrPage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 60,
+            zIndex: 100,
             animation: 'modalFade 0.18s ease-out',
           }}
           onClick={closeModal}
@@ -2779,7 +2779,7 @@ export default function MonthlyHrPage() {
         </div>
       )}
 
-      {/* Bulk Holiday Modal (e.g. Eid) – applies to ALL employees */}
+      {/* Bulk Holiday Modal (e.g. Eid) – applies to ALL employees; above header */}
       {canUpdate && bulkOpen && (
         <div
           style={{
@@ -2789,7 +2789,7 @@ export default function MonthlyHrPage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 60,
+            zIndex: 100,
             animation: 'modalFade 0.18s ease-out',
           }}
           onClick={closeBulkModal}
