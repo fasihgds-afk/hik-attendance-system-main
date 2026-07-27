@@ -86,7 +86,7 @@ export async function POST(req) {
     await connectDB();
 
     const body = await req.json();
-    const { name, code, startTime, endTime, crossesMidnight, description } = body;
+    const { name, code, startTime, endTime, description } = body;
 
     if (!name || !code || !startTime || !endTime) {
       throw new ValidationError('name, code, startTime, and endTime are required');
@@ -99,6 +99,9 @@ export async function POST(req) {
     }
 
     const grace = mergeGraceFromBody(body, null);
+    const { crossesMidnightFromTimes } = await import('../../../../lib/shift/syncEmployeeShiftHistory.js');
+    // Always derive from clock times so day shifts (e.g. 11:30–20:30) are never marked midnight-crossing.
+    const resolvedCrossesMidnight = crossesMidnightFromTimes(startTime, endTime);
 
     // OPTIMIZATION: Create with validation in one operation
     const shift = await Shift.create({
@@ -106,7 +109,7 @@ export async function POST(req) {
       code: code.toUpperCase(),
       startTime,
       endTime,
-      crossesMidnight: crossesMidnight || false,
+      crossesMidnight: resolvedCrossesMidnight,
       checkInGracePeriod: grace.checkInGracePeriod,
       checkOutGracePeriod: grace.checkOutGracePeriod,
       description: description || '',

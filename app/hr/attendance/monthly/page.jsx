@@ -2232,6 +2232,7 @@ export default function MonthlyHrPage() {
                           const titleParts = [
                             `Date: ${day.date}`,
                             `Status: ${day.status || '—'}`,
+                            day.shift ? `Shift used for violations: ${day.shift}` : '',
                             timeInfo,
                             day.late ? `Late: YES${lateExcused ? ' (Excused)' : ''}` : '',
                             isEarlyLike ? `Early leave: YES${earlyExcused ? ' (Excused)' : ''}` : '',

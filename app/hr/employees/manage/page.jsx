@@ -37,6 +37,8 @@ export default function EmployeeShiftPage() {
     totalPages: 1,
   });
   const skipSearchPageReset = React.useRef(true);
+  // Snapshot of shift at last load / successful save — table edits mutate `employees`, so we cannot use row.shift as "previous"
+  const originalShiftByEmp = React.useRef(new Map());
 
   const [toast, setToast] = useState({ type: '', text: '' });
 
@@ -136,6 +138,16 @@ export default function EmployeeShiftPage() {
       const items = response.data?.items || [];
       const paginationMeta = response.meta?.pagination || response.data?.pagination || null;
 
+      const snap = new Map(originalShiftByEmp.current);
+      for (const e of items) {
+        if (!e?.empCode) continue;
+        snap.set(String(e.empCode), {
+          shift: String(e.shift || '').trim().toUpperCase(),
+          shiftId: String(e.shiftId || e._shiftId || '').trim(),
+        });
+      }
+      originalShiftByEmp.current = snap;
+
       setEmployees(items);
       if (paginationMeta) {
         setPagination(paginationMeta);
@@ -195,9 +207,10 @@ export default function EmployeeShiftPage() {
         ? String(currentEmployee.shift).trim().toUpperCase() 
         : '';
 
-      // Capture the ORIGINAL shift from emp (before user edit in table) — this is the true previous shift
-      const prevShiftCode = String(emp.shift || '').trim().toUpperCase();
-      const prevShiftId = String(emp.shiftId || emp._shiftId || '').trim();
+      // Capture the ORIGINAL shift from last load/save — not from the edited row (already mutated in state)
+      const original = originalShiftByEmp.current.get(String(emp.empCode)) || {};
+      const prevShiftCode = String(original.shift || emp.shift || '').trim().toUpperCase();
+      const prevShiftId = String(original.shiftId || emp.shiftId || emp._shiftId || '').trim();
 
       // IMPORTANT: Record shift history BEFORE saving employee so the old shift is still in DB
       if (normalizedShift && normalizedShift !== prevShiftCode) {
@@ -254,22 +267,28 @@ export default function EmployeeShiftPage() {
       }
 
       const data = await res.json();
+      const savedEmployee = data.data?.employee ?? data.employee;
 
       // Update local state immediately for instant feedback
       // IMPORTANT: Use the returned employee data which has the updated shift
-      setEmployees((prev) =>
-        prev.map((e) => {
-          if (e.empCode === data.employee.empCode) {
-            // Merge the returned employee data to ensure shift is updated
-            return { ...e, ...data.employee };
-          }
-          return e;
-        })
-      );
+      if (savedEmployee?.empCode) {
+        originalShiftByEmp.current.set(String(savedEmployee.empCode), {
+          shift: String(savedEmployee.shift || normalizedShift || '').trim().toUpperCase(),
+          shiftId: String(savedEmployee.shiftId || '').trim(),
+        });
+        setEmployees((prev) =>
+          prev.map((e) => {
+            if (e.empCode === savedEmployee.empCode) {
+              return { ...e, ...savedEmployee };
+            }
+            return e;
+          })
+        );
+      }
 
       showToast(
         'success',
-        `Saved ${data.employee.empCode} (${data.employee.name || 'No name'})`
+        `Saved ${savedEmployee?.empCode || currentEmployee.empCode} (${savedEmployee?.name || currentEmployee.name || 'No name'})`
       );
       
       // Refresh the list to ensure we have the latest data from server

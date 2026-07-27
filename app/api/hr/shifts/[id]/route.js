@@ -114,7 +114,19 @@ export async function PUT(req, { params }) {
       }
       update.endTime = endTime;
     }
-    if (crossesMidnight !== undefined && crossesMidnight !== existing.crossesMidnight) update.crossesMidnight = crossesMidnight;
+    {
+      const { crossesMidnightFromTimes } = await import('../../../../../lib/shift/syncEmployeeShiftHistory.js');
+      const nextStart = update.startTime ?? existing.startTime;
+      const nextEnd = update.endTime ?? existing.endTime;
+      if (
+        crossesMidnight !== undefined ||
+        update.startTime !== undefined ||
+        update.endTime !== undefined
+      ) {
+        // Prefer clock-time derivation so bad manual flags cannot stick on day shifts
+        update.crossesMidnight = crossesMidnightFromTimes(nextStart, nextEnd);
+      }
+    }
 
     const graceKeys = [
       'gracePeriod',

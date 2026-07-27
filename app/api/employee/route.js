@@ -357,7 +357,7 @@ export async function POST(req) {
     const upsertAllowed = user.role === 'HR' || user.role === 'ADMIN';
 
     const existing = await Employee.findOne({ empCode })
-      .select('status empCode monthlySalary salaryHistory')
+      .select('status empCode monthlySalary salaryHistory shift shiftId')
       .lean()
       .maxTimeMS(1500);
     if (existing && !isEmployeeActive(existing)) {
@@ -418,6 +418,39 @@ export async function POST(req) {
 
     if (!employee && !upsertAllowed) {
       throw new NotFoundError(`Employee ${empCode} not found`);
+    }
+
+    // Monthly sheet is history-first: keep open EmployeeShiftHistory in sync with Employee.shift
+    if (
+      (user.role === 'HR' || user.role === 'ADMIN') &&
+      employee &&
+      update.shift &&
+      String(update.shift).toUpperCase() !== String(existing?.shift || '').toUpperCase()
+    ) {
+      try {
+        const { syncEmployeeShiftHistory } = await import('../../../lib/shift/syncEmployeeShiftHistory.js');
+        const offsetMin = (() => {
+          const raw = String(process.env.TIMEZONE_OFFSET || '+05:00').trim();
+          const m = /^([+-])?(\d{1,2})(?::?(\d{2}))?$/.exec(raw);
+          if (!m) return 5 * 60;
+          const sign = m[1] === '-' ? -1 : 1;
+          return sign * (parseInt(m[2] || '0', 10) * 60 + parseInt(m[3] || '0', 10));
+        })();
+        const local = new Date(Date.now() + offsetMin * 60 * 1000);
+        const effectiveDate = `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}-${String(local.getUTCDate()).padStart(2, '0')}`;
+        await syncEmployeeShiftHistory({
+          empCode,
+          shiftId: update.shiftId || employee.shiftId || null,
+          shiftCode: update.shift,
+          effectiveDate,
+          reason: 'Synced from employee profile update',
+          changedBy: user.email || user.name || user.empCode || 'HR',
+          previousShiftCode: existing?.shift || null,
+          previousShiftId: existing?.shiftId ? String(existing.shiftId) : null,
+        });
+      } catch (histErr) {
+        console.error('[Employee API] shift history sync failed:', histErr);
+      }
     }
 
     employee.bankDetails = decryptBankDetails(employee.bankDetails);
