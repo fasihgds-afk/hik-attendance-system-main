@@ -176,7 +176,7 @@ export default function EmployeeShiftPage() {
       } else {
         setCurrentPage(1);
       }
-    }, 350);
+    }, 450);
     return () => clearTimeout(timer);
   }, [searchInput]);
 

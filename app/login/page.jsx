@@ -2,13 +2,14 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useTheme } from "@/lib/theme/ThemeContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { AppShell, GlassCard } from "@/components/glass";
 
 function LoginInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { theme, colors } = useTheme();
 
@@ -36,6 +37,13 @@ function LoginInner() {
     }
   }, [employeeLoginLocked, mode]);
 
+  // Warm MongoDB connection while the user is typing credentials
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch("/api/health?warm=1", { signal: ctrl.signal, cache: "no-store" }).catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
   async function handleHrSubmit(e) {
     e.preventDefault();
     setErrorMsg("");
@@ -58,7 +66,6 @@ function LoginInner() {
         mode: "HR",
         email,
         password: hrPassword,
-        callbackUrl: "/hr/employees",
       });
 
       if (!result || result.error) {
@@ -67,8 +74,9 @@ function LoginInner() {
         return;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      window.location.href = "/hr/employees";
+      // Client navigation is faster than a full page reload
+      router.replace("/hr/employees");
+      router.refresh();
     } catch (err) {
       console.error("HR login error", err);
       setErrorMsg("Something went wrong. Please try again.");
@@ -94,50 +102,24 @@ function LoginInner() {
     setLoading(true);
 
     try {
-      const precheck = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: "EMPLOYEE", empCode: code }),
-      });
-      const precheckBody = await precheck.json().catch(() => ({}));
-      if (!precheck.ok) {
-        if (precheck.status === 429) {
-          setErrorMsg("Too many login attempts. Please wait a minute and try again.");
-          setLoading(false);
-          return;
-        }
-        if (precheck.status === 503 || /querySrv|ECONNREFUSED|database/i.test(precheckBody.error || precheckBody.message || "")) {
-          setErrorMsg("Cannot connect to the database right now. Check internet / MongoDB Atlas, then try again.");
-          setLoading(false);
-          return;
-        }
-        setErrorMsg(
-          precheckBody.error ||
-            precheckBody.message ||
-            (precheck.status === 403
-              ? "Your employee portal access is disabled. Please contact HR."
-              : "Unknown employee code. Check with HR.")
-        );
-        setLoading(false);
-        return;
-      }
-
+      // Single auth round-trip (precheck + NextAuth was hitting MongoDB twice)
       const result = await signIn("credentials", {
         redirect: false,
         mode: "EMPLOYEE",
         empCode: code,
         password: "",
-        callbackUrl: "/employee/dashboard",
       });
 
       if (!result || result.error) {
-        setErrorMsg("Unable to sign in. Check with HR.");
+        setErrorMsg(
+          "Unable to sign in. Check your employee code with HR (or ask if portal access is enabled)."
+        );
         setLoading(false);
         return;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      window.location.href = "/employee/dashboard";
+      router.replace("/employee/dashboard");
+      router.refresh();
     } catch (err) {
       console.error("Employee login error", err);
       setErrorMsg("Something went wrong. Please try again.");

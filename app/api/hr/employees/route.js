@@ -43,16 +43,29 @@ export async function GET(req) {
       ? sortOptions
       : (department ? { empCode: 1 } : { department: 1, empCode: 1 });
 
-    const [total, employees] = await Promise.all([
-      Employee.countDocuments(activeFilter).maxTimeMS(2500),
-      Employee.find(activeFilter)
-        .select(selectFields)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .maxTimeMS(2500),
-    ]);
+    const [employees, total] = search
+      ? await (async () => {
+          const rows = await Employee.find(activeFilter)
+            .select(selectFields)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit + 1)
+            .lean()
+            .maxTimeMS(2500);
+          const hasMore = rows.length > limit;
+          const items = hasMore ? rows.slice(0, limit) : rows;
+          return [items, skip + items.length + (hasMore ? 1 : 0)];
+        })()
+      : await Promise.all([
+          Employee.find(activeFilter)
+            .select(selectFields)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit)
+            .lean()
+            .maxTimeMS(2500),
+          Employee.countDocuments(activeFilter).maxTimeMS(2500),
+        ]);
 
     const hasNext = skip + employees.length < total;
     const totalPages = Math.max(1, Math.ceil(total / limit));

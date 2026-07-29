@@ -154,19 +154,38 @@ export async function GET(req) {
     }
     
     // Always run find + exact count in parallel for accurate pagination
-    const [employees, total] = await Promise.all([
-      Employee.find(queryFilter)
+    // When searching: skip expensive countDocuments — use limit+1 to detect next page
+    let employees;
+    let total;
+
+    if (search) {
+      const rows = await Employee.find(queryFilter)
         .select(listProjection)
         .sort(optimizedSort)
         .skip(skip)
-        .limit(limit)
+        .limit(limit + 1)
         .lean()
         .maxTimeMS(2000)
-        .exec(),
-      Employee.countDocuments(queryFilter)
-        .maxTimeMS(1500)
-        .exec(),
-    ]);
+        .exec();
+      const hasMore = rows.length > limit;
+      employees = hasMore ? rows.slice(0, limit) : rows;
+      // Approximate total so pagination controls still work without a full count
+      total = skip + employees.length + (hasMore ? 1 : 0);
+    } else {
+      [employees, total] = await Promise.all([
+        Employee.find(queryFilter)
+          .select(listProjection)
+          .sort(optimizedSort)
+          .skip(skip)
+          .limit(limit)
+          .lean()
+          .maxTimeMS(2000)
+          .exec(),
+        Employee.countDocuments(queryFilter)
+          .maxTimeMS(1500)
+          .exec(),
+      ]);
+    }
     
     // OPTIMIZATION: Fast shift normalization - skip lookup if shift is already a code
     // Most employees have shift codes (not ObjectIds), so we can skip the lookup in most cases

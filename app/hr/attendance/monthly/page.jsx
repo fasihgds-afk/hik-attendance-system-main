@@ -463,18 +463,11 @@ export default function MonthlyHrPage() {
     loadShifts();
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchTerm(searchInput.trim());
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
   async function loadMonth(forceRefresh = false) {
     try {
       setLoading(true);
       const params = new URLSearchParams({ month });
-      if (searchTerm) params.set('search', searchTerm);
+      // Search is filtered client-side for instant results — do not refetch the whole sheet
       if (forceRefresh) params.set('_t', String(Date.now()));
 
       const response = await api.get(`/api/hr/monthly-attendance?${params.toString()}`, {
@@ -499,7 +492,7 @@ export default function MonthlyHrPage() {
   useEffect(() => {
     loadMonth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, searchTerm]);
+  }, [month]);
 
   // Refetch when user returns to this tab (e.g. after changing leave on HR Leaves page) so both pages stay in sync
   useEffect(() => {
@@ -509,7 +502,12 @@ export default function MonthlyHrPage() {
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, searchTerm]);
+  }, [month]);
+
+  // Keep searchTerm in sync for any UI that still reads it (instant — no API call)
+  useEffect(() => {
+    setSearchTerm(searchInput.trim());
+  }, [searchInput]);
 
   function openCellModal(emp, day) {
     setSelected({ emp, day });
@@ -676,10 +674,18 @@ export default function MonthlyHrPage() {
     }
   }
 
-  // Search is applied server-side; keep shift filter on the client
+  // Instant client-side search + shift filter (no month rebuild per keystroke)
   const filteredEmployees = (data.employees || []).filter((emp) => {
     if (selectedShift && emp.shift !== selectedShift) {
       return false;
+    }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const code = String(emp.empCode || '').toLowerCase();
+      const name = String(emp.name || '').toLowerCase();
+      if (!code.includes(term) && !name.includes(term)) {
+        return false;
+      }
     }
     return true;
   });
