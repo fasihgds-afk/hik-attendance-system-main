@@ -1,0 +1,150 @@
+import mongoose from 'mongoose';
+
+const EmployeeSchema = new mongoose.Schema(
+  {
+    empCode: {
+      type: String,
+      unique: true,
+      required: true,
+      index: true,
+    },
+    name: String,
+    email: String,
+    monthlySalary: Number,
+
+    /** HR salary increases — used by salary report to highlight raises by month. */
+    salaryHistory: [
+      {
+        previousAmount: { type: Number, default: 0 },
+        amount: { type: Number, required: true },
+        /** YYYY-MM when the new salary took effect */
+        effectiveMonth: { type: String, required: true },
+        /** YYYY-MM-DD exact date HR selected */
+        effectiveDate: { type: String, default: '' },
+        changedAt: { type: Date, default: Date.now },
+        changedBy: { type: String, default: '' },
+      },
+    ],
+
+    /** First-recorded gross salary per month (YYYY-MM) for historical comparison. */
+    monthlySalarySnapshots: {
+      type: Map,
+      of: Number,
+      default: undefined,
+    },
+
+    // NEW: alternate Saturday grouping
+    // A → off on 1st, 3rd Saturday
+    // B → off on 2nd, 4th Saturday
+    saturdayGroup: {
+      type: String,
+      enum: ['A', 'B'],
+      default: 'A',
+    },
+
+    // Legacy shift field (kept for backward compatibility)
+    // Now accepts any shift code dynamically from Shift model
+    shift: {
+      type: String,
+      // No enum restriction - accepts any shift code from Shift model
+    },
+    // New: Reference to Shift model (for dynamic shifts)
+    shiftId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Shift',
+    },
+
+    department: String,
+    designation: String,
+
+    /** Employee joining date (YYYY-MM-DD). */
+    joinDate: { type: String, default: null },
+
+    phoneNumber: String,
+    cnic: String,
+
+    bankDetails: {
+      bankName: String,
+      accountTitle: String,
+      accountNumber: String,
+      iban: String,
+    },
+
+    profileImageBase64: String,
+    profileImageUrl: String,
+
+    /** When true, employee can Clock In / Out on web dashboard (no biometric at site). */
+    allowWebClockIn: {
+      type: Boolean,
+      default: false,
+    },
+
+    /** When false, employee cannot sign in to the employee portal (HR can toggle). */
+    portalEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
+    /** Soft-delete lifecycle — active employees appear in HR lists; archived do not. */
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'terminated'],
+      default: 'active',
+      index: true,
+    },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: String, default: null },
+    deleteReason: { type: String, default: null },
+    lastWorkingDay: { type: String, default: null }, // YYYY-MM-DD
+  },
+  { timestamps: true }
+);
+
+// 🔁 Optional: only if you want faster department+shift group reports
+EmployeeSchema.index({ department: 1, shift: 1 }, { background: true });
+
+// ✅ PERFORMANCE: Indexes for common query patterns
+// Index for department filtering
+EmployeeSchema.index({ department: 1 }, { background: true });
+
+// Index for shift filtering
+EmployeeSchema.index({ shift: 1 }, { background: true });
+
+// Index for email (for email lookups and searches)
+EmployeeSchema.index({ email: 1 }, { background: true });
+
+// Index for shiftId reference (for populating shift data)
+EmployeeSchema.index({ shiftId: 1 }, { background: true });
+
+// Text index for search (name, email, empCode)
+// This supports $text search queries (faster than regex)
+// Note: Only one text index per collection, so we include all searchable fields
+EmployeeSchema.index({ name: 'text', email: 'text', empCode: 'text' }, { background: true });
+
+// Compound index for common filter combinations (department + shift queries)
+EmployeeSchema.index({ department: 1, shift: 1, empCode: 1 }, { background: true });
+
+// Compound index for shiftId + department (for shift-based filtering with department)
+EmployeeSchema.index({ shiftId: 1, department: 1 }, { background: true });
+
+// CRITICAL: Compound index for department + empCode sorting (used in hr/employees route)
+// This index is essential for fast sorting by department then empCode
+EmployeeSchema.index({ department: 1, empCode: 1 }, { background: true });
+
+// Index for active vs archived list queries
+EmployeeSchema.index({ status: 1, empCode: 1 }, { background: true });
+
+// CRITICAL: Index for sorting by empCode (used in all list queries)
+// This index is essential for fast pagination - MUST exist for performance
+// empCode already has an index from unique: true, but we ensure it's optimized for sorting
+// The existing empCode_1 index should work, but we make sure it's there
+
+// Ensure indexes are created when model is initialized
+const Employee = mongoose.models.Employee || mongoose.model('Employee', EmployeeSchema);
+
+// NOTE: Index creation is now handled by ensureAllIndexes() in lib/db/ensureIndexes.js
+// which is called after mongoose.connect() in lib/db.js
+// This prevents "Cannot call createIndex() before initial connection" errors
+// We don't create indexes here anymore - it's handled by ensureAllIndexes() after connection
+
+export default Employee;

@@ -1,0 +1,87 @@
+# HIK Attendance System
+
+A modern attendance management system for tracking employee attendance, managing shifts, and calculating salaries.
+
+## Features
+
+- **Employee Management** - Add, edit, and manage employee information
+- **Shift Management** - Create and manage work shifts with flexible timings
+- **Daily Attendance** - Track daily attendance with automatic shift classification
+- **Monthly Reports** - View comprehensive monthly attendance with violations and salary deductions
+- **Salary Calculations** - Automatic calculation of salary deductions based on violations and leaves
+- **Role-Based Access** - Separate dashboards for HR and Employees
+- **Dark/Light Theme** - Modern UI with theme switching
+
+## Tech Stack
+
+- **Next.js 16** - React framework with App Router
+- **MongoDB** - Database with Mongoose ODM
+- **NextAuth.js** - Authentication and session management
+- **React 19** - UI library
+
+## Quick Start
+
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment**
+   
+   Create `.env.local` file:
+   ```env
+   MONGODB_URI=mongodb://localhost:27017/attendance-system
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=your-secret-key-here
+   TIMEZONE_OFFSET=+05:00
+   ```
+
+3. **Run development server**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open browser**
+   ```
+   http://localhost:3000
+   ```
+
+## Project Structure
+
+```
+next-app/
+├── app/              # Next.js pages and API routes
+├── components/       # React components
+├── lib/             # Utilities and helpers
+├── models/          # MongoDB models
+└── public/          # Static assets
+```
+
+## User Roles
+
+- **HR** - Full access to manage employees, shifts, and attendance
+- **Employee** - View own attendance and edit profile
+
+## API Endpoints
+
+All API routes follow standardized response format:
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "data": { ... },
+  "error": null
+}
+```
+
+## Development
+
+```bash
+npm run dev    # Start dev server
+npm run build  # Build for production
+npm start      # Start production server
+```
+
+## License
+
+Private and proprietary - Global Digital Solutions

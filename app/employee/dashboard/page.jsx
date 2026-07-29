@@ -1,0 +1,2973 @@
+// app/employee/dashboard/page.jsx
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { useTheme } from "@/lib/theme/ThemeContext";
+import Modal from "@/components/ui/Modal";
+import EmployeeProfileEdit from "@/components/employees/EmployeeProfileEdit";
+import { useAutoLogout } from "@/hooks/useAutoLogout";
+import AutoLogoutWarning from "@/components/ui/AutoLogoutWarning";
+import {
+  HrPageShell,
+  HrHeaderActions,
+  HrHeaderBadge,
+  GlassCard,
+  GlossOverlay,
+  getCardStyles,
+  getGlossPillStyles,
+  withLeftAccent,
+} from "@/components/glass";
+
+// Convert number to words (for amount in words)
+function numberToWords(num) {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  
+  if (num === 0) return 'Zero';
+  if (num < 20) return ones[num];
+  if (num < 100) {
+    const ten = Math.floor(num / 10);
+    const one = num % 10;
+    return tens[ten] + (one > 0 ? ' ' + ones[one] : '');
+  }
+  if (num < 1000) {
+    const hundred = Math.floor(num / 100);
+    const remainder = num % 100;
+    return ones[hundred] + ' Hundred' + (remainder > 0 ? ' ' + numberToWords(remainder) : '');
+  }
+  if (num < 100000) {
+    const thousand = Math.floor(num / 1000);
+    const remainder = num % 1000;
+    return numberToWords(thousand) + ' Thousand' + (remainder > 0 ? ' ' + numberToWords(remainder) : '');
+  }
+  if (num < 10000000) {
+    const lakh = Math.floor(num / 100000);
+    const remainder = num % 100000;
+    return numberToWords(lakh) + ' Lakh' + (remainder > 0 ? ' ' + numberToWords(remainder) : '');
+  }
+  const crore = Math.floor(num / 10000000);
+  const remainder = num % 10000000;
+  return numberToWords(crore) + ' Crore' + (remainder > 0 ? ' ' + numberToWords(remainder) : '');
+}
+
+
+// Salary Slip Component
+function SalarySlipModal({ isOpen, onClose, employeeData, month, loading }) {
+  const { colors, theme } = useTheme();
+  if (!isOpen) return null;
+  
+  if (loading) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            padding: '40px',
+            borderRadius: '12px',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: '16px', color: '#374151', marginBottom: '10px' }}>
+            Loading Salary Slip...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!employeeData) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: '#ffffff',
+            padding: '40px',
+            borderRadius: '12px',
+            textAlign: 'center',
+            maxWidth: '400px',
+          }}
+        >
+          <div style={{ fontSize: '16px', color: '#dc2626', marginBottom: '20px' }}>
+            Salary slip data not available for this month.
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6b7280',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-PK', {
+      style: 'currency',
+      currency: 'PKR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const getMonthName = (monthStr) => {
+    if (!monthStr) return '';
+    const [year, month] = monthStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { month: 'long' });
+  };
+
+  const handlePrint = async () => {
+    try {
+      // Dynamically import html2pdf.js for PDF generation
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      
+      // Get the slip content
+      const slipContent = document.querySelector('.salary-slip-container');
+      if (!slipContent) {
+        alert('Salary slip content not found');
+        return;
+      }
+
+      // Hide action buttons temporarily
+      const actions = slipContent.querySelector('.salary-slip-actions');
+      const originalDisplay = actions ? actions.style.display : '';
+      if (actions) {
+        actions.style.display = 'none';
+      }
+
+      // Wait a bit for DOM to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Get employee name for filename (sanitize for filename - replace spaces and special chars)
+      const employeeName = (employeeData.name || 'Employee').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const monthName = getMonthName(month);
+      const year = month?.split('-')[0];
+      const filename = `Salary_Slip_${employeeName}_${monthName}_${year}.pdf`;
+
+      // Configure PDF options
+      const opt = {
+        margin: [0.5, 0.5, 0.5, 0.5],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+        },
+        jsPDF: { 
+          unit: 'cm', 
+          format: 'a4', 
+          orientation: 'portrait',
+          compress: true,
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      // Generate and download PDF directly from the visible container
+      await html2pdf().set(opt).from(slipContent).save();
+      
+      // Restore action buttons
+      if (actions) {
+        actions.style.display = originalDisplay || '';
+      }
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      // Restore action buttons in case of error
+      const actions = document.querySelector('.salary-slip-actions');
+      if (actions) {
+        actions.style.display = '';
+      }
+      // Fallback to print dialog
+      alert('PDF generation failed. Opening print dialog instead.');
+      window.print();
+    }
+  };
+
+  const grossSalary = employeeData.monthlySalary || 0;
+  const netSalary = employeeData.netSalary || 0;
+  const deductionAmount = employeeData.salaryDeductAmount || 0;
+  const deductionDays = employeeData.salaryDeductDays || 0;
+
+  return (
+    <>
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .salary-slip-container,
+          .salary-slip-container * {
+            visibility: visible;
+          }
+          .salary-slip-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            background: white;
+            padding: 20px;
+            overflow: visible;
+            box-shadow: none;
+            border-radius: 0;
+          }
+          .salary-slip-actions {
+            display: none !important;
+          }
+          @page {
+            margin: 0.5cm;
+            size: A4;
+          }
+        }
+      `}</style>
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: theme === 'dark' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.75)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '15px',
+          overflow: 'hidden',
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          className="salary-slip-container"
+          style={{
+            backgroundColor: colors.background.card,
+            width: '100%',
+            maxWidth: 'min(90vw, 650px)',
+            borderRadius: '12px',
+            padding: '14px',
+            boxShadow: colors.card.shadow,
+            border: `1px solid ${colors.border.default}`,
+            position: 'relative',
+            maxHeight: '95vh',
+            overflowY: 'auto',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Actions - Compact and Responsive */}
+          <div className="salary-slip-actions" style={{ 
+            marginBottom: '12px', 
+            display: 'flex', 
+            gap: '8px', 
+            justifyContent: 'flex-end',
+            flexWrap: 'wrap',
+          }}>
+            <button
+              onClick={handlePrint}
+              style={{
+                padding: '8px 16px',
+                background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '12px',
+                whiteSpace: 'nowrap',
+                boxShadow: `0 4px 12px ${colors.primary[500]}40`,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = `0 6px 16px ${colors.primary[500]}60`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = `0 4px 12px ${colors.primary[500]}40`;
+              }}
+            >
+              📄 Download PDF
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: colors.background.tertiary,
+                color: colors.text.primary,
+                border: `1px solid ${colors.border.default}`,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '12px',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = colors.background.hover;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = colors.background.tertiary;
+              }}
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Salary Slip Content */}
+          <div style={{ fontFamily: 'Arial, sans-serif', color: colors.text.primary, backgroundColor: colors.background.card }}>
+            {/* Company Header with Logo (like dashboard) - Extra Compact & Responsive */}
+            <div className="header-section" style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: '10px 12px',
+              marginBottom: '12px',
+              borderRadius: '8px',
+              background: colors.gradient.primary,
+              color: '#f9fafb',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                <div className="header-logo" style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '999px',
+                  overflow: 'hidden',
+                  backgroundColor: 'rgba(15,23,42,0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 6px 15px rgba(15,23,42,0.6)',
+                  flexShrink: 0,
+                }}>
+                  <img
+                    src="/gds.png"
+                    alt="Global Digital Solutions logo"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+                <div className="header-text" style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: 'clamp(13px, 2vw, 15px)',
+                    fontWeight: 800,
+                    letterSpacing: 0.5,
+                    marginBottom: '2px',
+                  }}>
+                    Global Digital Solutions
+                  </div>
+                  <div style={{
+                    fontSize: 'clamp(9px, 1.5vw, 10px)',
+                    opacity: 0.9,
+                  }}>
+                    Salary Slip
+                  </div>
+                </div>
+              </div>
+              <div className="payslip-title" style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: 'clamp(10px, 1.5vw, 11px)', fontWeight: 600, color: '#ffffff', margin: 0 }}>
+                  Payslip For the Month
+                </div>
+                <div style={{ fontSize: 'clamp(9px, 1.5vw, 10px)', fontWeight: 500, color: '#ffffff', marginTop: '2px' }}>
+                  {getMonthName(month)} {month?.split('-')[0]}
+                </div>
+              </div>
+            </div>
+
+            {/* Employee Pay Summary - Extra Compact & Responsive */}
+            <div className="pay-summary" style={{ marginBottom: '12px', padding: '10px', backgroundColor: colors.background.secondary, borderRadius: '6px', border: `1px solid ${colors.border.default}` }}>
+              <h3 style={{ fontSize: 'clamp(10px, 1.5vw, 11px)', fontWeight: 600, color: colors.text.primary, marginBottom: '8px' }}>
+                Employee Pay Summary *
+              </h3>
+              <div className="pay-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                <div>
+                  <div className="pay-field" style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: 'clamp(8px, 1.2vw, 9px)', fontWeight: 500, color: colors.text.tertiary, display: 'block', marginBottom: '2px' }}>
+                      Employee Name :
+                    </label>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      fontWeight: 600,
+                      color: colors.text.primary,
+                      paddingBottom: '2px',
+                      borderBottom: `1px dashed ${colors.border.default}`
+                    }}>
+                      {employeeData.name || 'N/A'}
+                    </div>
+                  </div>
+                  <div className="pay-field" style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: 'clamp(8px, 1.2vw, 9px)', fontWeight: 500, color: '#6b7280', display: 'block', marginBottom: '2px' }}>
+                      Pay Period :
+                    </label>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      color: colors.text.primary,
+                      paddingBottom: '2px',
+                      borderBottom: `1px dashed ${colors.border.default}`
+                    }}>
+                      {getMonthName(month)} {month?.split('-')[0]}
+                    </div>
+                  </div>
+                  <div className="pay-field">
+                    <label style={{ fontSize: 'clamp(8px, 1.2vw, 9px)', fontWeight: 500, color: '#6b7280', display: 'block', marginBottom: '2px' }}>
+                      Loss of Pay Days :
+                    </label>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      fontWeight: 600,
+                      color: colors.error,
+                      paddingBottom: '2px',
+                      borderBottom: `1px dashed ${colors.border.default}`
+                    }}>
+                      {deductionDays.toFixed(3)}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div className="pay-field" style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: 'clamp(8px, 1.2vw, 9px)', fontWeight: 500, color: '#6b7280', display: 'block', marginBottom: '2px' }}>
+                      Employee ID :
+                    </label>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      fontWeight: 600,
+                      color: colors.text.primary,
+                      paddingBottom: '2px',
+                      borderBottom: `1px dashed ${colors.border.default}`
+                    }}>
+                      {employeeData.empCode || 'N/A'}
+                    </div>
+                  </div>
+                  <div className="pay-field" style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: 'clamp(8px, 1.2vw, 9px)', fontWeight: 500, color: '#6b7280', display: 'block', marginBottom: '2px' }}>
+                      Paid Days :
+                    </label>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      fontWeight: 600,
+                      color: colors.success,
+                      paddingBottom: '2px',
+                      borderBottom: `1px dashed ${colors.border.default}`
+                    }}>
+                      {(30 - deductionDays).toFixed(0)}
+                    </div>
+                  </div>
+                  <div className="pay-field">
+                    <label style={{ fontSize: 'clamp(8px, 1.2vw, 9px)', fontWeight: 500, color: '#6b7280', display: 'block', marginBottom: '2px' }}>
+                      Pay Date :
+                    </label>
+                    <div style={{ 
+                      fontSize: 'clamp(9px, 1.3vw, 10px)', 
+                      color: colors.text.primary,
+                      paddingBottom: '2px',
+                      borderBottom: `1px dashed ${colors.border.default}`
+                    }}>
+                      {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Income Details Table - Extra Compact & Responsive */}
+            <div style={{ marginBottom: '12px', overflowX: 'auto' }}>
+              <h3 style={{ fontSize: 'clamp(10px, 1.5vw, 11px)', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>
+                Income Details *
+              </h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(9px, 1.2vw, 10px)', border: '1px solid #e5e7eb', borderRadius: '6px', overflow: 'hidden', minWidth: '400px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f3f4f6' }}>
+                    <th style={{ padding: '5px', textAlign: 'left', fontWeight: 600, color: '#111827', borderRight: '1px solid #e5e7eb', width: '40%', fontSize: 'clamp(8px, 1.1vw, 9px)' }}>Earnings</th>
+                    <th style={{ padding: '5px', textAlign: 'right', fontWeight: 600, color: '#111827', borderRight: '1px solid #e5e7eb', width: '20%', fontSize: 'clamp(8px, 1.1vw, 9px)' }}>Amount</th>
+                    <th style={{ padding: '5px', textAlign: 'left', fontWeight: 600, color: '#111827', borderRight: '1px solid #e5e7eb', width: '40%', fontSize: 'clamp(8px, 1.1vw, 9px)' }}>Deductions</th>
+                    <th style={{ padding: '5px', textAlign: 'right', fontWeight: 600, color: '#111827', width: '20%', fontSize: 'clamp(8px, 1.1vw, 9px)' }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '5px', color: '#374151', borderRight: '1px solid #e5e7eb', fontSize: 'clamp(9px, 1.2vw, 10px)' }}>Basic</td>
+                    <td style={{ padding: '5px', textAlign: 'right', fontWeight: 600, color: '#111827', borderRight: '1px solid #e5e7eb', fontSize: 'clamp(9px, 1.2vw, 10px)' }}>
+                      {formatCurrency(grossSalary)}
+                    </td>
+                    <td style={{ padding: '5px', color: '#374151', borderRight: '1px solid #e5e7eb', fontSize: 'clamp(9px, 1.2vw, 10px)' }}>
+                      Salary Deductions
+                      {deductionDays > 0 && (
+                        <div style={{ fontSize: 'clamp(7px, 1vw, 8px)', color: '#6b7280', marginTop: '1px' }}>
+                          ({deductionDays.toFixed(3)} days)
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '5px', textAlign: 'right', fontWeight: 600, color: '#dc2626', fontSize: 'clamp(9px, 1.2vw, 10px)' }}>
+                      {formatCurrency(deductionAmount)}
+                    </td>
+                  </tr>
+                  <tr style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb' }}>
+                    <td style={{ padding: '6px', fontWeight: 700, fontSize: 'clamp(10px, 1.3vw, 11px)', color: '#111827', borderRight: '1px solid #e5e7eb' }}>Gross Earnings</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, fontSize: 'clamp(10px, 1.3vw, 11px)', color: '#111827', borderRight: '1px solid #e5e7eb' }}>
+                      {formatCurrency(grossSalary)}
+                    </td>
+                    <td style={{ padding: '6px', fontWeight: 700, fontSize: 'clamp(10px, 1.3vw, 11px)', color: '#111827', borderRight: '1px solid #e5e7eb' }}>Total Deductions</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, fontSize: 'clamp(10px, 1.3vw, 11px)', color: '#dc2626' }}>
+                      {formatCurrency(deductionAmount)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Total Net Payable - Extra Compact & Responsive with portal colors */}
+            <div className="net-payable" style={{ 
+              marginBottom: '12px', 
+              padding: '12px', 
+                background: colors.gradient.primary,
+              borderRadius: '8px',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+              color: '#ffffff'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ fontSize: 'clamp(11px, 1.5vw, 12px)', fontWeight: 700, color: '#ffffff', marginBottom: '3px' }}>
+                    Total Net Payable
+                  </h3>
+                  <div style={{ fontSize: 'clamp(9px, 1.2vw, 10px)', color: '#e0e7ff', opacity: 0.9 }}>
+                    Gross Earnings - Total Deductions
+                  </div>
+                </div>
+                <div className="amount" style={{ fontSize: 'clamp(18px, 2.5vw, 22px)', fontWeight: 800, color: '#ffffff', flexShrink: 0 }}>
+                  {formatCurrency(netSalary)}
+                </div>
+              </div>
+              <div className="amount-words" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                <div style={{ fontSize: 'clamp(8px, 1.1vw, 9px)', color: '#e0e7ff', marginBottom: '2px' }}>Amount in words:</div>
+                <div style={{ fontSize: 'clamp(9px, 1.2vw, 10px)', fontWeight: 600, color: '#ffffff', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                  {numberToWords(Math.floor(netSalary))} Rupees Only
+                </div>
+              </div>
+            </div>
+
+            {/* Footer - Ultra Compact */}
+            <div className="footer" style={{ marginTop: '12px', paddingTop: '10px', borderTop: '2px solid #e5e7eb', textAlign: 'center', fontSize: '9px', color: '#6b7280' }}>
+              {/* <p style={{ margin: '2px 0' }}>This is a computer-generated document and does not require a signature.</p> */}
+              <p style={{ margin: '2px 0' }}>For queries, please contact HR Department.</p>
+              <p style={{ margin: '4px 0 0 0', fontWeight: 600, color: '#111827', fontSize: '10px' }}>
+                Global Digital Solutions - Confidential Document
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// --------- SHARED HELPERS ----------
+
+function formatTimeShort(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+// same style as HR monthly screen (integer → "1", decimal → "1.007")
+function formatSalaryDays(value) {
+  if (value == null) return "0";
+  const num = Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  if (Number.isInteger(num)) return String(num);
+  return num.toFixed(3);
+}
+
+function formatCurrencyPKR(amount) {
+  const value = Number(amount || 0);
+  return new Intl.NumberFormat("en-PK", {
+    style: "currency",
+    currency: "PKR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function maskAccountNumber(accountNumber = "") {
+  const raw = String(accountNumber || "").replace(/\s+/g, "");
+  if (!raw) return "-";
+  if (raw.length <= 4) return raw;
+  return `${"*".repeat(Math.max(0, raw.length - 4))}${raw.slice(-4)}`;
+}
+
+function maskIban(iban = "") {
+  const raw = String(iban || "").replace(/\s+/g, "").toUpperCase();
+  if (!raw) return "-";
+  if (raw.length <= 8) return raw;
+  return `${raw.slice(0, 4)}${"*".repeat(Math.max(0, raw.length - 8))}${raw.slice(-4)}`;
+}
+
+// CLASSIFY CELL LIKE MONTHLY HR COLORS / STATUSES
+function classifyDayForRow(day, colors, theme = 'dark') {
+  const base = {
+    bg: colors.background.table.row,
+    fg: colors.text.table.cell,
+    badge: undefined,
+    tone: "default",
+  };
+  if (!day) return base;
+
+  const isLeaveType =
+    day.status === "Paid Leave" ||
+    day.status === "Un Paid Leave" ||
+    day.status === "Sick Leave" ||
+    day.status === "Marriage Leave" ||
+    day.status === "Death Leave" ||
+    day.status === "Maternity Leave" ||
+    day.status === "Paternity Leave" ||
+    day.status === "Hajj Leave" ||
+    day.status === "Umrah Leave";
+
+  // WFH
+  if (day.status === "Work From Home") {
+    return { 
+      bg: theme === 'dark' ? 'rgba(59, 130, 246, 0.2)' : '#dbeafe', 
+      fg: theme === 'dark' ? colors.primary[300] : colors.primary[800], 
+      badge: "WFH", 
+      tone: "info" 
+    };
+  }
+
+  if ((Number(day.awayHours) || 0) > 0) {
+    return {
+      bg: theme === 'dark' ? 'rgba(168, 85, 247, 0.22)' : '#f3e8ff',
+      fg: theme === 'dark' ? '#c4b5fd' : '#6b21a8',
+      badge: `Away ${day.awayHours}h`,
+      tone: 'away',
+    };
+  }
+
+  // No punches at all
+  if (!day.checkIn && !day.checkOut) {
+    if (day.status === "Holiday" || day.status === "Eid Holiday") {
+      return { 
+        bg: colors.background.tertiary, 
+        fg: colors.text.tertiary, 
+        badge: day.status === "Eid Holiday" ? "Eid Holiday" : "Holiday", 
+        tone: "muted" 
+      };
+    }
+    if (isLeaveType) {
+      return {
+        bg: theme === 'dark' ? 'rgba(251, 191, 36, 0.2)' : '#fef9c3',
+        fg: theme === 'dark' ? colors.warning : '#92400e',
+        badge: day.status,
+        tone: "leave",
+      };
+    }
+    if (day.status === "Absent") {
+      return {
+        bg: theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+        fg: theme === 'dark' ? colors.error : '#991b1b',
+        badge: "Absent",
+        tone: "danger",
+      };
+    }
+    if (day.status === "New Induction") {
+      return {
+        bg: colors.background.table.row,
+        fg: colors.text.table.cell,
+        badge: "New",
+        tone: "info",
+      };
+    }
+    // generic no-punch
+    return { bg: colors.background.tertiary, fg: colors.text.tertiary, tone: "muted" };
+  }
+
+  // Partial punches
+  const isPartial =
+    (day.checkIn && !day.checkOut) || (!day.checkIn && day.checkOut);
+  if (isPartial) {
+    return {
+      bg: theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+      fg: theme === 'dark' ? colors.error : '#991b1b',
+      badge: "Partial",
+      tone: "danger",
+    };
+  }
+
+  // Normal punches + late/early handling
+  const hasViolation = (day.late || day.earlyLeave) && !day.excused;
+  if (hasViolation) {
+    return {
+      bg: theme === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+      fg: theme === 'dark' ? colors.error : '#991b1b',
+      badge: "Late/Early",
+      tone: "danger",
+    };
+  }
+
+  if (day.excused && (day.late || day.earlyLeave)) {
+    return {
+      bg: theme === 'dark' ? 'rgba(34, 197, 94, 0.2)' : '#dcfce7',
+      fg: theme === 'dark' ? colors.success : '#166534',
+      badge: "Excused",
+      tone: "excused",
+    };
+  }
+
+  // On-time
+  return { 
+    bg: theme === 'dark' ? 'rgba(34, 197, 94, 0.2)' : '#dcfce7', 
+    fg: theme === 'dark' ? colors.success : '#166534', 
+    badge: "On time", 
+    tone: "ok" 
+  };
+}
+
+function formatDayDeductionRemark(remarks) {
+  if (!remarks?.length) return '';
+  return remarks
+    .map((r) => {
+      const bits = [];
+      if (r.title) bits.push(r.title);
+      if (r.detail && r.detail !== r.title) bits.push(r.detail);
+      if (r.note) bits.push(r.note);
+      if (r.amount != null && r.amount > 0) {
+        bits.push(`Deduction: ${Number(r.amount).toLocaleString('en-PK')} PKR`);
+      }
+      return bits.join(' · ');
+    })
+    .join(' | ');
+}
+
+function renderEmployeeAvatar(emp, size = 88) {
+  // Handle base64 images - they need data URI prefix
+  let src = "";
+  if (emp?.profileImageUrl) {
+    src = emp.profileImageUrl;
+  } else if (emp?.profileImageBase64) {
+    // If it already has data: prefix, use it as is, otherwise add it
+    if (emp.profileImageBase64.startsWith('data:')) {
+      src = emp.profileImageBase64;
+    } else {
+      // Assume JPEG format, add data URI prefix
+      src = `data:image/jpeg;base64,${emp.profileImageBase64}`;
+    }
+  }
+  
+  const initials =
+    (emp?.name || "")
+      .split(" ")
+      .map((p) => p[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "?";
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={emp?.name || emp?.empCode || "Employee"}
+        onError={(e) => {
+          // If image fails to load, fallback to initials
+          e.target.style.display = 'none';
+          if (e.target.nextSibling) {
+            e.target.nextSibling.style.display = 'flex';
+          }
+        }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "999px",
+          objectFit: "cover",
+          border: "2px solid rgba(148,163,184,0.7)",
+          boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
+          display: "block",
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "999px",
+        background: "linear-gradient(135deg, #2563eb, #38bdf8)",
+        color: "#f9fafb",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: size * 0.35,
+        fontWeight: 700,
+        boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+function SummaryItem({ label, value, color, hint }) {
+  const { colors } = useTheme();
+  const accent = color || colors.primary[500];
+  const cardStyle = withLeftAccent(
+    getCardStyles(colors, { padding: 0, borderRadius: 14 }),
+    accent,
+    3
+  );
+  return (
+    <div
+      style={{
+        ...cardStyle,
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        gap: 4,
+        minHeight: 72,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: colors.text.tertiary,
+          textTransform: "uppercase",
+          letterSpacing: 0.7,
+          fontWeight: 600,
+          lineHeight: 1.25,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: color || colors.text.primary,
+          letterSpacing: -0.02,
+          lineHeight: 1.1,
+        }}
+      >
+        {value}
+      </div>
+      {hint && (
+        <div
+          style={{
+            fontSize: 9,
+            color: colors.text.tertiary,
+            lineHeight: 1.35,
+          }}
+        >
+          {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --------------- PAGE -----------------
+
+export default function EmployeeDashboardPage() {
+  // ALL HOOKS MUST BE CALLED FIRST
+  const { colors, theme } = useTheme(); // Theme colors
+  const router = useRouter();
+  const { data: session, status } = useSession();
+
+  // Auto logout after 30 minutes of inactivity (with 5 minute warning)
+  const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
+    inactivityTime: 30 * 60 * 1000, // 30 minutes
+    warningTime: 5 * 60 * 1000, // 5 minutes warning
+    enabled: true,
+  });
+
+  const [month, setMonth] = useState(() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 7); // YYYY-MM
+  });
+
+  const [attendanceData, setAttendanceData] = useState(null);
+  const [employee, setEmployee] = useState(null);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [loadingEmployee, setLoadingEmployee] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  
+  // Profile edit modal state
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+
+  // Leave balance state
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [loadingLeaveBalance, setLoadingLeaveBalance] = useState(false);
+
+  const empCode = session?.user?.empCode;
+
+  // redirect if not employee
+  useEffect(() => {
+    if (status === "loading") return;
+    if (!session || session.user.role !== "EMPLOYEE") {
+      router.replace("/login?role=employee");
+    }
+  }, [session, status, router]);
+
+  // Load leave balance
+  useEffect(() => {
+    if (!empCode) return;
+
+    async function loadLeaveBalance() {
+      try {
+        setLoadingLeaveBalance(true);
+        const res = await fetch(`/api/employee/leaves?empCode=${encodeURIComponent(empCode)}`, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (res.ok) {
+          const response = await res.json();
+          if (response.success && response.data) {
+            setLeaveBalance(response.data);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load leave balance:", err);
+      } finally {
+        setLoadingLeaveBalance(false);
+      }
+    }
+    loadLeaveBalance();
+  }, [empCode]);
+
+  // optional profile API
+  useEffect(() => {
+    if (!empCode) return;
+
+    async function loadEmployeeProfile() {
+      try {
+        setLoadingEmployee(true);
+        const res = await fetch(
+          `/api/employee?empCode=${encodeURIComponent(empCode)}`,
+          {
+            method: "GET",
+            cache: "no-store",
+            credentials: "include",
+          }
+        );
+        if (!res.ok) return;
+        const response = await res.json();
+        
+        // Handle standardized API response format
+        // New format: { success, message, data: { employee }, error }
+        // Old format (backward compatibility): { employee } or { item } or { items }
+        let item = null;
+        
+        if (response.success !== undefined) {
+          // New standardized format
+          if (!response.success) {
+            console.error('Failed to load employee:', response.error || response.message);
+            return;
+          }
+          item = response.data?.employee || response.data?.item || null;
+        } else {
+          // Legacy format (backward compatibility)
+          item = response.employee || response.item || (Array.isArray(response.items) ? response.items[0] : null);
+        }
+        
+        if (item) setEmployee(item);
+      } catch (err) {
+        console.error("loadEmployeeProfile", err);
+      } finally {
+        setLoadingEmployee(false);
+      }
+    }
+
+    loadEmployeeProfile();
+  }, [empCode]);
+
+  // monthly attendance (same API as HR page) - LAZY LOADING
+  // Only load when user interacts or after a delay
+  const [attendanceDataLoaded, setAttendanceDataLoaded] = useState(false);
+  
+  useEffect(() => {
+    if (!empCode) return;
+    
+    // OPTIMIZATION: Reduced delay for faster data loading (page still renders first)
+    const timer = setTimeout(() => {
+      setAttendanceDataLoaded(true);
+    }, 200); // 200ms delay - faster perceived performance
+
+    return () => clearTimeout(timer);
+  }, [empCode]);
+
+  useEffect(() => {
+    if (!empCode || !attendanceDataLoaded) return;
+
+    async function loadMonth() {
+      try {
+        setLoadingAttendance(true);
+        setErrorMsg("");
+        const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Request failed (${res.status})`);
+        }
+        const response = await res.json();
+        
+        // Handle standardized API response format
+        // New format: { success, message, data: { employees, ... }, error }
+        // Old format (backward compatibility): { employees, ... }
+        let attendanceData = null;
+        
+        if (response.success !== undefined) {
+          // New standardized format
+          if (!response.success) {
+            throw new Error(response.error || response.message || 'Failed to load monthly attendance');
+          }
+          attendanceData = response.data || {};
+        } else {
+          // Legacy format (backward compatibility)
+          attendanceData = response;
+        }
+        
+        setAttendanceData(attendanceData);
+      } catch (err) {
+        console.error(err);
+        setErrorMsg(err.message || "Failed to load monthly attendance");
+      } finally {
+        setLoadingAttendance(false);
+      }
+    }
+
+    loadMonth();
+  }, [month, empCode, attendanceDataLoaded]);
+
+  // Handle profile update
+  async function handleProfileUpdate(formData) {
+    if (!empCode) {
+      setErrorMsg('Employee code not found');
+      return;
+    }
+
+    setSavingProfile(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const res = await fetch('/api/employee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          empCode: empCode,
+          name: formData.name,
+          email: formData.email,
+          phoneNumber: formData.phoneNumber,
+          bankDetails: formData.bankDetails,
+          profileImageBase64: formData.profileImageBase64,
+          profileImageUrl: formData.profileImageUrl,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Failed to update profile (${res.status})`);
+      }
+
+      const data = await res.json();
+      
+      // Update local employee state
+      const updatedEmployee = data?.data?.employee || data?.employee || null;
+      if (updatedEmployee) setEmployee(updatedEmployee);
+      
+      // Reload employee profile to get updated data
+      const profileRes = await fetch(
+        `/api/employee?empCode=${encodeURIComponent(empCode)}`,
+        { method: 'GET', cache: 'no-store', credentials: 'include' }
+      );
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        const freshEmployee = profileData?.data?.employee || profileData?.employee || null;
+        if (freshEmployee) {
+          setEmployee(freshEmployee);
+        }
+      }
+
+      setSuccessMsg('Profile updated successfully!');
+      setTimeout(() => {
+        setShowEditProfile(false);
+        setSuccessMsg('');
+      }, 1500);
+    } catch (err) {
+      console.error('Profile update error:', err);
+      setErrorMsg(err.message || 'Failed to update profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  // record for current empCode from monthly data
+  const myRecord = useMemo(() => {
+    if (!attendanceData?.employees || !empCode) return null;
+    return attendanceData.employees.find(
+      (emp) => String(emp.empCode) === String(empCode)
+    );
+  }, [attendanceData, empCode]);
+
+  const deductionRemarksByDate = useMemo(() => {
+    const map = new Map();
+    for (const r of myRecord?.deductionRemarks ?? []) {
+      const key = String(r.date || '').slice(0, 10);
+      if (!key) continue;
+      const list = map.get(key) || [];
+      list.push(r);
+      map.set(key, list);
+    }
+    return map;
+  }, [myRecord]);
+
+  // ---- DISPLAY FIELDS: ALWAYS TRUST myRecord FIRST ----
+  const displayName =
+    myRecord?.name || employee?.name || session?.user?.name || "Employee";
+
+  const displayDept =
+    myRecord?.department ||
+    employee?.department ||
+    session?.user?.department ||
+    "Not assigned";
+
+  const displayDesignation =
+    myRecord?.designation ||
+    employee?.designation ||
+    session?.user?.designation ||
+    "Not specified";
+
+  const displayShift =
+    myRecord?.shift || employee?.shift || session?.user?.shift || "-";
+
+  const displaySalary =
+    myRecord?.monthlySalary ??
+    employee?.monthlySalary ??
+    session?.user?.monthlySalary ??
+    0;
+  const displayNetSalary = myRecord?.netSalary ?? null;
+  const displayDeductDays = myRecord?.salaryDeductDays ?? 0;
+
+  const displayBankDetails = employee?.bankDetails || null;
+
+  const avatarSource = {
+    name: displayName,
+    empCode,
+    profileImageUrl:
+      myRecord?.profileImageUrl ||
+      myRecord?.photoUrl ||
+      employee?.profileImageUrl ||
+      session?.user?.profileImageUrl,
+    profileImageBase64:
+      myRecord?.profileImageBase64 ||
+      employee?.profileImageBase64 ||
+      session?.user?.profileImageBase64,
+  };
+
+  // Monthly summary using SAME statuses as monthly route,
+  // and trusting the API's isFuture flag
+  const monthSummary = useMemo(() => {
+    if (!myRecord?.days) return null;
+    const summary = {
+      present: 0,
+      wfh: 0,
+      holiday: 0,
+      sickLeave: 0,
+      paidLeave: 0,
+      unpaidLeave: 0,
+      absent: 0,
+    };
+
+    myRecord.days.forEach((d) => {
+      if (d.isFuture) return; // don't count future days
+      const st = d.status || "";
+
+      switch (st) {
+        case "Present":
+          summary.present += 1;
+          break;
+        case "Work From Home":
+          summary.wfh += 1;
+          break;
+        case "Holiday":
+        case "Eid Holiday":
+          summary.holiday += 1;
+          break;
+        case "Sick Leave":
+          summary.sickLeave += 1;
+          break;
+        case "Paid Leave":
+          summary.paidLeave += 1;
+          break;
+        case "Marriage Leave":
+        case "Death Leave":
+        case "Maternity Leave":
+        case "Paternity Leave":
+        case "Hajj Leave":
+        case "Umrah Leave":
+          summary.paidLeave += 1;
+          break;
+        case "Un Paid Leave":
+          summary.unpaidLeave += 1;
+          break;
+        case "Absent":
+          summary.absent += 1;
+          break;
+        default:
+          break;
+      }
+    });
+
+    return summary;
+  }, [myRecord]);
+
+  // "Today" = last non-future day from the API (company timezone)
+  const todayDayObj = useMemo(() => {
+    if (!myRecord?.days) return null;
+    const arr = myRecord.days;
+
+    for (let i = arr.length - 1; i >= 0; i -= 1) {
+      const d = arr[i];
+      if (d.isFuture) continue;
+      if (!d.status && !d.checkIn && !d.checkOut) continue;
+      return d;
+    }
+    return null;
+  }, [myRecord]);
+
+  const todayDateLabel = todayDayObj?.date
+    ? String(todayDayObj.date).slice(0, 10)
+    : "-";
+
+  const loading = loadingAttendance || status === "loading";
+
+  // Best Approach: Show salary slip button for:
+  // 1. Any past/completed month (always available - users can view historical slips)
+  // 2. Current month only on the 1st of next month (when previous month's slip becomes available)
+  const canViewSalarySlip = useMemo(() => {
+    if (!month) return false;
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    const currentDay = today.getDate();
+    
+    const [selectedYear, selectedMonth] = month.split('-').map(Number);
+    
+    // Case 1: Past year - always available (view historical slips)
+    if (selectedYear < currentYear) {
+      return true;
+    }
+    
+    // Case 2: Past month in current year - always available (view historical slips)
+    if (selectedYear === currentYear && selectedMonth < currentMonth) {
+      return true;
+    }
+    
+    // Case 3: Current month - only show on the 1st (meaning previous month's slip is now available)
+    if (selectedYear === currentYear && selectedMonth === currentMonth) {
+      // If viewing current month on the 1st, show button for previous month's slip
+      return currentDay === 1;
+    }
+    
+    // Case 4: Future month - not available
+    return false;
+  }, [month]);
+
+  // Determine which month's slip to show
+  const salarySlipMonth = useMemo(() => {
+    if (!month) return month;
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+    
+    const [selectedYear, selectedMonth] = month.split('-').map(Number);
+    
+    // If viewing current month on the 1st, show previous month's slip
+    if (selectedYear === currentYear && selectedMonth === currentMonth && currentDay === 1) {
+      let prevMonth = selectedMonth - 1;
+      let prevYear = selectedYear;
+      if (prevMonth < 1) {
+        prevMonth = 12;
+        prevYear = selectedYear - 1;
+      }
+      return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+    }
+    
+    // For past months, show the selected month's slip
+    return month;
+  }, [month]);
+
+  // Salary slip modal state
+  const [showSalarySlip, setShowSalarySlip] = useState(false);
+  
+  // Load previous month data when opening salary slip
+  const [salarySlipData, setSalarySlipData] = useState(null);
+  const [loadingSalarySlip, setLoadingSalarySlip] = useState(false);
+  /** Gross / Net hidden by default; eye toggles visibility */
+  const [showSalaryAmounts, setShowSalaryAmounts] = useState(false);
+
+  /** Web clock in/out (employees with allowWebClockIn) */
+  const [webClock, setWebClock] = useState(null);
+  const [webClockLoading, setWebClockLoading] = useState(false);
+  const [webClockPosting, setWebClockPosting] = useState(false);
+
+  const dayRowForWebClockDate = useMemo(() => {
+    if (!myRecord?.days || !webClock?.date) return null;
+    const ymd = String(webClock.date).slice(0, 10);
+    return (
+      myRecord.days.find((d) => String(d.date || "").slice(0, 10) === ymd) ?? null
+    );
+  }, [myRecord, webClock?.date]);
+
+  const suppressLegacyTodayStatus = useMemo(() => {
+    if (session?.user?.role !== "EMPLOYEE") return false;
+    const webEnabled =
+      webClock?.allowWebClockIn ||
+      !!session?.user?.allowWebClockIn ||
+      !!employee?.allowWebClockIn;
+    if (!webEnabled) return false;
+    if (!webClock || webClockLoading) return false;
+    if (webClock.allowWebClockIn === false) return false;
+    return !!webClock.shift;
+  }, [
+    session?.user?.role,
+    session?.user?.allowWebClockIn,
+    webClock,
+    webClockLoading,
+    employee?.allowWebClockIn,
+  ]);
+
+  const refreshMonthlyAttendance = useCallback(async () => {
+    if (!empCode || !attendanceDataLoaded || !month) return;
+    try {
+      setLoadingAttendance(true);
+      const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const response = await res.json();
+      let attendanceData = null;
+      if (response.success !== undefined) {
+        if (!response.success) return;
+        attendanceData = response.data || {};
+      } else {
+        attendanceData = response;
+      }
+      setAttendanceData(attendanceData);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingAttendance(false);
+    }
+  }, [empCode, attendanceDataLoaded, month]);
+
+  // Always load from DB (authoritative). Do not gate on /api/employee profile — that payload can omit allowWebClockIn.
+  useEffect(() => {
+    if (status !== "authenticated" || !empCode || session?.user?.role !== "EMPLOYEE") {
+      setWebClock(null);
+      setWebClockLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setWebClockLoading(true);
+      try {
+        const res = await fetch("/api/employee/web-clock", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const response = await res.json();
+        const payload = response.data ?? response;
+        if (!cancelled && res.ok) {
+          setWebClock(payload);
+        } else if (!cancelled) {
+          setWebClock(null);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setWebClock(null);
+      } finally {
+        if (!cancelled) setWebClockLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [empCode, status, session?.user?.role]);
+
+  async function handleWebClock(action) {
+    setWebClockPosting(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/employee/web-clock", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const response = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = response.error || response.message || `Request failed (${res.status})`;
+        throw new Error(msg);
+      }
+      const gr = await fetch("/api/employee/web-clock", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const gj = await gr.json();
+      const payload = gj.data ?? gj;
+      if (gr.ok) setWebClock(payload);
+      await refreshMonthlyAttendance();
+    } catch (err) {
+      setErrorMsg(err.message || "Clock action failed");
+    } finally {
+      setWebClockPosting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (showSalarySlip && salarySlipMonth && empCode) {
+      async function loadSalarySlipData() {
+        try {
+          setLoadingSalarySlip(true);
+          const res = await fetch(`/api/hr/monthly-attendance?month=${salarySlipMonth}`, {
+            method: "GET",
+            cache: "no-store",
+            credentials: "include",
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const mySlipRecord = json.employees?.find(
+              (emp) => String(emp.empCode) === String(empCode)
+            );
+            setSalarySlipData(mySlipRecord || null);
+          }
+        } catch (err) {
+          console.error("Failed to load salary slip data:", err);
+          setSalarySlipData(null);
+        } finally {
+          setLoadingSalarySlip(false);
+        }
+      }
+      loadSalarySlipData();
+    } else if (!showSalarySlip) {
+      // Reset data when modal closes
+      setSalarySlipData(null);
+    }
+  }, [showSalarySlip, salarySlipMonth, empCode]);
+
+  const glossPill = (variant = "neutral") => getGlossPillStyles(colors, variant);
+  // Same glass surface tokens as HR dashboard
+  const nestedGlassCard = getCardStyles(colors, { padding: 0, borderRadius: 16 });
+
+  const headerMeta = (
+    <>
+      <HrHeaderBadge>{displayName || "Employee"}</HrHeaderBadge>
+      <HrHeaderBadge>Code {empCode || "—"}</HrHeaderBadge>
+    </>
+  );
+
+  const headerSelectStyle = {
+    ...glossPill("neutral"),
+    height: 42,
+    cursor: "pointer",
+    fontWeight: 600,
+    outline: "none",
+  };
+
+  const headerActions = (
+    <HrHeaderActions>
+      <select
+        value={month.slice(0, 4)}
+        onChange={(e) => {
+          const newYear = e.target.value;
+          setMonth(`${newYear}-${month.slice(5, 7)}`);
+        }}
+        aria-label="Select Year"
+        title="Select Year"
+        style={{ ...headerSelectStyle, minWidth: 96 }}
+      >
+        {Array.from({ length: 10 }, (_, i) => {
+          const y = new Date().getFullYear() - 2 + i;
+          return (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          );
+        })}
+      </select>
+      <select
+        value={month.slice(5, 7)}
+        onChange={(e) => {
+          const newMonth = e.target.value;
+          setMonth(`${month.slice(0, 4)}-${newMonth}`);
+        }}
+        aria-label="Select Month"
+        title="Select Month"
+        style={{ ...headerSelectStyle, minWidth: 124 }}
+      >
+        {Array.from({ length: 12 }, (_, i) => {
+          const m = String(i + 1).padStart(2, "0");
+          const monthName = new Date(0, i).toLocaleString("en-US", { month: "long" });
+          return (
+            <option key={m} value={m}>
+              {monthName}
+            </option>
+          );
+        })}
+      </select>
+      <button
+        type="button"
+        onClick={() => router.push("/employee/complaints")}
+        style={glossPill("slate")}
+      >
+        Complaints
+      </button>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            await signOut({
+              redirect: false,
+              callbackUrl: "/login?role=employee",
+            });
+            router.push("/login?role=employee");
+          } catch (error) {
+            console.error("Logout error:", error);
+            router.push("/login?role=employee");
+          }
+        }}
+        style={glossPill("rose")}
+      >
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
+  // -------------- UI ------------------
+  return (
+    <HrPageShell
+      subtitle="Employee attendance & profile"
+      meta={headerMeta}
+      actions={headerActions}
+      className="employee-dashboard-container"
+    >
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        @media (max-width: 768px) {
+          .employee-top-row {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+          .employee-profile-card {
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+          }
+          .employee-profile-meta-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .employee-profile-avatar {
+            margin-bottom: 12px !important;
+          }
+          .employee-bottom-row {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .employee-summary-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
+          }
+          .employee-table-wrapper {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .employee-table {
+            min-width: 500px !important;
+            font-size: 11px !important;
+          }
+          .employee-table th,
+          .employee-table td {
+            padding: 6px 4px !important;
+            font-size: 11px !important;
+          }
+        }
+        @media (max-width: 1100px) {
+          .employee-top-row {
+            grid-template-columns: 1fr 1fr !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .employee-summary-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .employee-table {
+            min-width: 450px !important;
+            font-size: 10px !important;
+          }
+        }
+      `,
+        }}
+      />
+
+      {/* MAIN CARD */}
+      <GlassCard className="employee-main-card" style={{ marginTop: 18 }} padding={22}>
+        {errorMsg && (
+          <div
+              style={{
+                marginBottom: 12,
+                padding: "9px 11px",
+                borderRadius: 12,
+                backgroundColor: theme === 'dark' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(248,113,113,0.12)',
+                border: `1px solid ${colors.error}`,
+                color: colors.error,
+                fontSize: 12,
+              }}
+            >
+            {errorMsg}
+          </div>
+        )}
+
+        {/* TOP ROW - 2 equal cards (Profile + Compensation) */}
+        <div
+          className="employee-top-row"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+            gap: 18,
+            marginBottom: 20,
+            alignItems: "stretch",
+          }}
+        >
+          {/* PROFILE CARD */}
+          <div
+            className="employee-profile-card"
+              style={{
+                ...withLeftAccent(nestedGlassCard, colors.primary[500], 4),
+                padding: "16px 18px",
+                height: "100%",
+                minHeight: 0,
+                boxSizing: "border-box",
+                display: "flex",
+                gap: 14,
+                alignItems: "flex-start",
+                position: "relative",
+                overflow: "hidden",
+                transition: "box-shadow 0.2s ease",
+              }}
+            >
+            <GlossOverlay />
+            <div style={{ position: "relative", zIndex: 1, display: "flex", gap: 14, alignItems: "flex-start", width: "100%" }}>
+            <div className="employee-profile-avatar" style={{ flexShrink: 0, position: 'relative' }}>
+              {renderEmployeeAvatar(avatarSource, 64)}
+              <button
+                type="button"
+                onClick={() => setShowEditProfile(true)}
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  border: `2px solid ${colors.background.card}`,
+                  backgroundColor: colors.primary[500],
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 14,
+                  boxShadow: `0 2px 8px ${colors.primary[500]}40`,
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.primary[600];
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.primary[500];
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+                title="Edit Profile"
+              >
+                ✏️
+              </button>
+            </div>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.8,
+                    color: colors.text.tertiary,
+                  }}
+                >
+                  Your profile
+                </div>
+              <div
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 800,
+                    marginBottom: 2,
+                    letterSpacing: 0.2,
+                    color: colors.text.primary,
+                    lineHeight: 1.25,
+                  }}
+                >
+                  {displayName}
+                </div>
+              <div
+                className="employee-profile-meta-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "4px 12px",
+                  fontSize: 12,
+                }}
+              >
+                <div style={{ color: colors.text.secondary }}>Dept</div>
+                <div style={{ color: colors.text.primary, fontWeight: 600 }}>{displayDept}</div>
+                <div style={{ color: colors.text.secondary }}>Shift</div>
+                <div style={{ color: colors.text.primary, fontWeight: 600 }}>{displayShift}</div>
+                <div style={{ color: colors.text.secondary }}>Designation</div>
+                <div style={{ color: colors.text.primary, fontWeight: 600 }}>{displayDesignation}</div>
+              </div>
+              {!loading &&
+                !suppressLegacyTodayStatus &&
+                (todayDayObj || todayDateLabel !== "-") && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background:
+                      theme === "dark"
+                        ? "rgba(255,255,255,0.04)"
+                        : "rgba(0,0,0,0.03)",
+                    border: `1px solid ${colors.border.default}`,
+                    borderLeft: `3px solid ${colors.success}`,
+                  }}
+                >
+                  <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 0.8, color: colors.text.tertiary, marginBottom: 4 }}>
+                    Today&apos;s Status
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 10px", fontSize: 11 }}>
+                    <div style={{ color: colors.text.secondary }}>Date</div>
+                    <div style={{ color: colors.text.primary, fontWeight: 600 }}>{todayDateLabel}</div>
+                    <div style={{ color: colors.text.secondary }}>Check-in</div>
+                    <div style={{ color: colors.text.primary, fontWeight: 600 }}>{todayDayObj?.checkIn ? formatTimeShort(todayDayObj.checkIn) : '-'}</div>
+                    <div style={{ color: colors.text.secondary }}>Check-out</div>
+                    <div style={{ color: colors.text.primary, fontWeight: 600 }}>{todayDayObj?.checkOut ? formatTimeShort(todayDayObj.checkOut) : '-'}</div>
+                    <div style={{ color: colors.text.secondary }}>Status</div>
+                    <div style={{ color: todayDayObj?.status ? colors.success : colors.text.tertiary, fontWeight: 600 }}>{todayDayObj?.status || '-'}</div>
+                  </div>
+                </div>
+              )}
+              {session?.user?.role === "EMPLOYEE" &&
+                (webClock?.allowWebClockIn ||
+                  !!session?.user?.allowWebClockIn ||
+                  !!employee?.allowWebClockIn) && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    padding: "7px 9px",
+                    borderRadius: 8,
+                    background:
+                      theme === "dark"
+                        ? "rgba(59, 130, 246, 0.08)"
+                        : "rgba(59, 130, 246, 0.05)",
+                    border: `1px solid ${colors.primary[400]}40`,
+                    borderLeft: `3px solid ${
+                      webClock?.checkIn && webClock?.checkOut
+                        ? colors.success
+                        : colors.primary[500]
+                    }`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 6,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: 0.35,
+                        color: colors.text.primary,
+                        textTransform: "uppercase",
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      Clock in / out{" "}
+                      <span
+                        style={{
+                          fontWeight: 500,
+                          textTransform: "none",
+                          color: colors.text.tertiary,
+                          letterSpacing: 0,
+                        }}
+                      >
+                        · web
+                      </span>
+                    </div>
+                    {webClock?.checkIn && webClock?.checkOut && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          color: colors.success,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Done
+                      </span>
+                    )}
+                  </div>
+                  {webClockLoading ? (
+                    <div style={{ fontSize: 11, color: colors.text.secondary }}>
+                      Loading…
+                    </div>
+                  ) : webClock == null ? (
+                    <div style={{ fontSize: 11, color: colors.warning }}>
+                      Could not load clock status. Try refreshing the page. If it
+                      persists, log out and log back in.
+                    </div>
+                  ) : webClock.allowWebClockIn === false ? (
+                    <div style={{ fontSize: 11, color: colors.text.secondary }}>
+                      Web clock is not enabled for your account. In HR → Manage
+                      Employees, turn on &quot;Allow web Clock In / Out&quot;, save,
+                      then refresh or log in again.
+                    </div>
+                  ) : !webClock.shift ? (
+                    <div style={{ fontSize: 11, color: colors.warning }}>
+                      No shift assigned. Contact HR.
+                    </div>
+                  ) : (
+                    <>
+                      {(() => {
+                        const row = dayRowForWebClockDate;
+                        const inIso = row?.checkIn || webClock.checkIn;
+                        const outIso = row?.checkOut || webClock.checkOut;
+                        const statusText =
+                          row?.status ||
+                          (webClock.checkIn && webClock.checkOut
+                            ? "Present"
+                            : webClock.checkIn
+                              ? "Clocked in"
+                              : "—");
+                        return (
+                          <>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                                gap: "3px 6px",
+                                fontSize: 10,
+                                marginBottom: 6,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  padding: "1px 6px",
+                                  borderRadius: 4,
+                                  background:
+                                    theme === "dark"
+                                      ? "rgba(255,255,255,0.06)"
+                                      : "rgba(15,23,42,0.05)",
+                                  color: colors.text.secondary,
+                                }}
+                              >
+                                {webClock.date}
+                              </span>
+                              <span
+                                style={{
+                                  fontWeight: 700,
+                                  padding: "1px 6px",
+                                  borderRadius: 4,
+                                  background:
+                                    theme === "dark"
+                                      ? "rgba(59,130,246,0.18)"
+                                      : "rgba(59,130,246,0.1)",
+                                  color: colors.primary[600],
+                                }}
+                              >
+                                {webClock.shift}
+                              </span>
+                              <span style={{ color: colors.text.tertiary }}>
+                                ·
+                              </span>
+                              <span style={{ color: colors.text.secondary }}>
+                                In{" "}
+                                <strong
+                                  style={{
+                                    color: colors.text.primary,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {inIso ? formatTimeShort(inIso) : "—"}
+                                </strong>
+                              </span>
+                              <span style={{ color: colors.text.tertiary }}>
+                                ·
+                              </span>
+                              <span style={{ color: colors.text.secondary }}>
+                                Out{" "}
+                                <strong
+                                  style={{
+                                    color: colors.text.primary,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  {outIso ? formatTimeShort(outIso) : "—"}
+                                </strong>
+                              </span>
+                              <span style={{ color: colors.text.tertiary }}>
+                                ·
+                              </span>
+                              <span
+                                style={{
+                                  fontWeight: 600,
+                                  color: row?.status
+                                    ? colors.success
+                                    : colors.text.secondary,
+                                }}
+                              >
+                                {statusText}
+                              </span>
+                            </div>
+                            {row &&
+                              (row.late ||
+                                row.earlyLeave ||
+                                row.lateExcused ||
+                                row.earlyExcused) && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 4,
+                                    marginBottom: 5,
+                                  }}
+                                >
+                                  {(row.lateExcused || row.late) && (
+                                    <span
+                                      style={{
+                                        fontSize: 9,
+                                        fontWeight: 600,
+                                        padding: "1px 6px",
+                                        borderRadius: 4,
+                                        background: row.lateExcused
+                                          ? theme === "dark"
+                                            ? "rgba(34,197,94,0.2)"
+                                            : "rgba(34,197,94,0.12)"
+                                          : theme === "dark"
+                                            ? "rgba(251,191,36,0.2)"
+                                            : "rgba(251,191,36,0.18)",
+                                        color: row.lateExcused
+                                          ? colors.success
+                                          : colors.warning,
+                                      }}
+                                    >
+                                      {row.lateExcused ? "Late excused" : "Late"}
+                                    </span>
+                                  )}
+                                  {(row.earlyExcused || row.earlyLeave) && (
+                                    <span
+                                      style={{
+                                        fontSize: 9,
+                                        fontWeight: 600,
+                                        padding: "1px 6px",
+                                        borderRadius: 4,
+                                        background: row.earlyExcused
+                                          ? theme === "dark"
+                                            ? "rgba(34,197,94,0.2)"
+                                            : "rgba(34,197,94,0.12)"
+                                          : theme === "dark"
+                                            ? "rgba(249,115,22,0.22)"
+                                            : "rgba(249,115,22,0.14)",
+                                        color: row.earlyExcused
+                                          ? colors.success
+                                          : colors.accent.orange,
+                                      }}
+                                    >
+                                      {row.earlyExcused
+                                        ? "Early leave excused"
+                                        : "Early leave"}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                          </>
+                        );
+                      })()}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          disabled={
+                            webClockPosting ||
+                            !!webClock.checkIn ||
+                            !webClock.shift
+                          }
+                          onClick={() => handleWebClock("in")}
+                          style={{
+                            flex: "none",
+                            padding: "5px 12px",
+                            borderRadius: 6,
+                            border: "none",
+                            backgroundColor: colors.primary[500],
+                            color: "#fff",
+                            fontWeight: 600,
+                            fontSize: 11,
+                            cursor:
+                              webClockPosting || webClock.checkIn
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity: webClockPosting || webClock.checkIn ? 0.55 : 1,
+                          }}
+                        >
+                          Clock In
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            webClockPosting ||
+                            !webClock.checkIn ||
+                            !!webClock.checkOut
+                          }
+                          onClick={() => handleWebClock("out")}
+                          style={{
+                            flex: "none",
+                            padding: "5px 12px",
+                            borderRadius: 6,
+                            border: `1px solid ${colors.border.default}`,
+                            backgroundColor: colors.background.secondary,
+                            color: colors.text.primary,
+                            fontWeight: 600,
+                            fontSize: 11,
+                            cursor:
+                              webClockPosting ||
+                              !webClock.checkIn ||
+                              webClock.checkOut
+                                ? "not-allowed"
+                                : "pointer",
+                            opacity:
+                              webClockPosting ||
+                              !webClock.checkIn ||
+                              webClock.checkOut
+                                ? 0.55
+                                : 1,
+                          }}
+                        >
+                          Clock Out
+                        </button>
+                      </div>
+                      {webClock.checkIn && webClock.checkOut && (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: colors.text.tertiary,
+                            marginTop: 4,
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          Totals below refresh with the month table.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {loadingEmployee && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: colors.text.secondary,
+                    marginTop: 8,
+                  }}
+                >
+                  Loading profile…
+                </div>
+              )}
+            </div>
+            </div>
+          </div>
+
+          {/* COMPENSATION CARD */}
+          <div
+            className="employee-comp-card"
+            style={{
+              ...withLeftAccent(nestedGlassCard, colors.success, 4),
+              padding: "16px 18px",
+              height: "100%",
+              minHeight: 0,
+              boxSizing: "border-box",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              position: "relative",
+              overflow: "hidden",
+              transition: "box-shadow 0.2s ease",
+            }}
+          >
+            <GlossOverlay />
+            <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 8, height: "100%" }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+                color: colors.text.tertiary,
+              }}
+            >
+              Compensation &amp; bank
+            </div>
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                background:
+                  theme === "dark"
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(0,0,0,0.02)",
+                border: `1px solid ${colors.border.default}`,
+                borderLeft: `3px solid ${colors.success}`,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.75,
+                    color: colors.text.tertiary,
+                  }}
+                >
+                  Pay summary
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSalaryAmounts((v) => !v)}
+                  aria-label={showSalaryAmounts ? "Hide salary amounts" : "Show salary amounts"}
+                  title={showSalaryAmounts ? "Hide Gross & Net" : "Show Gross & Net"}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 4,
+                    border: "none",
+                    borderRadius: 8,
+                    background:
+                      theme === "dark"
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(15,23,42,0.05)",
+                    color: colors.text.secondary,
+                    cursor: "pointer",
+                    lineHeight: 0,
+                    flexShrink: 0,
+                  }}
+                >
+                  {showSalaryAmounts ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width={18} height={18} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "3px 10px",
+                }}
+              >
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Gross</div>
+                <div style={{ fontSize: 12, color: colors.success, fontWeight: 600, letterSpacing: showSalaryAmounts ? "normal" : "0.12em" }}>
+                  {showSalaryAmounts ? formatCurrencyPKR(displaySalary) : "Rs •••••••"}
+                </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Net</div>
+                <div style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600, letterSpacing: showSalaryAmounts ? "normal" : "0.12em" }}>
+                  {showSalaryAmounts ? (displayNetSalary != null ? formatCurrencyPKR(displayNetSalary) : "-") : "Rs •••••••"}
+                </div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Deduct days</div>
+                <div style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600 }}>{formatSalaryDays(displayDeductDays)}</div>
+                <div style={{ fontSize: 12, color: colors.text.secondary }}>Slip</div>
+                <div style={{ fontSize: 12, color: colors.text.primary, fontWeight: 600 }}>{canViewSalarySlip ? "Available" : "Pending"}</div>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                background:
+                  theme === "dark"
+                    ? "rgba(255,255,255,0.04)"
+                    : colors.background.secondary,
+                border: `1px solid ${colors.border.default}`,
+                borderLeft: `3px solid ${colors.primary[500]}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.75,
+                  color: colors.text.tertiary,
+                  marginBottom: 6,
+                  fontWeight: 700,
+                }}
+              >
+                Bank details
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 1.45 }}>
+                {displayBankDetails?.bankName || "-"} · {displayBankDetails?.accountTitle || "-"}
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 1.45 }}>
+                A/C: <strong style={{ color: colors.text.primary }}>{maskAccountNumber(displayBankDetails?.accountNumber)}</strong>
+              </div>
+              <div style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 1.45 }}>
+                IBAN: <strong style={{ color: colors.text.primary }}>{maskIban(displayBankDetails?.iban)}</strong>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                marginTop: "auto",
+                paddingTop: 4,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setShowEditProfile(true)}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${colors.primary[500]}`,
+                  backgroundColor: colors.primary[500],
+                  color: "#ffffff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: `0 4px 14px ${colors.primary[500]}35`,
+                }}
+              >
+                Update Bank
+              </button>
+              <button
+                type="button"
+                disabled={!canViewSalarySlip || !myRecord}
+                onClick={() => canViewSalarySlip && myRecord && setShowSalarySlip(true)}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${colors.border.default}`,
+                  backgroundColor: canViewSalarySlip && myRecord ? colors.background.tertiary : colors.background.secondary,
+                  color: colors.text.primary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: canViewSalarySlip && myRecord ? "pointer" : "not-allowed",
+                  opacity: canViewSalarySlip && myRecord ? 1 : 0.6,
+                }}
+              >
+                Salary Slip
+              </button>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM ROW */}
+        <div
+          className="employee-bottom-row"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 2.1fr)",
+            gap: 20,
+          }}
+        >
+          {/* SUMMARY */}
+          <div
+              style={{
+                ...withLeftAccent(
+                  { ...nestedGlassCard, borderRadius: 18 },
+                  colors.primary[500],
+                  3
+                ),
+                padding: "18px 18px 16px",
+                borderTopWidth: "3px",
+                borderTopStyle: "solid",
+                borderTopColor: colors.primary[500],
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <GlossOverlay />
+              <div style={{ position: "relative", zIndex: 1 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.75,
+                  textTransform: "uppercase",
+                  color: colors.text.tertiary,
+                  marginBottom: 4,
+                }}
+              >
+                Attendance
+              </div>
+              <div
+                style={{
+                  fontSize: 17,
+                  marginBottom: 14,
+                  fontWeight: 800,
+                  color: colors.text.primary,
+                  letterSpacing: -0.02,
+                }}
+              >
+                Monthly summary
+              </div>
+              {loading ? (
+                <div style={{ fontSize: 12.5, color: colors.text.tertiary }}>
+                  Loading monthly attendance…
+                </div>
+              ) : !myRecord ? (
+                <div style={{ fontSize: 12.5, color: colors.text.tertiary }}>
+                  No data found for this month.
+                </div>
+              ) : (
+              <>
+                <div
+                  className="employee-summary-grid"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+                    gap: 10,
+                    fontSize: 12,
+                  }}
+                >
+                  <SummaryItem
+                    label="Present"
+                    value={monthSummary?.present ?? 0}
+                    color="#22c55e"
+                  />
+                  <SummaryItem
+                    label="WFH"
+                    value={monthSummary?.wfh ?? 0}
+                    color="#38bdf8"
+                  />
+                  <SummaryItem
+                    label="Holidays"
+                    value={monthSummary?.holiday ?? 0}
+                    color="#9ca3af"
+                  />
+                  <SummaryItem
+                    label="Sick Leave"
+                    value={monthSummary?.sickLeave ?? 0}
+                    color="#f97373"
+                  />
+                  <SummaryItem
+                    label="Paid Leave"
+                    value={monthSummary?.paidLeave ?? 0}
+                    color="#a3e635"
+                  />
+                  <SummaryItem
+                    label="Un Paid Leave"
+                    value={monthSummary?.unpaidLeave ?? 0}
+                    color="#fb7185"
+                  />
+                  <SummaryItem
+                    label="Absent"
+                    value={monthSummary?.absent ?? 0}
+                    color="#f97373"
+                  />
+                  <SummaryItem
+                    label="Late Violations"
+                    value={myRecord?.lateViolationCount ?? myRecord?.lateCount ?? 0}
+                    color="#f97373"
+                    hint="Counted separately for deduction"
+                  />
+                  <SummaryItem
+                    label="Early Violations"
+                    value={myRecord?.earlyViolationCount ?? myRecord?.earlyCount ?? 0}
+                    color="#f97373"
+                    hint="Counted separately for deduction"
+                  />
+                  <SummaryItem
+                    label="Salary deduct (days)"
+                    value={formatSalaryDays(myRecord?.salaryDeductDays ?? 0)}
+                    color="#e5e7eb"
+                    
+                  />
+                  
+                  {/* Quarter leaves: taken and left for current quarter + full year */}
+                  {leaveBalance && leaveBalance.summary && (
+                    <>
+                      {leaveBalance.summary.currentQuarter ? (
+                        <>
+                          <SummaryItem
+                            label="Paid leave taken (this quarter)"
+                            value={leaveBalance.summary.currentQuarter.taken ?? 0}
+                            color="#a3e635"
+                            hint={leaveBalance.summary.currentQuarter.label ?? "Current quarter"}
+                          />
+                          <SummaryItem
+                            label="Paid leave left (this quarter)"
+                            value={leaveBalance.summary.currentQuarter.remaining ?? leaveBalance.summary.leavesPerQuarter ?? 6}
+                            color="#22c55e"
+                            hint={`${leaveBalance.summary.currentQuarter.remaining ?? 0} of ${leaveBalance.summary.currentQuarter.allocated ?? 6} `}
+                          />
+                        </>
+                      ) : leaveBalance.summary?.quarters?.length > 0 ? (
+                        <>
+                          <SummaryItem
+                            label="Paid leave taken (this quarter)"
+                            value={leaveBalance.summary.quarters.find((q) => q.quarter === Math.ceil((new Date().getMonth() + 1) / 3))?.taken ?? 0}
+                            color="#a3e635"
+                            hint="Current quarter"
+                          />
+                          <SummaryItem
+                            label="Paid leave left (this quarter)"
+                            value={leaveBalance.summary.quarters.find((q) => q.quarter === Math.ceil((new Date().getMonth() + 1) / 3))?.remaining ?? leaveBalance.summary.leavesPerQuarter ?? 6}
+                            color="#22c55e"
+                            hint="Per quarter · no carry-forward"
+                          />
+                        </>
+                      ) : (
+                        <SummaryItem
+                          label="Paid leave this quarter"
+                          value={leaveBalance.summary.leavesPerQuarter ?? 6}
+                          color="#a3e635"
+                          hint="Q1–Q4 (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec)"
+                        />
+                      )}
+                      {/* Quarter summary for the year: taken / allocated per quarter */}
+                      {leaveBalance.summary.quarters?.length === 4 && (
+                        <div
+                          style={{
+                            gridColumn: "1 / -1",
+                            marginTop: 8,
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            background: "rgba(34, 197, 94, 0.08)",
+                            border: "1px solid rgba(34, 197, 94, 0.2)",
+                            fontSize: 12,
+                            color: colors.text?.secondary ?? "#6b7280",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, marginBottom: 6, color: colors.text?.primary ?? "#111827" }}>
+                            Quarter leaves ({leaveBalance.year ?? new Date().getFullYear()})
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 16px" }}>
+                            {leaveBalance.summary.quarters.map((q) => (
+                              <span key={q.quarter}>
+                                <strong>{q.label ?? `Q${q.quarter}`}</strong>: {q.taken ?? 0} taken, {q.remaining ?? 0} left (of {q.allocated ?? 6})
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 14,
+                    borderTop: `1px solid ${colors.border.default}`,
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                    color: colors.text.muted,
+                  }}
+                >
+                  Salary deduction and statuses use the same rules as the HR
+                  monthly view. Future days show as{" "}
+                  <span style={{ color: colors.warning, fontWeight: 700 }}>
+                    Upcoming
+                  </span>{" "}
+                  and are not counted yet.
+                </div>
+              </>
+            )}
+              </div>
+          </div>
+
+          {/* DAY-BY-DAY ROW */}
+          <div>
+            <div
+                style={{
+                  ...withLeftAccent(
+                    { ...nestedGlassCard, borderRadius: 18 },
+                    colors.secondary[500],
+                    3
+                  ),
+                  padding: "18px 18px 14px",
+                  borderTopWidth: "3px",
+                  borderTopStyle: "solid",
+                  borderTopColor: colors.secondary[500],
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <GlossOverlay />
+                <div style={{ position: "relative", zIndex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: 0.75,
+                    textTransform: "uppercase",
+                    color: colors.text.tertiary,
+                    marginBottom: 4,
+                  }}
+                >
+                  Calendar
+                </div>
+                <div
+                  style={{
+                    fontSize: 17,
+                    marginBottom: 12,
+                    fontWeight: 800,
+                    color: colors.text.primary,
+                    letterSpacing: -0.02,
+                  }}
+                >
+                  Day-by-day attendance
+                </div>
+                <div
+                  className="employee-table-wrapper"
+                  style={{
+                    maxHeight: "440px",
+                    overflowY: "auto",
+                    overflowX: "auto",
+                    borderRadius: 12,
+                    border: `1px solid ${colors.border.table}`,
+                    backgroundColor: colors.background.table.row,
+                  }}
+                >
+                  <table
+                  className="employee-table"
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 11.5,
+                    minWidth: 500,
+                    backgroundColor: colors.background.table.row,
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: colors.background.table.header }}>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Day
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Status
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        In / Out
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Flags
+                      </th>
+                      <th
+                        style={{
+                          padding: "7px 8px",
+                          textAlign: "left",
+                          borderBottom: `1px solid ${colors.border.table}`,
+                          fontWeight: 600,
+                          color: colors.text.table.header,
+                        }}
+                      >
+                        Remark
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!myRecord?.days || myRecord.days.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          style={{
+                            padding: "9px 10px",
+                            textAlign: "center",
+                            color: colors.text.tertiary,
+                          }}
+                        >
+                          No attendance records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      myRecord.days.map((d, idx) => {
+                        const dayNo = idx + 1;
+                        const isFuture = !!d.isFuture;
+                        const isToday =
+                          todayDayObj && d.date === todayDayObj.date;
+
+                        const classInfo = classifyDayForRow(d, colors, theme);
+
+                        let statusLabel = d.status || "—";
+                        let inTime = d.checkIn
+                          ? formatTimeShort(d.checkIn)
+                          : "-";
+                        let outTime = d.checkOut
+                          ? formatTimeShort(d.checkOut)
+                          : "-";
+                        let inOutLabel = `${inTime} / ${outTime}`;
+                        const isPartial =
+                          (d.checkIn && !d.checkOut) ||
+                          (!d.checkIn && d.checkOut);
+
+                        // match monthly rules for in/out text
+                        if (!d.checkIn && !d.checkOut) {
+                          if (d.status === "Holiday" || d.status === "Eid Holiday") inOutLabel = "- / -";
+                          else if (
+                            d.status === "Paid Leave" ||
+                            d.status === "Un Paid Leave" ||
+                            d.status === "Sick Leave" ||
+                            d.status === "Marriage Leave" ||
+                            d.status === "Death Leave" ||
+                            d.status === "Maternity Leave" ||
+                            d.status === "Paternity Leave" ||
+                            d.status === "Hajj Leave" ||
+                            d.status === "Umrah Leave"
+                          )
+                            inOutLabel = d.status;
+                          else if (d.status === "Absent")
+                            inOutLabel = "No punch";
+                          else if (d.status === "Work From Home")
+                            inOutLabel = "WFH";
+                          else if (d.status === "New Induction")
+                            inOutLabel = "New Induction";
+                        } else if (d.checkIn && !d.checkOut) {
+                          inOutLabel = `${formatTimeShort(
+                            d.checkIn
+                          )} / Missing Check-Out`;
+                        } else if (!d.checkIn && d.checkOut) {
+                          inOutLabel = `Missing Check-In / ${formatTimeShort(
+                            d.checkOut
+                          )}`;
+                        }
+
+                        if (isFuture) {
+                          statusLabel = "Upcoming";
+                          inOutLabel = "- / -";
+                        }
+
+                        const flags = [];
+                        if (!isFuture) {
+                          if (d.late) flags.push("Late");
+                          if (d.earlyLeave || isPartial) flags.push("Early");
+                          if (d.excused) flags.push("Excused");
+                          if ((Number(d.awayHours) || 0) > 0) {
+                            flags.push(`Away ${d.awayHours}h`);
+                          }
+                        }
+
+                        const dateKey = String(d.date || '').slice(0, 10);
+                        const dayRemark =
+                          formatDayDeductionRemark(deductionRemarksByDate.get(dateKey)) ||
+                          d.awayNote ||
+                          d.reason ||
+                          '';
+
+                        return (
+                          <tr
+                            key={d.date || idx}
+                            style={{
+                              backgroundColor: isFuture
+                                ? colors.background.primary
+                                : classInfo.bg,
+                            }}
+                          >
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: isToday ? colors.success : colors.text.table.cell,
+                                fontWeight: isToday ? 700 : 500,
+                              }}
+                            >
+                              {dayNo}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: isFuture ? colors.warning : classInfo.fg,
+                                fontStyle: isFuture ? "italic" : "normal",
+                              }}
+                            >
+                              {statusLabel}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: colors.text.tertiary,
+                              }}
+                            >
+                              {inOutLabel}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: isFuture ? colors.text.tertiary : colors.error,
+                              }}
+                            >
+                              {flags.length ? flags.join(", ") : "—"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "6px 8px",
+                                borderBottom: `1px solid ${colors.border.table}`,
+                                color: colors.text.tertiary,
+                                fontSize: 10.5,
+                                maxWidth: 160,
+                              }}
+                            >
+                              {dayRemark || "—"}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+                </div>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* Salary Slip Modal */}
+      <SalarySlipModal
+        isOpen={showSalarySlip}
+        onClose={() => {
+          setShowSalarySlip(false);
+          setSalarySlipData(null);
+        }}
+        employeeData={salarySlipData || myRecord}
+        month={salarySlipMonth || month}
+        loading={loadingSalarySlip}
+      />
+
+      {/* Edit Profile Modal */}
+      <Modal
+        isOpen={showEditProfile}
+        onClose={() => {
+          setShowEditProfile(false);
+          setErrorMsg('');
+          setSuccessMsg('');
+        }}
+        title="Edit Profile"
+        size="medium"
+      >
+        {successMsg && (
+          <div style={{
+            marginBottom: 16,
+            padding: '12px 16px',
+            borderRadius: 8,
+            backgroundColor: theme === 'dark' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
+            border: `1px solid ${colors.success}`,
+            color: colors.success,
+            fontSize: 13,
+            fontWeight: 500,
+          }}>
+            {successMsg}
+          </div>
+        )}
+        {errorMsg && (
+          <div style={{
+            marginBottom: 16,
+            padding: '12px 16px',
+            borderRadius: 8,
+            backgroundColor: theme === 'dark' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(248,113,113,0.12)',
+            border: `1px solid ${colors.error}`,
+            color: colors.error,
+            fontSize: 13,
+            fontWeight: 500,
+          }}>
+            {errorMsg}
+          </div>
+        )}
+        <EmployeeProfileEdit
+          employee={employee || myRecord}
+          onSave={handleProfileUpdate}
+          onCancel={() => {
+            setShowEditProfile(false);
+            setErrorMsg('');
+            setSuccessMsg('');
+          }}
+          loading={savingProfile}
+        />
+      </Modal>
+
+      {/* Auto Logout Warning */}
+      {showWarning && (
+        <AutoLogoutWarning
+          timeRemaining={timeRemaining}
+          onStayLoggedIn={handleStayLoggedIn}
+          onLogout={autoLogout}
+        />
+      )}
+    </HrPageShell>
+  );
+}

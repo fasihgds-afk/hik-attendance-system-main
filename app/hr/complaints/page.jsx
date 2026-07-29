@@ -1,0 +1,706 @@
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
+import { useTheme } from '@/lib/theme/ThemeContext';
+import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
+import { useAutoLogout } from '@/hooks/useAutoLogout';
+import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
+import { usePermissions } from '@/hooks/usePermissions';
+import { api } from '@/lib/api/client';
+import PaginationControls from '@/components/common/PaginationControls';
+
+const STATUS_LABELS = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
+};
+
+const EMPTY_SUMMARY = { open: 0, in_progress: 0, resolved: 0, closed: 0, total: 0 };
+
+function formatDate(d) {
+  if (!d) return '-';
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function getStatusTone(status, colors, primary, successColor, warningColor) {
+  if (status === 'resolved') return { color: successColor, bg: `${successColor}22` };
+  if (status === 'closed') return { color: '#64748b', bg: 'rgba(100,116,139,0.2)' };
+  if (status === 'in_progress') return { color: warningColor, bg: `${warningColor}22` };
+  return { color: primary, bg: `${primary}22` };
+}
+
+export default function HrComplaintsPage() {
+  const { colors, theme } = useTheme();
+  const router = useRouter();
+  const { session, status, canView, canUpdate } = usePermissions('complaints');
+
+  const { showWarning, timeRemaining, handleStayLoggedIn, handleLogout: autoLogout } = useAutoLogout({
+    inactivityTime: 30 * 60 * 1000,
+    warningTime: 5 * 60 * 1000,
+    enabled: true,
+  });
+
+  const [complaints, setComplaints] = useState([]);
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [loading, setLoading] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterPeriod, setFilterPeriod] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
+  const [viewId, setViewId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [respondForm, setRespondForm] = useState({ status: '', hrResponse: '', internalNote: '' });
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState({ type: '', text: '' });
+  const skipSearchPageReset = useRef(true);
+
+  useEffect(() => {
+    if (status === 'loading') return;
+    const role = String(session?.user?.role || '').toUpperCase();
+    if (status === 'unauthenticated' || (session && !['HR', 'ADMIN'].includes(role))) {
+      router.replace('/login?role=hr');
+      return;
+    }
+  }, [session, status, router]);
+
+  function showToast(type, text) {
+    setToast({ type, text });
+    setTimeout(() => setToast((prev) => (prev.text === text ? { type: '', text: '' } : prev)), 3000);
+  }
+
+  const loadComplaints = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', String(currentPage));
+      params.set('limit', '50');
+      if (filterStatus) params.set('status', filterStatus);
+      if (filterPeriod && filterPeriod !== 'all') params.set('period', filterPeriod);
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+
+      const data = await api.get(`/api/hr/complaints?${params.toString()}`, {
+        requestKey: 'hr-complaints-list',
+      });
+
+      if (data.aborted) return;
+
+      if (data.success) {
+        setComplaints(data.data?.complaints || []);
+        setSummary({ ...EMPTY_SUMMARY, ...(data.data?.summary || {}) });
+        setPagination(
+          data.meta?.pagination ||
+            data.data?.pagination || { page: currentPage, limit: 50, total: 0, totalPages: 1 }
+        );
+      } else if (!silent) {
+        showToast('error', data.error || 'Failed to load complaints');
+      }
+    } catch (err) {
+      if (!silent) showToast('error', 'Failed to load complaints');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [currentPage, filterStatus, filterPeriod, searchQuery]);
+
+  const isHrPortal = ['HR', 'ADMIN'].includes(String(session?.user?.role || '').toUpperCase());
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+      if (skipSearchPageReset.current) {
+        skipSearchPageReset.current = false;
+      } else {
+        setCurrentPage(1);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (isHrPortal && canView) loadComplaints();
+  }, [isHrPortal, canView, loadComplaints]);
+
+  useEffect(() => {
+    if (!isHrPortal || !canView) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadComplaints(true);
+    }, 45000);
+    return () => clearInterval(interval);
+  }, [isHrPortal, canView, loadComplaints]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && isHrPortal && canView) loadComplaints(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [isHrPortal, canView, loadComplaints]);
+
+  useEffect(() => {
+    const id = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('id');
+    if (id) setViewId(id);
+  }, []);
+
+  async function loadDetail(id) {
+    if (!id) return;
+    try {
+      const data = await api.get(`/api/hr/complaints/${id}`, {
+        requestKey: `hr-complaint-detail-${id}`,
+      });
+      if (data.aborted) return;
+      if (data.success) {
+        const c = data.data?.complaint || null;
+        setDetail(c);
+        setRespondForm({
+          status: c?.status || '',
+          hrResponse: c?.hrResponse || '',
+          internalNote: c?.internalNote || '',
+        });
+      } else setDetail(null);
+    } catch (_) {
+      setDetail(null);
+    }
+  }
+
+  useEffect(() => {
+    if (viewId) loadDetail(viewId);
+    else setDetail(null);
+  }, [viewId]);
+
+  async function handleSaveResponse(e) {
+    e.preventDefault();
+    if (!viewId || !canUpdate) return;
+    setSaving(true);
+    try {
+      const data = await api.patch(`/api/hr/complaints/${viewId}`, {
+        status: respondForm.status || undefined,
+        hrResponse: respondForm.hrResponse,
+        internalNote: respondForm.internalNote,
+        hrRespondedBy: session?.user?.name || session?.user?.email || 'HR',
+      });
+      if (data.success) {
+        showToast('success', 'Response saved');
+        setDetail(data.data?.complaint || detail);
+        loadComplaints();
+        setViewId(null);
+        setDetail(null);
+      } else {
+        showToast('error', data.error || 'Failed to save response');
+      }
+    } catch (err) {
+      showToast('error', 'Failed to save response');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await signOut({ redirect: false, callbackUrl: '/login?role=hr' });
+      router.push('/login?role=hr');
+    } catch (_) {
+      router.push('/login?role=hr');
+    }
+  };
+
+  const bgCard = colors.background?.card ?? colors.background?.tertiary;
+  const border = colors.border?.default;
+  const textPrimary = colors.text?.primary;
+  const textSecondary = colors.text?.secondary;
+  const textTertiary = colors.text?.tertiary ?? textSecondary;
+  const primary = typeof colors.primary === 'object' ? colors.primary?.[500] : colors.primary;
+  const successColor = colors.success ?? (typeof colors.secondary === 'object' ? colors.secondary?.[600] : colors.secondary) ?? '#22c55e';
+  const warningColor = colors.warning ?? colors.accent?.yellow ?? '#fbbf24';
+  const inputBg = colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc');
+
+  const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
+
+  function setStatusFilter(next) {
+    setFilterStatus((prev) => (prev === next ? '' : next));
+    setCurrentPage(1);
+  }
+
+  const summaryCards = [
+    {
+      id: '',
+      label: 'Total',
+      value: summary.total,
+      tone: textPrimary,
+      bg: theme === 'dark' ? 'rgba(148,163,184,0.08)' : 'rgba(148,163,184,0.1)',
+      borderColor: border,
+    },
+    {
+      id: 'open',
+      label: 'Open',
+      value: summary.open,
+      tone: primary,
+      bg: `${primary}14`,
+      borderColor: `${primary}55`,
+    },
+    {
+      id: 'in_progress',
+      label: 'In Progress',
+      value: summary.in_progress,
+      tone: warningColor,
+      bg: `${warningColor}14`,
+      borderColor: `${warningColor}55`,
+    },
+    {
+      id: 'resolved',
+      label: 'Resolved',
+      value: summary.resolved,
+      tone: successColor,
+      bg: `${successColor}14`,
+      borderColor: `${successColor}55`,
+    },
+    {
+      id: 'closed',
+      label: 'Closed',
+      value: summary.closed,
+      tone: '#64748b',
+      bg: 'rgba(100,116,139,0.12)',
+      borderColor: 'rgba(100,116,139,0.4)',
+    },
+  ];
+
+  const controlStyle = {
+    padding: '10px 14px',
+    borderRadius: 10,
+    border: `1px solid ${border}`,
+    background: inputBg,
+    color: textPrimary,
+    fontSize: 13,
+    fontWeight: 500,
+  };
+
+  const pageSubtitle = canUpdate
+    ? 'View and respond to employee complaints'
+    : 'View employee complaints (read only)';
+
+  const headerActions = (
+    <HrHeaderActions>
+      <button type="button" onClick={() => router.push('/hr/dashboard')} className="complaints-button" style={glossPill('neutral')}>
+        Dashboard
+      </button>
+      <button type="button" onClick={handleLogout} className="complaints-button" style={glossPill('rose')}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Logout
+      </button>
+    </HrHeaderActions>
+  );
+
+  if (status === 'loading') {
+    return (
+      <HrPageShell subtitle={pageSubtitle} actions={headerActions}>
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
+          <div style={{ padding: 40, textAlign: 'center', color: textSecondary, fontSize: 14 }}>
+            Loading...
+          </div>
+        </GlassCard>
+      </HrPageShell>
+    );
+  }
+
+  if (status === 'authenticated' && !canView) {
+    return (
+      <HrPageShell subtitle={pageSubtitle} actions={headerActions}>
+        <GlassCard style={{ marginTop: 18 }} padding={20}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}>
+            <p style={{ fontSize: 15, color: textPrimary, margin: 0 }}>You do not have permission to view complaints.</p>
+            <button type="button" onClick={() => router.push('/hr/employees')} style={glossPill('neutral')}>
+              Back to HR Hub
+            </button>
+          </div>
+        </GlassCard>
+      </HrPageShell>
+    );
+  }
+
+  return (
+    <HrPageShell subtitle={pageSubtitle} actions={headerActions}>
+      <GlassCard style={{ marginTop: 18 }} padding={20}>
+      {!canUpdate && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: theme === 'dark' ? 'rgba(148,163,184,0.1)' : 'rgba(148,163,184,0.12)', color: textSecondary, fontSize: 13 }}>
+          View only — you can open complaints, but cannot change status or send responses.
+        </div>
+      )}
+
+      {/* Summary KPI cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        {summaryCards.map((card) => {
+          const active = filterStatus === card.id;
+          return (
+            <button
+              key={card.label}
+              type="button"
+              onClick={() => setStatusFilter(card.id)}
+              style={{
+                textAlign: 'left',
+                padding: '16px 18px',
+                borderRadius: 14,
+                border: `1px solid ${active ? card.tone : card.borderColor}`,
+                background: card.bg,
+                cursor: 'pointer',
+                boxShadow: active ? `0 0 0 2px ${card.tone}33` : 'none',
+                transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
+              }}
+            >
+              <div style={{ fontSize: 12, color: textSecondary, marginBottom: 6, fontWeight: 600 }}>{card.label}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: card.tone, lineHeight: 1.1 }}>{card.value}</div>
+              <div style={{ fontSize: 11, color: textTertiary, marginTop: 6 }}>
+                {card.id ? 'Click to filter' : 'All statuses'}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginBottom: 12,
+        }}
+      >
+        <select
+          value={filterPeriod}
+          onChange={(e) => {
+            setFilterPeriod(e.target.value);
+            setCurrentPage(1);
+          }}
+          style={{ ...controlStyle, minWidth: 170 }}
+        >
+          <option value="all">All time</option>
+          <option value="week">Last 7 days</option>
+          <option value="month">Last 30 days</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Search employee, designation, subject..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          style={{ ...controlStyle, flex: 1, minWidth: 220, maxWidth: 420, fontWeight: 400 }}
+        />
+      </div>
+
+      {/* Status pills */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {[
+          { id: '', label: 'All', count: summary.total },
+          { id: 'open', label: 'Open', count: summary.open },
+          { id: 'in_progress', label: 'In Progress', count: summary.in_progress },
+          { id: 'resolved', label: 'Resolved', count: summary.resolved },
+          { id: 'closed', label: 'Closed', count: summary.closed },
+        ].map((item) => {
+          const active = filterStatus === item.id;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => setStatusFilter(item.id)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 999,
+                border: `1px solid ${active ? primary : border}`,
+                background: active
+                  ? theme === 'dark'
+                    ? 'rgba(59,130,246,0.2)'
+                    : 'rgba(59,130,246,0.12)'
+                  : inputBg,
+                color: active ? primary : textSecondary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {item.label} ({item.count})
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 12, color: textSecondary, marginBottom: 12 }}>
+        Showing {pagination.total || 0} complaint{(pagination.total || 0) === 1 ? '' : 's'}
+        {filterStatus ? ` · ${STATUS_LABELS[filterStatus] || filterStatus}` : ''}
+        {filterPeriod !== 'all' ? ` · ${filterPeriod === 'week' ? 'last 7 days' : 'last 30 days'}` : ''}
+      </div>
+
+      {/* Table */}
+      <div
+        style={{
+          borderRadius: 14,
+          border: `1px solid ${border}`,
+          overflow: 'auto',
+          maxHeight: '65vh',
+          background: theme === 'dark' ? 'rgba(15,23,42,0.35)' : 'rgba(248,250,252,0.8)',
+        }}
+      >
+        {loading && !complaints.length ? (
+          <div style={{ padding: 48, textAlign: 'center', color: textSecondary, fontSize: 14 }}>Loading complaints...</div>
+        ) : complaints.length === 0 ? (
+          <div style={{ padding: 48, textAlign: 'center' }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: textPrimary, marginBottom: 6 }}>No complaints found</p>
+            <p style={{ fontSize: 14, color: textSecondary, margin: 0 }}>
+              {filterStatus || searchQuery || filterPeriod !== 'all'
+                ? 'Try clearing filters or widening the date range.'
+                : 'Employee complaints will appear here when submitted.'}
+            </p>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: colors.background?.table?.header ?? primary }}>
+                {['Employee', 'Designation', 'Department', 'Subject', 'Status', 'Date', 'Action'].map((label, idx) => (
+                  <th
+                    key={label}
+                    style={{
+                      padding: '14px 16px',
+                      textAlign: idx === 6 ? 'right' : 'left',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: colors.text?.table?.header ?? '#fff',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 2,
+                      background: colors.background?.table?.header ?? primary,
+                    }}
+                  >
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {complaints.map((c, i) => {
+                const tone = getStatusTone(c.status, colors, primary, successColor, warningColor);
+                const rowBg =
+                  i % 2 === 0
+                    ? colors.background?.table?.row ?? bgCard
+                    : colors.background?.table?.rowEven ?? (theme === 'dark' ? '#1e293b' : '#f8fafc');
+                return (
+                  <tr
+                    key={c._id}
+                    style={{
+                      background: rowBg,
+                      borderBottom: i < complaints.length - 1 ? `1px solid ${border}` : 'none',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = theme === 'dark' ? 'rgba(51, 65, 85, 0.45)' : '#f1f5f9';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = rowBg;
+                    }}
+                  >
+                    <td style={{ padding: '16px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 600 }}>
+                      <div>{c.employeeName || '-'}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: textSecondary, marginTop: 2 }}>{c.empCode}</div>
+                    </td>
+                    <td style={{ padding: '16px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{c.designation || '-'}</td>
+                    <td style={{ padding: '16px', fontSize: 13, color: colors.text?.cell ?? textSecondary }}>{c.department || '-'}</td>
+                    <td style={{ padding: '16px', fontSize: 14, color: colors.text?.cell ?? textPrimary, fontWeight: 500, maxWidth: 260 }}>
+                      {c.subject}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '5px 11px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.color}44`,
+                        }}
+                      >
+                        {STATUS_LABELS[c.status] || c.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px', fontSize: 13, color: colors.text?.cell ?? textSecondary, whiteSpace: 'nowrap' }}>
+                      {formatDate(c.createdAt)}
+                    </td>
+                    <td style={{ padding: '16px', textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewId(c._id);
+                          setDetail(null);
+                          loadDetail(c._id);
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: 10,
+                          border: `1px solid ${primary}`,
+                          background: theme === 'dark' ? `${primary}18` : `${primary}10`,
+                          color: primary,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {canUpdate ? 'Respond' : 'View'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <PaginationControls
+        currentPage={pagination.page || currentPage}
+        totalPages={pagination.totalPages || 1}
+        totalItems={pagination.total || 0}
+        itemsPerPage={pagination.limit || 50}
+        onPageChange={setCurrentPage}
+        loading={loading}
+      />
+      </GlassCard>
+
+      {/* View / Respond modal – professional hierarchy */}
+      {viewId && (
+        <div style={{ position: 'fixed', inset: 0, background: theme === 'dark' ? 'rgba(2, 6, 23, 0.85)' : 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => { setViewId(null); setDetail(null); }}>
+          <div style={{ background: bgCard, borderRadius: 20, padding: 28, minWidth: 480, maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${border}`, boxShadow: theme === 'dark' ? '0 25px 50px -12px rgba(0,0,0,0.5)' : '0 25px 50px -12px rgba(0,0,0,0.12)' }} onClick={(e) => e.stopPropagation()}>
+            {detail ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: `2px solid ${border}` }}>
+                  <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: textPrimary, letterSpacing: '-0.02em' }}>
+                    {canUpdate ? 'View & Respond' : 'Complaint details'}
+                  </h2>
+                  {(() => {
+                    const tone = getStatusTone(detail.status, colors, primary, successColor, warningColor);
+                    return (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          padding: '5px 12px',
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.color}44`,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {STATUS_LABELS[detail.status] || detail.status}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                <div style={{ marginBottom: 24, padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: theme === 'dark' ? 'rgba(15,23,42,0.4)' : 'rgba(248,250,252,0.9)' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Employee</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: textPrimary, marginBottom: 4 }}>{detail.employeeName} ({detail.empCode})</p>
+                  <p style={{ fontSize: 13, color: textSecondary, margin: 0 }}>{detail.designation || '—'} · {detail.department || '—'} · {formatDate(detail.createdAt)}</p>
+                </div>
+                <div style={{ marginBottom: 24 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Complaint</p>
+                  <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 10, color: textPrimary, lineHeight: 1.4 }}>{detail.subject}</p>
+                  <p style={{ fontSize: 14, color: textPrimary, whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{detail.description}</p>
+                </div>
+
+                {detail.hrResponse && (
+                  <div style={{ marginBottom: 24, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50`, borderLeft: `4px solid ${successColor}` }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: successColor, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current remarks (visible to employee)</p>
+                    <p style={{ fontSize: 14, color: textPrimary, whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{detail.hrResponse}</p>
+                    {detail.hrRespondedAt && <p style={{ fontSize: 12, color: textSecondary, marginTop: 10 }}>Responded on {formatDate(detail.hrRespondedAt)}</p>}
+                  </div>
+                )}
+
+                {canUpdate ? (
+                  <form onSubmit={handleSaveResponse}>
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 8, color: textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</label>
+                      <select
+                        value={respondForm.status}
+                        onChange={(e) => setRespondForm({ ...respondForm, status: e.target.value })}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#0f172a' : '#f8fafc'), color: textPrimary, fontSize: 14 }}
+                      >
+                        {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 20, padding: 20, borderRadius: 16, background: `${successColor}18`, border: `1px solid ${successColor}50` }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: successColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Remarks (visible to employee)</label>
+                      <p style={{ fontSize: 12, color: textSecondary, marginBottom: 12, lineHeight: 1.4 }}>This reply will be shown to the employee on their Complaints page.</p>
+                      <textarea
+                        value={respondForm.hrResponse}
+                        onChange={(e) => setRespondForm({ ...respondForm, hrResponse: e.target.value })}
+                        placeholder="Your reply to the employee..."
+                        rows={4}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#fff'), color: textPrimary, fontSize: 14, resize: 'vertical', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 24, padding: 20, borderRadius: 16, background: theme === 'dark' ? 'rgba(100, 116, 139, 0.1)' : 'rgba(100, 116, 139, 0.06)', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 6, color: textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Internal note (HR only)</label>
+                      <p style={{ fontSize: 12, color: textSecondary, marginBottom: 12, lineHeight: 1.4 }}>Not visible to the employee.</p>
+                      <textarea
+                        value={respondForm.internalNote}
+                        onChange={(e) => setRespondForm({ ...respondForm, internalNote: e.target.value })}
+                        placeholder="Internal notes..."
+                        rows={2}
+                        style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${border}`, background: colors.background?.input ?? (theme === 'dark' ? '#1e293b' : '#fff'), color: textPrimary, fontSize: 14, resize: 'vertical', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                      <button type="button" onClick={() => { setViewId(null); setDetail(null); }} style={{ padding: '12px 24px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={(e) => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f1f5f9'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>Close</button>
+                      <button type="submit" disabled={saving} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: primary, color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: `0 2px 12px ${primary}40`, transition: 'opacity 0.2s' }}>{saving ? 'Saving...' : 'Save response'}</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <p style={{ fontSize: 13, color: textSecondary, margin: 0 }}>
+                      View only — you can read this complaint but cannot change status or send a response.
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="button" onClick={() => { setViewId(null); setDetail(null); }} style={{ padding: '12px 24px', borderRadius: 12, border: `1px solid ${border}`, background: 'transparent', color: textPrimary, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ padding: 40, textAlign: 'center', color: textSecondary, fontSize: 14 }}>Loading...</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {toast.text && (
+        <div style={{ position: 'fixed', right: 24, bottom: 24, padding: '14px 20px', borderRadius: 14, background: toast.type === 'error' ? `${colors.error ?? '#ef4444'}20` : `${successColor}20`, border: `1px solid ${toast.type === 'error' ? (colors.error ?? '#ef4444') : successColor}60`, color: toast.type === 'error' ? (colors.error ?? '#dc2626') : successColor, fontSize: 14, fontWeight: 500, zIndex: 50, boxShadow: colors.card?.shadow ?? '0 4px 20px rgba(0,0,0,0.12)' }}>
+          {toast.text}
+        </div>
+      )}
+      {showWarning && <AutoLogoutWarning timeRemaining={timeRemaining} onStayLoggedIn={handleStayLoggedIn} onLogout={autoLogout} />}
+    </HrPageShell>
+  );
+}

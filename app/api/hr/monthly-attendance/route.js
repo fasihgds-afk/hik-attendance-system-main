@@ -1,0 +1,1876 @@
+// app/api/hr/monthly-attendance/route.js
+//
+// =============================================================================
+// MONTHLY ATTENDANCE API - VIOLATION FORMULA QUICK REFERENCE
+// =============================================================================
+import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
+import { requirePermission, requireAuth } from '../../../../lib/auth/requireAuth';
+import { hasPermission } from '../../../../lib/auth/permissions';
+
+import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
+//
+// VIOLATION DEDUCTION FORMULA (Quick Summary):
+// --------------------------------------------
+// Pattern: Every 3rd violation (3, 6, 9, 12, ...) = 1 FULL DAY
+//          All other violations after 3rd (4, 5, 7, 8, 10, 11, ...) = PER-MINUTE FINE
+//
+// Formula:
+//   Full Days = floor(violationCount / 3)
+//   Per-Minute Days = sum of (minutes × 0.007) for each non-milestone violation
+//   Total Violation Days = Full Days + Per-Minute Days
+//
+// Examples:
+//   - 3 violations → 1 full day
+//   - 5 violations → 1 full day + (0.007 × minutes from violations #4 and #5)
+//   - 8 violations → 2 full days + (0.007 × minutes from violations #4, #5, #7, #8)
+//
+// TOTAL SALARY DEDUCTION = Violation Days + Unpaid Leave + Absent + Half Days
+//
+// For detailed formula explanation, see comments in the violation calculation section
+// (around line 695) and final salary calculation section (around line 904).
+//
+// =============================================================================
+
+import mongoose from 'mongoose';
+import { connectDB } from '../../../../lib/db';
+import Employee from '../../../../models/Employee';
+import ShiftAttendance from '../../../../models/ShiftAttendance';
+import Shift from '../../../../models/Shift';
+import {
+  resolveShiftGracePeriods,
+  resolveGracePeriodsForCalendarDate,
+  shiftWithGracePolicyForAttendanceRow,
+  shiftWithGraceResolvedForDate,
+} from '../../../../lib/shift/gracePeriods.js';
+import { getCompanyTodayYmd } from '../../../../lib/time/companyToday.js';
+import ViolationRules from '../../../../models/ViolationRules';
+import PaidLeaveQuarter from '../../../../models/PaidLeaveQuarter';
+import LeaveRecord from '../../../../models/LeaveRecord';
+import Department from '../../../../models/Department';
+import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
+import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
+import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturdayIndexInMonth, EXTRAORDINARY_LEAVE_STATUSES } from '../../../../lib/calculations';
+import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
+import { calculateAwayDeductionDays, getPaidWorkHours, getShiftDurationHours, getShiftBreakMinutes, buildDeductionRemarks } from '../../../../lib/calculations/awayDeduction';
+import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
+import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
+import { getCompanySettings } from '../../../../lib/settings/getCompanySettings';
+import { fetchEmployeesForMonthlySheet } from '../../../../lib/employees/activeFilter';
+
+// OPTIMIZATION: Node.js runtime for better connection pooling
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// -----------------------------------------------------------------------------
+// TIMEZONE + COMPANY DAY (ends at 08:55 local)
+// -----------------------------------------------------------------------------
+
+function parseOffsetToMinutes(offsetStr) {
+  if (!offsetStr) return 5 * 60; // default +05:00
+
+  const str = String(offsetStr).trim();
+  const m = /^([+-])?(\d{1,2})(?::?(\d{2}))?$/.exec(str);
+  if (!m) return 5 * 60;
+
+  const sign = m[1] === '-' ? -1 : 1;
+  const hours = parseInt(m[2] || '0', 10);
+  const mins = parseInt(m[3] || '0', 10);
+  return sign * (hours * 60 + mins);
+}
+
+// company timezone offset in minutes & ms (same on local + Vercel)
+const COMPANY_OFFSET_MIN = parseOffsetToMinutes(
+  process.env.TIMEZONE_OFFSET || '+05:00'
+);
+const COMPANY_OFFSET_MS = COMPANY_OFFSET_MIN * 60 * 1000;
+
+// current “company day” with 08:55 cutoff in company local time
+function getCompanyTodayParts() {
+  const nowUtc = new Date();
+  const localMs = nowUtc.getTime() + COMPANY_OFFSET_MS;
+  const local = new Date(localMs);
+
+  const h = local.getUTCHours();
+  const m = local.getUTCMinutes();
+
+  // before 08:55 → still previous company day
+  if (h < 8 || (h === 8 && m < 55)) {
+    local.setUTCDate(local.getUTCDate() - 1);
+  }
+
+  return {
+    year: local.getUTCFullYear(),
+    monthIndex: local.getUTCMonth(),
+    day: local.getUTCDate(),
+  };
+}
+
+// company-local date for a calendar day (YYYY-MM, day)
+// PERFORMANCE: Memoized to avoid recalculating same date parts
+const _getCompanyLocalDatePartsOriginal = function(year, monthIndex, day) {
+  // build 00:00 UTC, then shift to company local and read UTC* fields
+  const baseUtc = Date.UTC(year, monthIndex, day, 0, 0, 0);
+  const local = new Date(baseUtc + COMPANY_OFFSET_MS);
+  return {
+    year: local.getUTCFullYear(),
+    monthIndex: local.getUTCMonth(),
+    day: local.getUTCDate(),
+    dow: local.getUTCDay(), // 0–6 in company timezone
+  };
+};
+
+const getCompanyLocalDateParts = memoize(_getCompanyLocalDatePartsOriginal, (year, monthIndex, day) => {
+  return `${year}-${monthIndex}-${day}`;
+});
+
+// -----------------------------------------------------------------------------
+// SHIFT + LATE/EARLY RULES  (timezone-safe)
+// -----------------------------------------------------------------------------
+
+function toMinutes(h, m) {
+  return h * 60 + m;
+}
+
+// Convert a stored Date (UTC internally) into minutes since midnight
+// in COMPANY LOCAL time, so Vercel (UTC) and your PC (+05:00) behave the same.
+function toCompanyMinutes(date) {
+  const localMs = date.getTime() + COMPANY_OFFSET_MS;
+  const local = new Date(localMs);
+  const h = local.getUTCHours();
+  const m = local.getUTCMinutes();
+  return toMinutes(h, m);
+}
+
+function isCompanySaturday(date) {
+  const localMs = date.getTime() + COMPANY_OFFSET_MS;
+  const local = new Date(localMs);
+  return local.getUTCDay() === 6; // Saturday in company timezone
+}
+
+// Helper: Parse time string "HH:mm" to minutes
+function parseTimeToMinutes(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  return toMinutes(h || 0, m || 0);
+}
+
+// getShiftForDate function removed - using only employee's current shift assignment
+
+// Returns:
+//  - late / earlyLeave flags (true/false)
+//  - lateMinutes / earlyMinutes = minutes BEYOND grace period
+// shift can be either a shift object (from DB) or a shift code string (legacy)
+// PERFORMANCE: Memoized to avoid recalculating same shift/checkIn/checkOut combinations
+const _computeLateEarlyOriginal = function(
+  shift,
+  checkIn,
+  checkOut,
+  allShiftsMap = null,
+  calendarDateYmd = null
+) {
+  if (!shift || !checkIn || !checkOut) {
+    return { late: false, earlyLeave: false, lateMinutes: 0, earlyMinutes: 0 };
+  }
+
+  // convert both punches into company-local minutes
+  let inMin = toCompanyMinutes(checkIn);
+  let outMin = toCompanyMinutes(checkOut);
+
+  let startMin = 0;
+  let endMin = 0;
+  let rawEndMin = 0;
+  let graceCheckIn = null;
+  let graceCheckOut = null;
+  let crossesMidnight = false;
+
+  // Get shift object - could be already an object or a code string
+  let shiftObj = null;
+  if (typeof shift === 'object' && shift.startTime) {
+    shiftObj = shift;
+  } else if (typeof shift === 'string' && allShiftsMap) {
+    // If shift is a code string, look it up from the map
+    shiftObj = allShiftsMap.get(shift);
+  }
+
+  // Saturday special case: If shift is N2 on Saturday, use N1 timing instead
+  if (shiftObj && shiftObj.code === 'N2' && allShiftsMap && isCompanySaturday(checkIn)) {
+    const n1Shift = allShiftsMap.get('N1');
+    if (n1Shift && n1Shift.startTime) {
+      shiftObj =
+        calendarDateYmd != null && calendarDateYmd !== ''
+          ? shiftWithGraceResolvedForDate(n1Shift, calendarDateYmd)
+          : n1Shift;
+    }
+  }
+
+  if (shiftObj && shiftObj.startTime) {
+    // Use shift times from database (fully dynamic)
+    startMin = parseTimeToMinutes(shiftObj.startTime);
+    rawEndMin = parseTimeToMinutes(shiftObj.endTime);
+    const g =
+      calendarDateYmd != null && calendarDateYmd !== ''
+        ? resolveGracePeriodsForCalendarDate(shiftObj, calendarDateYmd)
+        : resolveShiftGracePeriods(shiftObj);
+    graceCheckIn = g.checkIn;
+    graceCheckOut = g.checkOut;
+    crossesMidnight = shiftObj.crossesMidnight || false;
+    
+    // For midnight-crossing shifts, normalize end time
+    if (crossesMidnight) {
+      const startClock = startMin % (24 * 60);
+      // If end time is before start time (e.g., 06:00 < 21:00 or 03:00 < 18:00), it's the next day
+      if (rawEndMin < startClock) {
+        endMin = rawEndMin + (24 * 60); // Normalize to next day
+      } else {
+        endMin = rawEndMin;
+      }
+    } else {
+      endMin = rawEndMin;
+    }
+  } else {
+    // Fallback: if shift not found, return no violations (shouldn't happen in normal flow)
+    console.warn(`Shift not found for: ${typeof shift === 'object' ? shift?.code : shift}`);
+    return { late: false, earlyLeave: false, lateMinutes: 0, earlyMinutes: 0 };
+  }
+
+  // if shift crosses midnight, normalise both inMin and outMin
+  // For night shifts (S1: 18:00-03:00, S2: 21:00-06:00):
+  // - Start time is on day 1 (e.g., 18:00 or 21:00)
+  // - End time is on day 2 (e.g., 03:00 = 27:00 or 06:00 = 30:00)
+  // - Check-in/out times after midnight (00:00-05:59) belong to the shift that started the previous day
+  // - Early arrivals (before shift start on same day, e.g., 20:00 for S2) are on-time (green)
+  if (crossesMidnight) {
+    const startClock = startMin % (24 * 60); // e.g., 18:00 = 1080 or 21:00 = 1260
+    const earlyMorningThreshold = 6 * 60; // 06:00 = 360 minutes (before this is next day)
+    
+    // Normalize check-in for midnight-crossing shifts:
+    // Rule: If check-in is in early morning (00:00-05:59), it belongs to the shift that started the previous day
+    //       So we normalize it by adding 24 hours to compare with the shift start time
+    // Example N2 (21:00-06:00, startClock=1260):
+    //   - Check-in at 20:00 (1200) → same day, early arrival → don't normalize → GREEN (1200 < 1260, early)
+    //   - Check-in at 21:00 (1260) → on time → don't normalize → GREEN (1260 = 1260, on time)
+    //   - Check-in at 22:46 (1366) → same day, late → don't normalize → AMBER (1366 > 1260, 106 min late)
+    //   - Check-in at 02:16 (136) → next day, belongs to previous shift → normalize to 1576 → AMBER (1576 > 1260, 316 min late)
+    //   - Check-in at 05:59 (359) → next day, belongs to previous shift → normalize to 1799 → AMBER (1799 > 1260, 539 min late)
+    if (inMin < earlyMorningThreshold) {
+      // Early morning (00:00-05:59) = belongs to shift that started previous day, normalize
+      inMin += 24 * 60;
+    }
+    // If inMin >= earlyMorningThreshold, it's on the same day as shift start, don't normalize
+    // This includes both early arrivals (inMin < startClock) and late arrivals (inMin >= startClock)
+    
+    // Normalize check-out: For midnight-crossing shifts, check-out should be on the same day as shift end (next day)
+    // Since endMin is normalized (e.g., 1800 for 06:00), we need to normalize outMin to match
+    // Normalize check-out if it's in early morning (00:00-08:00) - this covers all normal check-out scenarios
+    // Check-outs after 08:00 are likely data errors or very unusual cases
+    // Example S2 (ends 06:00 = 1800 normalized):
+    //   - Check-out at 05:48 (348) → normalize to 1788 → earlyMinutes = 1800-1788 = 12 ✓
+    //   - Check-out at 06:00 (360) → normalize to 1800 → earlyMinutes = 1800-1800 = 0 ✓
+    //   - Check-out at 06:15 (375) → normalize to 1815 → earlyMinutes = 1800-1815 = -15 → 0 ✓
+    //   - Check-out at 07:00 (420) → normalize to 1860 → earlyMinutes = 1800-1860 = -60 → 0 ✓
+    // Normalize to next day when checkout clock-time is before shift start clock-time.
+    // This handles midnight-crossing shifts reliably, including checkouts after 08:00.
+    if (outMin < startClock) {
+      outMin += 24 * 60;
+    }
+    
+    // Also normalize endMin if needed (endMin is already stored as next day time like 27:00 or 30:00)
+    // For S1: endMin = 27:00 (03:00 next day) = 1620 minutes
+    // For S2: endMin = 30:00 (06:00 next day) = 1800 minutes
+    // These are already normalized, so we just need to ensure outMin is normalized too
+  }
+
+  // Calculate late: how many minutes after shift start
+  // POLICY FOR ALL SHIFTS:
+  // - Check-in BEFORE shift start time → GREEN (early arrival is fine, not late)
+  // - Check-in AT or AFTER shift start time, but within grace period (≤gracePeriod min) → GREEN (on-time)
+  // - Check-in AFTER shift start + grace period (>gracePeriod min) → AMBER (violation - late arrival)
+  // Example: Shift 21:00, grace 15min
+  //   - Check-in at 20:40 (20 min early) → GREEN (lateMinutesTotal = 0, late = false)
+  //   - Check-in at 21:00 (on time) → GREEN (lateMinutesTotal = 0, late = false)
+  //   - Check-in at 21:15 (15 min late, within grace) → GREEN (lateMinutesTotal = 15, late = false)
+  //   - Check-in at 21:16 (16 min late, exceeds grace) → AMBER (lateMinutesTotal = 16, late = true)
+  let lateMinutesTotal = inMin - startMin;
+  // Early arrival (negative value) means on-time, set to 0
+  if (lateMinutesTotal < 0) lateMinutesTotal = 0;
+
+  // Calculate early: how many minutes before shift end
+  // For night shifts crossing midnight, endMin is already normalized (27:00 or 30:00)
+  // POLICY FOR ALL SHIFTS:
+  // - Check-out AT or AFTER shift end time → GREEN (stayed late, which is fine)
+  // - Check-out BEFORE shift end time, but within grace period (≥gracePeriod min before end) → GREEN (on-time)
+  // - Check-out BEFORE shift end - grace period (<gracePeriod min before end) → ORANGE (violation - early departure)
+  // Example: Shift ends 06:00, grace 15min (so grace boundary is 05:45)
+  //   - Check-out at 06:30 (30 min late) → GREEN (earlyMinutesTotal = 0, earlyLeave = false)
+  //   - Check-out at 06:00 (on time) → GREEN (earlyMinutesTotal = 0, earlyLeave = false)
+  //   - Check-out at 05:45 (15 min early, at grace boundary) → GREEN (earlyMinutesTotal = 15, earlyLeave = false)
+  //   - Check-out at 05:44 (16 min early, exceeds grace) → ORANGE (earlyMinutesTotal = 16, earlyLeave = true)
+  let earlyMinutesTotal = endMin - outMin;
+  // Late departure (negative value) means on-time, set to 0
+  if (earlyMinutesTotal < 0) earlyMinutesTotal = 0;
+
+  // Determine violations: only if minutes exceed grace period
+  // Note: earlyMinutesTotal = 0 means on-time or late (both are GREEN)
+  //       lateMinutesTotal = 0 means on-time or early (both are GREEN)
+  const late = lateMinutesTotal > graceCheckIn;
+  const earlyLeave = earlyMinutesTotal > graceCheckOut;
+
+  // Violation minutes = minutes AFTER grace
+  const lateMinutes = late ? lateMinutesTotal - graceCheckIn : 0;
+  const earlyMinutes = earlyLeave ? earlyMinutesTotal - graceCheckOut : 0;
+
+  return { late, earlyLeave, lateMinutes, earlyMinutes };
+};
+
+// Memoize computeLateEarly for performance (same shift/checkIn/checkOut = same result)
+const computeLateEarly = memoize(_computeLateEarlyOriginal, (shift, checkIn, checkOut, allShiftsMap, calendarDateYmd) => {
+  const shiftKey = typeof shift === 'object' ? shift.code || shift._id : shift;
+  const gIn = typeof shift === 'object' && shift?.checkInGracePeriod != null ? shift.checkInGracePeriod : '';
+  const gOut = typeof shift === 'object' && shift?.checkOutGracePeriod != null ? shift.checkOutGracePeriod : '';
+  const checkInKey = checkIn instanceof Date ? checkIn.getTime() : checkIn;
+  const checkOutKey = checkOut instanceof Date ? checkOut.getTime() : checkOut;
+  return createCacheKey(shiftKey, gIn, gOut, checkInKey, checkOutKey, calendarDateYmd || '');
+});
+
+// YYYY-MM-DD from a Date, using UTC fields so server timezone doesn't matter
+function toYMD(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const y = date.getUTCFullYear();
+  const m = pad(date.getUTCMonth() + 1);
+  const d = pad(date.getUTCDate());
+  return `${y}-${m}-${d}`;
+}
+
+// REMOVED: Duplicate extractShiftCode function - now using imported from lib/calculations
+// This function is kept for reference but should not be used
+// Use: import { extractShiftCode } from '../../../../lib/calculations';
+function _extractShiftCode_DEPRECATED(shiftStr) {
+  if (!shiftStr || typeof shiftStr !== 'string') return shiftStr || '';
+  
+  // Trim whitespace
+  shiftStr = shiftStr.trim();
+  
+  // If it's already a simple code like "D1", "S2", etc., return it
+  if (/^[A-Z]\d+$/.test(shiftStr)) {
+    return shiftStr;
+  }
+  
+  // Try to extract code from formatted strings like "– S2 (21:00–06:00)" or "S2 (21:00–06:00)"
+  // Look for pattern: optional dash/space, then letter+number, then optional parentheses
+  const match = shiftStr.match(/(?:–\s*)?([A-Z]\d+)(?:\s*\([^)]+\))?/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  
+  // If no pattern matches, return as-is (might be a valid code we don't recognize)
+  return shiftStr;
+}
+
+// -----------------------------------------------------------------------------
+// STATUS NORMALISATION
+// -----------------------------------------------------------------------------
+
+// REMOVED: Duplicate normalizeStatus function - now using imported from lib/calculations
+// This function is kept for reference but should not be used
+// Use: import { normalizeStatus } from '../../../../lib/calculations';
+function _normalizeStatus_DEPRECATED(rawStatus, { isWeekendOff } = {}) {
+  let s = (rawStatus || '').trim();
+  if (!s) {
+    if (isWeekendOff) return 'Holiday';
+    return 'Absent';
+  }
+
+  const lower = s.toLowerCase();
+
+  if (lower === 'present' || lower === 'p') return 'Present';
+  if (lower === 'holiday' || lower === 'h' || lower === 'off') return 'Holiday';
+  if (lower === 'absent' || lower === 'a' || lower === 'no punch') return 'Absent';
+
+  if (lower === 'sick leave' || lower === 'sl') {
+    return 'Sick Leave';
+  }
+  if (lower === 'paid leave' || lower === 'pl') {
+    return 'Paid Leave';
+  }
+  if (lower === 'un paid leave' || lower === 'unpaid leave' || lower === 'upl') {
+    return 'Un Paid Leave';
+  }
+  if (lower === 'leave without inform' || lower === 'lwi' || lower === 'leave without info') {
+    return 'Leave Without Inform';
+  }
+  if (lower === 'work from home' || lower === 'wfh') {
+    return 'Work From Home';
+  }
+  if (lower === 'half day' || lower === 'half') {
+    return 'Half Day';
+  }
+
+  return s;
+}
+
+// -----------------------------------------------------------------------------
+// GET /api/hr/monthly-attendance?month=YYYY-MM
+// -----------------------------------------------------------------------------
+
+export async function GET(req) {
+  try {
+    const { user } = await requireAuth();
+    const role = String(user?.role || '').toUpperCase();
+    if (['HR', 'ADMIN'].includes(role)) {
+      const canViewMonthly = hasPermission(user, 'monthlyAttendance', 'view');
+      const canViewSalary = hasPermission(user, 'salaryReport', 'view');
+      if (!canViewMonthly && !canViewSalary) {
+        const err = new Error('Missing permission: monthlyAttendance.view');
+        err.code = 'FORBIDDEN_PERMISSION';
+        throw err;
+      }
+    }
+    const { searchParams } = new URL(req.url);
+    let month = searchParams.get('month');
+    const search = (searchParams.get('search') || '').trim();
+
+    if (!month) {
+      const now = new Date();
+      month = now.toISOString().slice(0, 7); // YYYY-MM
+    }
+
+    const [yearStr, monthStr] = month.split('-');
+    const year = Number(yearStr);
+    const monthIndex = Number(monthStr) - 1;
+
+    if (Number.isNaN(year) || Number.isNaN(monthIndex)) {
+      throw new ValidationError('Invalid "month" format. Use YYYY-MM.');
+    }
+
+    const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 0, 0, 0, 0));
+    const daysInMonth = monthEnd.getUTCDate();
+    const monthPrefix = `${yearStr}-${monthStr}`;
+
+    // company "today" in company time (with 08:55 cutoff)
+    const companyToday = getCompanyTodayParts();
+    const companyTodayYmd = getCompanyTodayYmd();
+
+    let monthRelation = 0; // -1 past, 0 same, 1 future
+    if (year < companyToday.year) monthRelation = -1;
+    else if (year > companyToday.year) monthRelation = 1;
+    else if (monthIndex < companyToday.monthIndex) monthRelation = -1;
+    else if (monthIndex > companyToday.monthIndex) monthRelation = 1;
+    else monthRelation = 0;
+
+    // OPTIMIZATION: Connect DB early
+    await connectDB();
+
+    // OPTIMIZATION: Fetch violation rules with minimal fields, fast timeout
+    let violationRules = await ViolationRules.findOne({ isActive: true })
+      .select('violationConfig absentConfig leaveConfig')
+      .lean()
+      .maxTimeMS(1500); // Reduced timeout
+    if (!violationRules) {
+      // Return default rules if none exist
+      violationRules = {
+        violationConfig: {
+          freeViolations: 2,
+          milestoneInterval: 3,
+          perMinuteRate: 0.007,
+          maxPerMinuteFine: 1.0,
+        },
+        absentConfig: {
+          bothMissingDays: 1.0,
+          partialPunchDays: 1.0,
+          leaveWithoutInformDays: 1.5,
+        },
+        leaveConfig: {
+          unpaidLeaveDays: 1.0,
+          sickLeaveDays: 1.0,
+          halfDayDays: 0.5,
+          paidLeaveDays: 0.0,
+        },
+      };
+    }
+
+    const isEmployeeViewer = user.role === 'EMPLOYEE';
+    const myEmpCode = isEmployeeViewer ? String(user.empCode || '').trim() : '';
+    if (isEmployeeViewer && !myEmpCode) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const monthStartDate = `${monthPrefix}-01`;
+    const monthEndDate = `${monthPrefix}-${String(daysInMonth).padStart(2, '0')}`;
+
+    // OPTIMIZATION: Run queries in parallel; employees scoped to one row when viewer is EMPLOYEE
+    const [shiftCount, employeesRaw, departmentDocs] = await Promise.all([
+      Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
+      isEmployeeViewer
+        ? Employee.find({ empCode: myEmpCode })
+            .select('empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots saturdayGroup')
+            .lean()
+            .maxTimeMS(1500)
+        : fetchEmployeesForMonthlySheet(Employee, ShiftAttendance, {
+            monthStartDate,
+            monthEndDate,
+            monthRelation,
+            projection: 'empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots saturdayGroup',
+            maxTimeMS: 2500,
+          }),
+      Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
+    ]);
+
+    let employees = employeesRaw || [];
+
+    const useDynamicShifts = shiftCount > 0;
+    const departmentPolicyMap = new Map();
+    (departmentDocs || []).forEach((d) => {
+      if (d.name == null) return;
+      departmentPolicyMap.set(String(d.name).trim().toLowerCase(), {
+        saturdayPolicy: d.saturdayPolicy || 'alternate',
+        fifthSaturdayPolicy: d.fifthSaturdayPolicy || 'working_all',
+        saturdayShiftMode: d.saturdayShiftMode || 'own_time',
+        saturdayUnifiedStart: d.saturdayUnifiedStart || '21:00',
+        saturdayUnifiedEnd: d.saturdayUnifiedEnd || '06:00',
+        saturdayUnifiedCrossesMidnight: d.saturdayUnifiedCrossesMidnight ?? true,
+      });
+    });
+
+    // Server-side search: narrow employees before loading month attendance (much cheaper)
+    if (search && !isEmployeeViewer) {
+      const term = search.toLowerCase();
+      employees = employees.filter((emp) => {
+        const code = String(emp.empCode || '').toLowerCase();
+        const name = String(emp.name || '').toLowerCase();
+        return code.includes(term) || name.includes(term);
+      });
+    }
+
+    // Dynamic weekly off days (default [0] = Sunday). Saturday (6) is handled
+    // separately by department policy below, so it is excluded here.
+    const companySettings = await getCompanySettings();
+    const weeklyOffDays = (companySettings.weeklyOffDays || [0]).filter((d) => d !== 6);
+
+    const shiftAttendanceFilter = {
+      date: { $gte: monthStartDate, $lte: monthEndDate },
+    };
+    if (isEmployeeViewer) {
+      shiftAttendanceFilter.empCode = myEmpCode;
+    } else if (search) {
+      const codes = employees.map((e) => e.empCode).filter(Boolean);
+      // No matches → skip heavy attendance scan
+      shiftAttendanceFilter.empCode = { $in: codes.length ? codes : ['__none__'] };
+    }
+
+    const shiftDocs = await ShiftAttendance.find(shiftAttendanceFilter)
+      .select(
+        'date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited checkInGracePeriod checkOutGracePeriod awayHours awayNote awayReportedBy'
+      )
+      .lean()
+      .maxTimeMS(4000); // Reduced timeout for faster response
+
+    // Group ALL records by empCode|date (there may be multiple per day if shift changed)
+    const allDocsByEmpDate = new Map();
+    for (const doc of shiftDocs) {
+      if (!doc.empCode || !doc.date) continue;
+      const key = `${doc.empCode}|${doc.date}`;
+      if (!allDocsByEmpDate.has(key)) allDocsByEmpDate.set(key, []);
+      allDocsByEmpDate.get(key).push(doc);
+    }
+
+    // Paid leave from HR Leaves (quarter-based): reflect on monthly sheet from LeaveRecord
+    const empCodes = employees.map((e) => e.empCode);
+    const leaveRecords = await LeaveRecord.find({
+      empCode: { $in: empCodes },
+      date: { $gte: monthStartDate, $lte: monthEndDate },
+      leaveType: 'paid',
+    })
+      .select('empCode date')
+      .lean()
+      .maxTimeMS(2000);
+    const paidLeaveKeys = new Set((leaveRecords || []).map((lr) => `${lr.empCode}|${lr.date}`));
+
+    // OPTIMIZATION: Pre-fetch all shifts in parallel with other queries
+    const allShiftsMap = new Map();
+    if (useDynamicShifts) {
+      // OPTIMIZATION: Fetch shifts with minimal fields, fast timeout
+      // Load ALL shifts (active + inactive) so historical codes (R1, R2) resolve correctly when deactivated
+      const allShifts = await Shift.find({})
+        .select(
+          '_id name code startTime endTime crossesMidnight breakMinutes paidHoursPerDay gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+        )
+        .sort({ code: 1 }) // Consistent ordering
+        .lean()
+        .maxTimeMS(1500); // Reduced timeout
+      
+      allShifts.forEach((s) => {
+        allShiftsMap.set(s._id.toString(), s);
+        allShiftsMap.set(s.code, s); // Also index by code for quick lookup
+      });
+    }
+
+    const shiftById = new Map();
+    allShiftsMap.forEach((s) => {
+      if (s && s._id && s.code) shiftById.set(s._id.toString(), s.code);
+    });
+    const shiftForDateMap = await getShiftsForEmployeesInDateRange(
+      empCodes,
+      monthStartDate,
+      monthEndDate,
+      { employees, shiftById }
+    );
+
+    // Pick the correct record per (empCode, date): prefer the one matching effective shift for that date
+    const docsByEmpDate = new Map();
+    for (const [key, docs] of allDocsByEmpDate) {
+      if (docs.length === 1) {
+        docsByEmpDate.set(key, docs[0]);
+      } else {
+        const effectiveShift = shiftForDateMap.get(key) || '';
+        const match = docs.find((d) => d.shift && d.shift.toUpperCase() === effectiveShift.toUpperCase());
+        docsByEmpDate.set(key, match || docs[docs.length - 1]);
+      }
+    }
+
+    // PERFORMANCE: Pre-calculate weekend flags for all days to avoid repeated calculations
+    const weekendFlags = new Map();
+    const firstFourSaturdays = [];
+    let saturdayCounter = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const { dow } = getCompanyLocalDateParts(year, monthIndex, day);
+      const isSaturday = dow === 6;
+      weekendFlags.set(day, {
+        dow,
+        isSunday: dow === 0,
+        isWeeklyOff: weeklyOffDays.includes(dow),
+        isSaturday,
+      });
+      if (isSaturday && saturdayCounter < 4) {
+        saturdayCounter += 1;
+        firstFourSaturdays.push({ day, saturdayIndex: saturdayCounter });
+      }
+    }
+
+    const employeesOut = [];
+
+    for (const emp of employees) {
+      const empShift = emp.shift || '';
+      const days = [];
+
+      let lateCount = 0;
+      let earlyCount = 0;
+      let unpaidLeaveDays = 0;
+      let absentDays = 0;
+      let halfDays = 0;
+      let missingPunchDays = 0;       // missing check-in OR check-out → 1 day
+      let lateViolationCount = 0;     // late violations counted separately
+      let earlyViolationCount = 0;     // early violations counted separately
+      let violationBaseDays = 0;      // full days from 3rd, 6th, 9th, ... (each type)
+      let perMinuteFineDays = 0;      // extra days from per-minute fine
+      let awayDeductionDays = 0;      // HR-recorded away-from-workstation (hours / shift hours)
+      let totalAwayHours = 0;
+      let totalLateMinutes = 0;       // sum of late minutes (beyond grace)
+      let totalEarlyMinutes = 0;
+
+      let saturdayIndex = 0;
+      let employeeOffDayCount = 0; // weekend/off days for this employee (used by 'actual' working-days mode)
+
+      // Auto-detect Saturday group from actual attendance pattern
+      // Uses both punches AND no-punches to determine which group the employee is in
+      // Group A: off 1st & 3rd (odd), works 2nd & 4th (even)
+      // Group B: off 2nd & 4th (even), works 1st & 3rd (odd)
+      {
+        let oddPunches = 0, evenPunches = 0;
+        let oddNoPunch = 0, evenNoPunch = 0;
+        for (const sat of firstFourSaturdays) {
+          const d = sat.day;
+          const satNum = sat.saturdayIndex;
+          // Skip future days — no data to detect from
+          if (monthRelation > 0 || (monthRelation === 0 && d > companyToday.day)) continue;
+          const dk = `${emp.empCode}|${monthPrefix}-${String(d).padStart(2, '0')}`;
+          const satDoc = docsByEmpDate.get(dk);
+          const hasSatPunch = satDoc && (satDoc.checkIn || satDoc.checkOut);
+          if (satNum === 1 || satNum === 3) {
+            if (hasSatPunch) oddPunches++; else oddNoPunch++;
+          } else {
+            if (hasSatPunch) evenPunches++; else evenNoPunch++;
+          }
+        }
+        // Score: punches on your working Saturdays + no-punches on your off Saturdays
+        // A works even Saturdays, B works odd Saturdays
+        const scoreA = evenPunches + oddNoPunch;
+        const scoreB = oddPunches + evenNoPunch;
+        if (scoreA > scoreB) emp.saturdayGroup = 'A';
+        else if (scoreB > scoreA) emp.saturdayGroup = 'B';
+      }
+
+      // Cache for shift lookups per employee (to avoid repeated lookups for same date)
+      const shiftCache = new Map();
+      let employeeShiftObj = null; // Cache employee's current shift object
+
+      // Pre-fetch employee's current shift once (if exists and using dynamic shifts)
+      if (useDynamicShifts) {
+        if (emp.shiftId) {
+          employeeShiftObj = allShiftsMap.get(emp.shiftId.toString());
+        }
+        // If shiftId lookup failed, try shift code (might be formatted string)
+        if (!employeeShiftObj && emp.shift) {
+          const extractedCode = extractShiftCode(emp.shift);
+          employeeShiftObj = allShiftsMap.get(extractedCode);
+        }
+      }
+
+      // Shift history removed - using only employee's current shift
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dd = String(day).padStart(2, '0');
+        const date = `${monthPrefix}-${dd}`;
+        const key = `${emp.empCode}|${date}`;
+        const doc = docsByEmpDate.get(key);
+
+        // FUTURE days (no salary effect)
+        let isFutureDay = false;
+        if (monthRelation > 0) {
+          isFutureDay = true;
+        } else if (monthRelation === 0 && day > companyToday.day) {
+          isFutureDay = true;
+        }
+
+        // PERFORMANCE: Use pre-calculated weekend flags
+        const weekendInfo = weekendFlags.get(day);
+        const dow = weekendInfo.dow;
+        
+        let isWeekendOff = false;
+        if (weekendInfo.isWeeklyOff) isWeekendOff = true; // configurable weekly off days (default Sunday)
+        if (weekendInfo.isSaturday) {
+          saturdayIndex++;
+          if (isSaturdayOffForEmployee(saturdayIndex, emp, departmentPolicyMap, emp.department || '')) isWeekendOff = true;
+        }
+        if (isWeekendOff) employeeOffDayCount++;
+
+        // Get shift for this date - use shift effective on this date (history-first)
+        const shiftForDate = shiftForDateMap.get(`${emp.empCode}|${date}`);
+        let shiftObj = shiftCache.get(date);
+        let shiftCode = '';
+
+        if (useDynamicShifts) {
+          if (shiftForDate) {
+            shiftCode = shiftForDate;
+            shiftObj = allShiftsMap.get(shiftForDate) || null;
+            if (shiftObj) shiftCache.set(date, shiftObj);
+          }
+          if (!shiftObj) {
+            if (employeeShiftObj) {
+              shiftObj = employeeShiftObj;
+              shiftCode = shiftCode || employeeShiftObj.code;
+              shiftCache.set(date, shiftObj);
+            } else if (doc?.shift) {
+              const normalizedShiftCode = extractShiftCode(doc.shift);
+              shiftObj = allShiftsMap.get(normalizedShiftCode);
+              shiftCode = shiftCode || (shiftObj ? shiftObj.code : normalizedShiftCode);
+              if (shiftObj) shiftCache.set(date, shiftObj);
+            } else if (emp.shift) {
+              const extractedCode = extractShiftCode(emp.shift);
+              shiftObj = allShiftsMap.get(extractedCode);
+              shiftCode = shiftCode || (shiftObj ? shiftObj.code : extractedCode);
+              if (shiftObj) shiftCache.set(date, shiftObj);
+            } else {
+              shiftCode = shiftCode || empShift || '';
+            }
+          } else if (!shiftCode) {
+            shiftCode = shiftObj.code;
+          }
+        } else {
+          shiftCode = shiftForDate || doc?.shift || empShift || '';
+        }
+
+        if (isFutureDay) {
+          days.push({
+            date,
+            shift: shiftCode,
+            status: '',
+            reason: '',
+            checkIn: null,
+            checkOut: null,
+            late: false,
+            earlyLeave: false,
+            excused: false,
+            leaveType: null,
+            isFuture: true,
+          });
+          continue;
+        }
+
+        // Saturday unified-shift-time override (per-department, OFF by default).
+        // When a department uses 'unified_time', all shifts are judged against one
+        // common Saturday timing. Only applies on worked Saturdays.
+        if (weekendInfo.isSaturday && !isWeekendOff) {
+          const deptCfg = departmentPolicyMap.get(String(emp.department || '').trim().toLowerCase());
+          if (deptCfg && deptCfg.saturdayShiftMode === 'unified_time' && deptCfg.saturdayUnifiedStart && deptCfg.saturdayUnifiedEnd) {
+            // Replace the shift object used for calculation only (display shiftCode kept as-is).
+            shiftObj = {
+              code: 'SAT-UNIFIED',
+              name: 'Saturday Unified',
+              startTime: deptCfg.saturdayUnifiedStart,
+              endTime: deptCfg.saturdayUnifiedEnd,
+              crossesMidnight: !!deptCfg.saturdayUnifiedCrossesMidnight,
+            };
+          }
+        }
+
+        const checkIn = doc?.checkIn ? new Date(doc.checkIn) : null;
+        // Ensure checkOut is properly converted - handle both Date objects and ISO strings
+        // Try multiple field names in case of variations
+        let checkOut = null;
+        const checkOutValue = doc?.checkOut || doc?.checkout || doc?.check_out;
+        if (checkOutValue != null) {
+          try {
+            // Handle both Date objects and ISO strings
+            if (checkOutValue instanceof Date) {
+              checkOut = checkOutValue;
+            } else if (typeof checkOutValue === 'string') {
+              checkOut = new Date(checkOutValue);
+            } else if (checkOutValue.constructor === Date) {
+              checkOut = checkOutValue;
+            }
+            // Validate the date is valid
+            if (checkOut && isNaN(checkOut.getTime())) {
+              checkOut = null;
+            }
+          } catch (e) {
+            checkOut = null;
+          }
+        }
+        
+        // ====================================================================================
+        // NIGHT SHIFT CHECKOUT RETRIEVAL LOGIC
+        // ====================================================================================
+        // For night shifts that cross midnight: checkOut may be stored on the next day's record
+        // since the shift ends on the next working day (e.g., Dec 26 shift 21:00-06:00 ends on Dec 27 at 06:00)
+        // This logic applies to ALL night shift employees (N1, N2, S1, S2, or any shift with crossesMidnight=true)
+        // 
+        // Strategy:
+        // 1. First try to get checkOut from current day's record (already done above)
+        // 2. If checkOut is missing but checkIn exists, check next day's record
+        // 3. Use next day's checkOut if it belongs to current day's night shift
+        // ====================================================================================
+        if (checkIn && !checkOut && day < daysInMonth) {
+          // Check if this is a night shift (crosses midnight)
+          const isNightShift = shiftObj?.crossesMidnight || 
+                               (shiftCode && ['N1', 'N2', 'S1', 'S2'].includes(shiftCode));
+          
+          if (isNightShift) {
+            const nextDay = day + 1;
+            const nextDayStr = String(nextDay).padStart(2, '0');
+            const nextDate = `${monthPrefix}-${nextDayStr}`;
+            const nextKey = `${emp.empCode}|${nextDate}`;
+            const nextDoc = docsByEmpDate.get(nextKey);
+            
+            // If next day's record has a checkOut, check if it belongs to current day's night shift
+            if (nextDoc?.checkOut) {
+              try {
+                const nextCheckOutValue = nextDoc.checkOut || nextDoc.checkout || nextDoc.check_out;
+                if (nextCheckOutValue != null) {
+                  const nextCheckOut = nextCheckOutValue instanceof Date 
+                    ? nextCheckOutValue 
+                    : new Date(nextCheckOutValue);
+                  if (!isNaN(nextCheckOut.getTime())) {
+                    const checkOutLocal = new Date(nextCheckOut.getTime() + COMPANY_OFFSET_MS);
+                    const checkOutHour = checkOutLocal.getUTCHours();
+                    const checkOutMin = checkOutLocal.getUTCMinutes();
+                    const checkOutTotalMin = checkOutHour * 60 + checkOutMin;
+                    
+                    // Check if next day has checkIn - if not, the checkOut definitely belongs to previous day
+                    let nextDayHasCheckIn = false;
+                    if (nextDoc.checkIn) {
+                      try {
+                        const nextCheckIn = nextDoc.checkIn instanceof Date 
+                          ? nextDoc.checkIn 
+                          : new Date(nextDoc.checkIn);
+                        if (!isNaN(nextCheckIn.getTime())) {
+                          nextDayHasCheckIn = true;
+                        }
+                      } catch (e) {
+                        // Ignore errors
+                      }
+                    }
+                    
+                    // For night shifts: checkOut before 08:00 belongs to previous day's shift
+                    // Also if next day has no checkIn, the checkOut definitely belongs to previous day
+                    // Use 08:00 (480 minutes) as the cutoff - anything before this is from previous night shift
+                    if (checkOutTotalMin < 480 || !nextDayHasCheckIn) {
+                      checkOut = nextCheckOut;
+                    } else if (nextDayHasCheckIn) {
+                      // If next day has checkIn, check if checkIn is in evening (new shift) vs early morning (same shift)
+                      try {
+                        const nextCheckIn = nextDoc.checkIn instanceof Date 
+                          ? nextDoc.checkIn 
+                          : new Date(nextDoc.checkIn);
+                        if (!isNaN(nextCheckIn.getTime())) {
+                          const checkInLocal = new Date(nextCheckIn.getTime() + TZ_MS);
+                          const checkInHour = checkInLocal.getUTCHours();
+                          
+                          // If checkOut is before 08:00 and checkIn is after 18:00 (evening),
+                          // then checkOut belongs to previous day's night shift
+                          // (checkIn is the start of the next shift)
+                          if (checkOutTotalMin < 480 && checkInHour >= 18) {
+                            checkOut = nextCheckOut;
+                          }
+                        }
+                      } catch (e) {
+                        // Ignore errors - fallback to not using this checkOut
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                // Ignore errors
+              }
+            }
+          }
+        }
+        
+        // Also check: if current day has checkOut but it's after 08:00 and we have a night shift,
+        // it might actually belong to the previous day. But we'll keep it for now since it's in the current record.
+        
+        // Debug logging for specific employees and dates to troubleshoot checkOut issues
+        const shouldDebug = (emp.empCode === '812593' && (date.includes('-19') || date.includes('-24'))) ||
+                            (emp.empCode === '00002' && date.includes('-26')) ||
+                            (emp.empCode === '25057' && date.includes('-26'));
+        
+        if (shouldDebug) {
+          const nextDay = day < daysInMonth ? day + 1 : null;
+          const nextDayKey = nextDay ? `${emp.empCode}|${monthPrefix}-${String(nextDay).padStart(2, '0')}` : null;
+          const nextDayDoc = nextDayKey ? docsByEmpDate.get(nextDayKey) : null;
+        }
+        
+        const hasPunch = !!checkIn || !!checkOut;
+        const bothMissing = !checkIn && !checkOut; // Check if both punches are missing
+
+        // ----- AUTO STATUS LOGIC -----
+        let rawStatus = doc?.attendanceStatus;
+        let status;
+
+        if (!doc) {
+          // no record at all → auto by weekend, unless paid leave was marked in HR Leaves
+          status = paidLeaveKeys.has(key) ? 'Paid Leave' : (isWeekendOff ? 'Holiday' : 'Absent');
+        } else {
+          if (rawStatus) {
+            status = normalizeStatus(rawStatus, { isWeekendOff });
+          } else {
+            // HR did not set status; decide from punches (or paid leave from HR Leaves)
+            if (paidLeaveKeys.has(key)) {
+              status = 'Paid Leave';
+            } else if (bothMissing && !isWeekendOff) {
+              status = 'Absent';
+            } else if (hasPunch) {
+              status = 'Present';
+            } else if (isWeekendOff) {
+              status = 'Holiday';
+            } else {
+              status = 'Absent';
+            }
+          }
+        }
+        // Ensure HR Leaves (LeaveRecord) paid leave always reflects on monthly sheet
+        if (paidLeaveKeys.has(key)) status = 'Paid Leave';
+
+        // Department Saturday policy overrides — skip if HR manually edited this record
+        const wasManuallyEdited = doc?.manuallyEdited === true;
+
+        if (weekendInfo.isSaturday && !wasManuallyEdited) {
+          if (!isWeekendOff && status === 'Holiday') {
+            status = hasPunch ? 'Present' : 'Absent';
+          }
+          if (isWeekendOff && status === 'Absent' && !hasPunch) {
+            status = 'Holiday';
+          }
+        }
+
+        const reason = doc?.reason || '';
+        
+        // First, recalculate late/early based on current times
+        let late = false;
+        let earlyLeave = false;
+        let dayViolationMinutes = 0;
+        let lateMinutes = 0;
+        let earlyMinutes = 0;
+
+        // Late / Early calculation only if both punches and not a holiday
+        // Use shiftObj (from DB) or shiftCode (legacy) for calculations
+        // IMPORTANT: Check if check-in and check-out are the same time (data error)
+        const sameTimePunch = checkIn && checkOut && 
+          Math.abs(checkIn.getTime() - checkOut.getTime()) < 60000; // Less than 1 minute difference
+        
+        if (checkIn && checkOut && status !== 'Holiday' && status !== 'Eid Holiday' && !sameTimePunch) {
+          // Use shiftObj if available, otherwise look up shift by code from allShiftsMap
+          // Normalize shiftCode in case it's a formatted string
+          const normalizedShiftCode = shiftCode ? extractShiftCode(shiftCode) : null;
+          let shiftForCalc = (shiftObj && shiftObj.startTime) 
+            ? shiftObj 
+            : (normalizedShiftCode ? allShiftsMap?.get(normalizedShiftCode) : null);
+          
+          // If still no shift found, try employee's current shift object (fallback)
+          if (!shiftForCalc && employeeShiftObj && employeeShiftObj.startTime) {
+            shiftForCalc = employeeShiftObj;
+          }
+          
+          // If still no shift found, try to get from employee's shift code
+          if (!shiftForCalc && emp.shift) {
+            const extractedEmpShift = extractShiftCode(emp.shift);
+            shiftForCalc = allShiftsMap?.get(extractedEmpShift);
+          }
+
+          const shiftDated = shiftWithGraceResolvedForDate(shiftForCalc, date);
+          const shiftForViolation = shiftWithGracePolicyForAttendanceRow(
+            shiftDated,
+            doc,
+            date,
+            companyTodayYmd
+          );
+          const flags = computeLateEarly(shiftForViolation, checkIn, checkOut, allShiftsMap, date);
+          
+          
+          late = !!flags.late;
+          earlyLeave = !!flags.earlyLeave;
+
+          lateMinutes = flags.lateMinutes || 0;
+          earlyMinutes = flags.earlyMinutes || 0;
+
+          dayViolationMinutes = lateMinutes + earlyMinutes;
+        } else if (sameTimePunch) {
+          // If check-in and check-out are the same time, treat as missing check-out
+          // This will be handled by the missing punch logic below
+          late = false;
+          earlyLeave = false;
+          lateMinutes = 0;
+          earlyMinutes = 0;
+          dayViolationMinutes = 0;
+        }
+
+        // Now read excused flags from database (use recalculated late/early for fallback)
+        // Support both new separate fields and legacy excused field
+        const lateExcused = doc?.lateExcused !== undefined 
+          ? !!doc.lateExcused 
+          : (doc?.excused && late); // Use recalculated late, not stored doc?.late
+        const earlyExcused = doc?.earlyExcused !== undefined 
+          ? !!doc.earlyExcused 
+          : (doc?.excused && earlyLeave); // Use recalculated earlyLeave, not stored doc?.earlyLeave
+        const excused = lateExcused || earlyExcused; // For backward compatibility
+
+        // Check late separately
+        if (late && !lateExcused) {
+          lateCount++;
+          totalLateMinutes += lateMinutes;
+        }
+        // Check early separately
+        if (earlyLeave && !earlyExcused) {
+          earlyCount++;
+          totalEarlyMinutes += earlyMinutes;
+        }
+
+        // Working day check for violation deduction (not leave/holiday, has punches)
+        // Half Day: no late/early violation deduction (only 0.5 day leave deduction applies)
+        const isWorkingDayWithPunches = 
+          status !== 'Holiday' && 
+          status !== 'Eid Holiday' && 
+          status !== 'Paid Leave' && 
+          status !== 'Un Paid Leave' && 
+          status !== 'Sick Leave' && 
+          status !== 'Work From Home' &&
+          status !== 'Half Day' &&
+          !EXTRAORDINARY_LEAVE_STATUSES.includes(status) &&
+          checkIn && 
+          checkOut;
+
+        // =============================================================================
+        // SALARY DEDUCTION FORMULA - LATE AND EARLY COUNTED SEPARATELY
+        // =============================================================================
+        //
+        // LATE and EARLY violations are tracked independently. Each has its own count.
+        // - 2 late + 2 early → 3rd late = 1 day, 3rd early = 1 day → Total 2 days
+        // - A day with BOTH late and early counts as 1 late + 1 early violation
+        //
+        // RULES (same for both late and early):
+        // - 1st & 2nd: FREE | 3rd, 6th, 9th...: 1 FULL DAY | 4th, 5th, 7th, 8th...: PER-MINUTE FINE
+        //
+        // =============================================================================
+
+        // --- LATE VIOLATION (counted separately) ---
+        if (late && !lateExcused && isWorkingDayWithPunches) {
+          lateViolationCount += 1;
+          const vNo = lateViolationCount;
+          const vConfig = violationRules.violationConfig;
+
+          if (vNo > vConfig.freeViolations) {
+            if (vNo % vConfig.milestoneInterval === 0) {
+              violationBaseDays += 1;
+            } else {
+              const fineForThisDay = Math.min(
+                lateMinutes * vConfig.perMinuteRate,
+                vConfig.maxPerMinuteFine
+              );
+              perMinuteFineDays += fineForThisDay;
+            }
+          }
+        }
+
+        // --- EARLY VIOLATION (counted separately) ---
+        if (earlyLeave && !earlyExcused && isWorkingDayWithPunches) {
+          earlyViolationCount += 1;
+          const vNo = earlyViolationCount;
+          const vConfig = violationRules.violationConfig;
+
+          if (vNo > vConfig.freeViolations) {
+            if (vNo % vConfig.milestoneInterval === 0) {
+              violationBaseDays += 1;
+            } else {
+              const fineForThisDay = Math.min(
+                earlyMinutes * vConfig.perMinuteRate,
+                vConfig.maxPerMinuteFine
+              );
+              perMinuteFineDays += fineForThisDay;
+            }
+          }
+        }
+
+        // ----------------- ABSENT / MISSING PUNCH DEDUCTION -----------------------
+        // Use rules from database
+        const partialPunch = (checkIn && !checkOut) || (!checkIn && checkOut);
+        // bothMissing already defined above
+        const excusedForMissing = earlyExcused || lateExcused;
+        
+        // Determine if this is an absent day (missing punch OR no punch at all)
+        // Exclude Leave Without Inform from absent calculation (handled separately)
+        // Exclude extraordinary leaves (paid, no deduction)
+        const isAbsentDay = (partialPunch || bothMissing) && 
+          status !== 'Holiday' && 
+          status !== 'Eid Holiday' && 
+          status !== 'Paid Leave' && 
+          status !== 'Un Paid Leave' && 
+          status !== 'Sick Leave' && 
+          status !== 'Work From Home' &&
+          status !== 'Leave Without Inform' &&
+          !EXTRAORDINARY_LEAVE_STATUSES.includes(status) &&
+          !excusedForMissing;
+        
+        // Apply absent deduction using database rules
+        // IMPORTANT: Don't count if it's already a leave (Unpaid Leave, Sick Leave, Leave Without Inform, or extraordinary)
+        const hrMarkedAbsentOnWeekendOff =
+          wasManuallyEdited &&
+          isWeekendOff &&
+          status === 'Absent';
+        if (isAbsentDay && (!isWeekendOff || hrMarkedAbsentOnWeekendOff) && status !== 'Un Paid Leave' && status !== 'Sick Leave' && status !== 'Leave Without Inform' && !EXTRAORDINARY_LEAVE_STATUSES.includes(status)) {
+          const missingPunchDays = getMissingPunchDeductionDays(bothMissing, partialPunch, violationRules.absentConfig);
+          absentDays += missingPunchDays;
+        }
+
+        // ----------------- LEAVE / HALF-DAY RULES ----------------
+        // Use database rules for leave deductions
+        const leaveDeduction = getLeaveDeductionDays(status, violationRules.leaveConfig, violationRules.absentConfig);
+        
+        if (status === 'Un Paid Leave' || status === 'Sick Leave') {
+          unpaidLeaveDays += leaveDeduction;
+        } else if (status === 'Leave Without Inform') {
+          // Leave Without Inform is handled in absentConfig
+          absentDays += leaveDeduction;
+        } else if (status === 'Half Day') {
+          halfDays += leaveDeduction;
+        }
+        // Paid Leave = no deduction (excluded from all deduction logic)
+
+        // HR-recorded away from workstation (hourly proportional deduction)
+        const awayHoursRaw = Number(doc?.awayHours) || 0;
+        const shiftGrossHours = getShiftDurationHours(shiftObj);
+        const shiftBreakMinutes = getShiftBreakMinutes(shiftObj);
+        const shiftPaidHours = getPaidWorkHours(shiftObj);
+        let awayDeductionForDay = 0;
+        const awayEligible =
+          awayHoursRaw > 0 &&
+          !isFutureDay &&
+          checkIn &&
+          !isWeekendOff &&
+          status !== 'Holiday' &&
+          status !== 'Eid Holiday' &&
+          status !== 'Paid Leave' &&
+          status !== 'Un Paid Leave' &&
+          status !== 'Sick Leave' &&
+          !EXTRAORDINARY_LEAVE_STATUSES.includes(status);
+
+        if (awayEligible) {
+          awayDeductionForDay = calculateAwayDeductionDays(awayHoursRaw, shiftPaidHours);
+          awayDeductionDays += awayDeductionForDay;
+          totalAwayHours += awayHoursRaw;
+        }
+
+        days.push({
+          date,
+          shift: shiftCode, // Use shift code for display
+          status,
+          reason,
+          checkIn: checkIn ? checkIn.toISOString() : null,
+          checkOut: checkOut ? checkOut.toISOString() : null,
+          late,
+          earlyLeave,
+          excused: lateExcused || earlyExcused, // For backward compatibility
+          lateExcused,
+          earlyExcused,
+          leaveType: doc?.leaveType || null, // Quarter-based: 'paid' only (no casual/annual)
+          awayHours: awayHoursRaw,
+          awayDeductionDays: awayDeductionForDay,
+          awayNote: doc?.awayNote || '',
+          awayReportedBy: doc?.awayReportedBy || '',
+          shiftHours: shiftPaidHours,
+          shiftGrossHours,
+          breakMinutes: shiftBreakMinutes,
+          isFuture: false,
+        });
+      }
+
+      // =============================================================================
+      // FINAL SALARY DEDUCTION CALCULATION - COMBINING ALL DEDUCTION COMPONENTS
+      // =============================================================================
+      //
+      // TOTAL SALARY DEDUCTION FORMULA:
+      // --------------------------------
+      // Salary Deduction (days) = 
+      //   Violation Full Days +          // From 3rd, 6th, 9th, ... violations (1 day each)
+      //   Violation Per-Minute Days +    // From 4th, 5th, 7th, 8th, ... violations (minutes × 0.007)
+      //   Unpaid Leave Days +            // Unpaid Leave + Sick Leave (1 day each)
+      //   Absent Days +                  // Missing punches or no attendance (1 day each, LWI = 1.5 days)
+      //   Half Days                      // Half-day leaves (0.5 day each)
+      //
+      // COMPONENT BREAKDOWN:
+      // --------------------
+      // 1. VIOLATION FULL DAYS (violationBaseDays):
+      //    - Accumulated from milestone violations (3rd, 6th, 9th, 12th, ...)
+      //    - Each milestone violation = 1 full day
+      //    - Example: 9 violations → 3 full days (from violations #3, #6, #9)
+      //
+      // 2. VIOLATION PER-MINUTE DAYS (perMinuteFineDays):
+      //    - Accumulated from non-milestone violations after 3rd (4th, 5th, 7th, 8th, ...)
+      //    - Formula per violation: min(violationMinutes × 0.007, 1.0) days
+      //    - Example: 4th violation (30 min) + 5th violation (20 min) + 7th violation (15 min)
+      //              = (30×0.007) + (20×0.007) + (15×0.007) = 0.21 + 0.14 + 0.105 = 0.455 days
+      //
+      // 3. UNPAID LEAVE DAYS (unpaidLeaveDays):
+      //    - Unpaid Leave status: 1 day per occurrence
+      //    - Sick Leave status: 1 day per occurrence (treated as unpaid)
+      //    - Example: 3 Unpaid Leave + 2 Sick Leave = 5 days
+      //
+      // 4. ABSENT DAYS (absentDays):
+      //    - Missing both check-in AND check-out: 1 day per occurrence
+      //    - Missing only check-in OR only check-out: 1 day per occurrence
+      //    - Leave Without Inform (LWI) status: 1.5 days per occurrence
+      //    - Example: 2 days missing punches + 1 LWI = 2 + 1.5 = 3.5 days
+      //
+      // 5. HALF DAYS (halfDays):
+      //    - Half Day status: 0.5 day per occurrence
+      //    - Example: 3 Half Days = 1.5 days
+      //
+      // COMPLETE EXAMPLE CALCULATION:
+      // -----------------------------
+      // Employee with:
+      //   - 8 violations (violations #3, #4, #5, #6, #7, #8 with 20, 30, 15, 10, 25, 10 min)
+      //   - 2 Unpaid Leave
+      //   - 1 Sick Leave
+      //   - 3 Absent days (missing punches)
+      //   - 1 Leave Without Inform (1.5 days)
+      //   - 2 Half Days
+      //
+      // Calculation:
+      //   violationFullDays = 2 (from violations #3 and #6)
+      //   perMinuteDays = (20×0.007) + (30×0.007) + (15×0.007) + (25×0.007) + (10×0.007)
+      //                = 0.14 + 0.21 + 0.105 + 0.175 + 0.07 = 0.70 days
+      //   unpaidLeaveDays = 2 + 1 = 3 days
+      //   absentDays = 3 + 1.5 = 4.5 days
+      //   halfDays = 2 × 0.5 = 1.0 day
+      //
+      //   TOTAL = 2.0 + 0.70 + 3.0 + 4.5 + 1.0 = 11.2 days deduction
+      //
+      // SALARY CALCULATION:
+      // -------------------
+      // Per-Day Salary = Gross Monthly Salary ÷ 30 days
+      // Deduction Amount = Per-Day Salary × Total Deduction Days
+      // Net Salary = Gross Salary - Deduction Amount
+      //
+      // Example (continued from above):
+      //   Gross Salary = ₹30,000
+      //   Per-Day Salary = ₹30,000 ÷ 30 = ₹1,000
+      //   Deduction Amount = ₹1,000 × 11.2 = ₹11,200
+      //   Net Salary = ₹30,000 - ₹11,200 = ₹18,800
+      //
+      // =============================================================================
+
+      // Component 1: Violation Full Days (from milestone violations: 3rd, 6th, 9th, ...)
+      const violationFullDays = violationBaseDays;
+
+      // Component 2: Violation Per-Minute Days (from non-milestone violations: 4th, 5th, 7th, 8th, ...)
+      const perMinuteDays = perMinuteFineDays;
+
+      // Component 3: Other Deductions
+      // - unpaidLeaveDays: Unpaid Leave + Sick Leave (1 day each)
+      // - absentDays: Missing punches (1 day each) + Leave Without Inform (1.5 days each)
+      // - halfDays: Half Day leaves (0.5 day each)
+      // Note: Missing punch is counted as absent (1 day), not a separate category
+      const salaryDeductDaysRaw =
+        violationFullDays +      // Full days from milestone violations
+        perMinuteDays +          // Days from per-minute violation fines
+        awayDeductionDays +      // Away from workstation (hours / shift hours)
+        unpaidLeaveDays +        // Unpaid Leave + Sick Leave
+        absentDays +             // Missing punches + Leave Without Inform
+        halfDays;                // Half-day leaves
+
+      // Calculate final deduction (rounded to 3 decimal places for precision)
+      // No artificial cap applied - if deduction exceeds month days, it reflects actual violations/absences
+      // Example: If deduction = 35 days in a 30-day month, employee will have negative/zero net salary
+      const salaryDeductDays = Number(salaryDeductDaysRaw.toFixed(3));
+
+
+      const grossSalary = emp.monthlySalary || 0;
+
+      const snapshotRaw =
+        emp.monthlySalarySnapshots?.[monthPrefix] ??
+        (typeof emp.monthlySalarySnapshots?.get === 'function'
+          ? emp.monthlySalarySnapshots.get(monthPrefix)
+          : undefined);
+      let recordedMonthlySalary = grossSalary;
+      if (snapshotRaw != null && Number.isFinite(Number(snapshotRaw))) {
+        recordedMonthlySalary = Number(snapshotRaw);
+      } else {
+        Employee.updateOne(
+          { empCode: emp.empCode, [`monthlySalarySnapshots.${monthPrefix}`]: { $exists: false } },
+          { $set: { [`monthlySalarySnapshots.${monthPrefix}`]: grossSalary } }
+        ).catch(() => {});
+      }
+
+      // Working days per month, controlled by CompanySettings.workingDaysMode:
+      //  - 'legacy' (default): daysInMonth - 6 (preserves historical behavior)
+      //  - 'actual': daysInMonth minus this employee's real weekend/off days
+      //  - 'fixed' : a fixed configured number
+      let workingDaysInMonth;
+      if (companySettings.workingDaysMode === 'fixed') {
+        workingDaysInMonth = companySettings.fixedDaysPerMonth || 26;
+      } else if (companySettings.workingDaysMode === 'actual') {
+        workingDaysInMonth = Math.max(1, daysInMonth - employeeOffDayCount);
+      } else {
+        workingDaysInMonth = daysInMonth - 6;
+      }
+      const salaryCalc = calculateSalaryAmounts(
+        grossSalary, 
+        salaryDeductDays, 
+        { daysPerMonth: workingDaysInMonth } // Per-day salary based on working days
+      );
+      const perDaySalary = salaryCalc.perDaySalary;
+      const salaryDeductAmount = salaryCalc.deductionAmount;
+      const netSalary = salaryCalc.netSalary;
+
+      const deductionRemarks = buildDeductionRemarks(days, perDaySalary);
+
+      // Get dynamic shift for the employee - use current shift assignment (no history)
+      let dynamicShift = emp.shift || '';
+      if (useDynamicShifts) {
+        // Use employee's current shift object (from shiftId field)
+        if (employeeShiftObj && employeeShiftObj.code) {
+          dynamicShift = employeeShiftObj.code;
+        } else if (emp.shiftId) {
+          // Try to get shift from employee's shiftId if shift object wasn't found
+          const shiftFromId = allShiftsMap.get(emp.shiftId.toString());
+          if (shiftFromId && shiftFromId.code) {
+            dynamicShift = shiftFromId.code;
+          }
+        } else if (emp.shift) {
+          // Last fallback: try to extract shift code from emp.shift (might be formatted string)
+          const extractedCode = extractShiftCode(emp.shift);
+          // Try to look it up in allShiftsMap to verify it's valid
+          const shiftFromCode = allShiftsMap.get(extractedCode);
+          if (shiftFromCode && shiftFromCode.code) {
+            dynamicShift = shiftFromCode.code;
+          } else {
+            // Use extracted code even if not found in map (might be a valid code not in active shifts)
+            dynamicShift = extractedCode;
+          }
+        }
+      }
+
+      employeesOut.push({
+        empCode: emp.empCode,
+        name: emp.name || '',
+        department: emp.department || '',
+        designation: emp.designation || '',
+        shift: dynamicShift,
+        monthlySalary: grossSalary, // GROSS (current)
+        recordedMonthlySalary, // GROSS locked when month was first opened
+        netSalary: Number(netSalary.toFixed(2)), // NET after deduction
+        salaryDeductAmount: Number(salaryDeductAmount.toFixed(2)),
+        lateCount,
+        earlyCount,
+        lateViolationCount,
+        earlyViolationCount,
+        violationDays: lateViolationCount + earlyViolationCount, // total for backward compatibility
+        missingPunchDays,
+        unpaidLeaveDays,
+        absentDays,
+        halfDays,
+        awayDeductionDays,
+        totalAwayHours,
+        salaryDeductDays,
+        perDaySalary: Number(perDaySalary.toFixed(2)),
+        deductionRemarks,
+        totalLateMinutes,
+        totalEarlyMinutes,
+        days,
+      });
+    }
+
+    // Stable Multi-Criteria Sort (Optimized)
+    // Algorithm: JavaScript's native sort (Timsort-like, stable O(n log n))
+    // Sort criteria: 1) Department (alphabetical), 2) Employee Code (numeric-aware)
+    employeesOut.sort((a, b) => {
+      // Primary sort: Department (case-insensitive)
+      const da = (a.department || '').toLowerCase().trim();
+      const db = (b.department || '').toLowerCase().trim();
+      if (da !== db) {
+        return da.localeCompare(db, undefined, { sensitivity: 'base' });
+      }
+      
+      // Secondary sort: Employee Code (numeric-aware for better ordering)
+      const codeA = String(a.empCode || '').trim();
+      const codeB = String(b.empCode || '').trim();
+      
+      // Try numeric comparison first (if both are numeric)
+      const numA = Number(codeA);
+      const numB = Number(codeB);
+      if (!isNaN(numA) && !isNaN(numB) && codeA === String(numA) && codeB === String(numB)) {
+        return numA - numB; // Numeric sort
+      }
+      
+      // Fallback to string comparison with natural ordering
+      return codeA.localeCompare(codeB, undefined, { 
+        numeric: true, // Natural sort: "2" comes before "10"
+        sensitivity: 'base' 
+      });
+    });
+
+    // Employees can only see their own data; HR/ADMIN see all
+    let filteredEmployees = employeesOut;
+    if (user.role === 'EMPLOYEE') {
+      const myEmpCode = String(user.empCode || '').trim();
+      filteredEmployees = employeesOut.filter((e) => String(e.empCode || '').trim() === myEmpCode);
+    }
+
+    const result = {
+      month: monthPrefix,
+      daysInMonth,
+      employees: filteredEmployees,
+    };
+
+    // Direct response - NO edge caching for authenticated routes
+    // (public cache would serve HR data to unauthenticated users - security risk)
+    const response = successResponse(
+      result,
+      'Monthly attendance retrieved successfully',
+      HTTP_STATUS.OK
+    );
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    return response;
+  } catch (err) {
+    if (
+      err?.code === 'UNAUTHORIZED_HR' ||
+      err?.code === 'UNAUTHORIZED' ||
+      err?.code === 'UNAUTHORIZED_EMPLOYEE'
+    ) {
+      return errorResponse('Unauthorized', 401);
+    }
+    return errorResponseFromException(err, req);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// PAID LEAVE COUNTER HELPERS (defensive: counters never go below zero)
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// POST /api/hr/monthly-attendance
+// -----------------------------------------------------------------------------
+
+export async function POST(req) {
+  try {
+    const { user } = await requirePermission('monthlyAttendance', 'update');
+    await connectDB();
+
+    const body = await req.json();
+    const {
+      empCode,
+      date,
+      status,
+      reason,
+      checkInTime,
+      checkOutTime,
+      violationExcused, // Legacy: kept for backward compatibility
+      lateExcused,
+      earlyExcused,
+      leaveType, // 'paid' only (quarter-based; no casual/annual)
+      awayHours,
+      awayNote,
+      awayReportedBy,
+    } = body;
+
+    if (!empCode || !date) {
+      throw new ValidationError('empCode and date are required');
+    }
+
+    const TZ = process.env.TIMEZONE_OFFSET || '+05:00';
+
+    // OPTIMIZATION: Run queries in parallel for faster response
+    const [allShifts, emp, departmentDocs] = await Promise.all([
+      Shift.find({})
+        .select(
+          '_id name code startTime endTime crossesMidnight breakMinutes paidHoursPerDay gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
+        )
+        .lean()
+        .maxTimeMS(1500),
+      Employee.findOne({ empCode })
+        .select('empCode name shift shiftId department designation monthlySalary saturdayGroup')
+        .lean()
+        .maxTimeMS(2000),
+      Department.find().select('name saturdayPolicy fifthSaturdayPolicy').lean().maxTimeMS(1500),
+    ]);
+    
+    const allShiftsMap = new Map();
+    allShifts.forEach((s) => {
+      allShiftsMap.set(s._id.toString(), s);
+      allShiftsMap.set(s.code, s);
+    });
+    const departmentPolicyMap = new Map();
+    (departmentDocs || []).forEach((d) => {
+      if (d.name == null) return;
+      departmentPolicyMap.set(String(d.name).trim().toLowerCase(), {
+        saturdayPolicy: d.saturdayPolicy || 'alternate',
+        fifthSaturdayPolicy: d.fifthSaturdayPolicy || 'working_all',
+      });
+    });
+
+    // Dynamic weekly off days (default [0] = Sunday). Saturday handled by department policy.
+    const companySettings = await getCompanySettings();
+    const weeklyOffDays = (companySettings.weeklyOffDays || [0]).filter((d) => d !== 6);
+
+    if (!emp) {
+      throw new NotFoundError(`Employee ${empCode}`);
+    }
+
+    const shiftById = new Map();
+    allShifts.forEach((s) => {
+      if (s && s._id && s.code) shiftById.set(s._id.toString(), s.code);
+    });
+    const shiftForDateMap = await getShiftsForEmployeesOnDate([empCode], date, {
+      employees: [emp],
+      shiftById,
+    });
+    const shiftCodeFromHistory = shiftForDateMap.get(empCode);
+
+    let shiftObj = null;
+    let shiftCode = shiftCodeFromHistory || '';
+    if (shiftCode) shiftObj = allShiftsMap.get(shiftCode);
+    if (!shiftObj && emp.shiftId) {
+      shiftObj = allShiftsMap.get(emp.shiftId.toString());
+      if (shiftObj) shiftCode = shiftObj.code;
+    }
+    if (!shiftObj && emp.shift) {
+      const extractedCode = extractShiftCode(emp.shift);
+      shiftObj = allShiftsMap.get(extractedCode);
+      shiftCode = shiftCode || (shiftObj ? shiftObj.code : extractedCode);
+    }
+    if (!shiftCode) shiftCode = emp.shift || '';
+
+    // Saturday unified-shift-time override (per-department, OFF by default).
+    // Replaces the shift used for calc/checkout on Saturdays when the department
+    // uses 'unified_time'. Storage shiftCode is kept as the employee's real shift.
+    {
+      const postLocal = new Date(`${date}T00:00:00${TZ}`);
+      const postDow = new Date(postLocal.getTime() + COMPANY_OFFSET_MS).getUTCDay();
+      if (postDow === 6) {
+        const deptCfg = departmentPolicyMap.get(String(emp.department || '').trim().toLowerCase());
+        if (deptCfg && deptCfg.saturdayShiftMode === 'unified_time' && deptCfg.saturdayUnifiedStart && deptCfg.saturdayUnifiedEnd) {
+          shiftObj = {
+            code: 'SAT-UNIFIED',
+            name: 'Saturday Unified',
+            startTime: deptCfg.saturdayUnifiedStart,
+            endTime: deptCfg.saturdayUnifiedEnd,
+            crossesMidnight: !!deptCfg.saturdayUnifiedCrossesMidnight,
+          };
+        }
+      }
+    }
+
+    const companyTodayYmdPost = getCompanyTodayYmd();
+
+    const existingRecord = await ShiftAttendance.findOne({ empCode, date, shift: shiftCode })
+      .select('attendanceStatus leaveType checkInGracePeriod checkOutGracePeriod')
+      .lean()
+      .maxTimeMS(2000);
+
+    let checkIn = null;
+    let checkOut = null;
+
+    // store with explicit offset (+05:00) – absolute time is correct everywhere
+    if (checkInTime) {
+      checkIn = new Date(`${date}T${checkInTime}:00${TZ}`);
+    }
+
+    if (checkOutTime) {
+      let coDate = date;
+      // Check if shift crosses midnight (from shift object or legacy codes)
+      const crossesMidnight = shiftObj
+        ? shiftObj.crossesMidnight
+        : (shiftObj?.crossesMidnight || false);
+      
+      if (crossesMidnight) {
+        const [hStr] = checkOutTime.split(':');
+        const h = Number(hStr || '0');
+        if (h < 8) {
+          // next-day checkout – move company date +1 safely using UTC fields
+          const base = new Date(`${date}T00:00:00${TZ}`);
+          base.setUTCDate(base.getUTCDate() + 1);
+          coDate = toYMD(base); // uses UTC fields
+        }
+      }
+      checkOut = new Date(`${coDate}T${checkOutTime}:00${TZ}`);
+    }
+
+    // We still store only flags here; minute-level salary handling happens in GET
+    let late = false;
+    let earlyLeave = false;
+    if (checkIn && checkOut) {
+      // Normalize shiftCode in case it's a formatted string
+      const normalizedShiftCode = shiftCode ? extractShiftCode(shiftCode) : null;
+      const shiftForCalc = shiftObj || (normalizedShiftCode ? allShiftsMap?.get(normalizedShiftCode) : null);
+      const shiftDated = shiftWithGraceResolvedForDate(shiftForCalc, date);
+      const shiftForViolation = shiftWithGracePolicyForAttendanceRow(
+        shiftDated,
+        existingRecord,
+        date,
+        companyTodayYmdPost
+      );
+      const flags = computeLateEarly(shiftForViolation, checkIn, checkOut, allShiftsMap, date);
+      late = flags.late;
+      earlyLeave = flags.earlyLeave;
+    }
+
+    // Handle excused flags - support both new separate fields and legacy
+    // IMPORTANT: Always use the provided excused flags if they exist, regardless of recalculated late/early
+    // This allows users to excuse violations even if times are recalculated
+    const finalLateExcused = lateExcused !== undefined 
+      ? !!lateExcused 
+      : (violationExcused !== undefined ? (violationExcused && late) : false);
+    const finalEarlyExcused = earlyExcused !== undefined 
+      ? !!earlyExcused 
+      : (violationExcused !== undefined ? (violationExcused && earlyLeave) : false);
+    const finalExcused = finalLateExcused || finalEarlyExcused; // Legacy field
+
+    // Saving excused flags
+
+    const hasPunch = !!checkIn || !!checkOut;
+
+    // Determine if this date is a weekend (same logic as GET endpoint)
+    const dateObj = new Date(`${date}T00:00:00${TZ}`);
+    const localMs = dateObj.getTime() + COMPANY_OFFSET_MS;
+    const local = new Date(localMs);
+    const dow = local.getUTCDay(); // Day of week in company timezone
+    const [yearStr, monthStr, ddStr] = date.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIndex = parseInt(monthStr, 10) - 1;
+    const dayOfMonth = parseInt(ddStr, 10);
+    const firstParts = getCompanyLocalDateParts(year, monthIndex, 1);
+    const saturdayIndex = getSaturdayIndexInMonth(year, monthIndex, dayOfMonth, dow, firstParts.dow);
+    
+    let isWeekendOff = false;
+    if (weeklyOffDays.includes(dow)) {
+      isWeekendOff = true; // configurable weekly off days (default Sunday)
+    } else if (dow === 6) {
+      isWeekendOff = saturdayIndex == null ? true : isSaturdayOffForEmployee(saturdayIndex, emp, departmentPolicyMap, emp.department || '');
+    }
+
+    let rawStatus = status;
+    let attendanceStatus;
+
+    if (!rawStatus) {
+      if (hasPunch) {
+        rawStatus = 'Present';
+      } else {
+        rawStatus = 'Absent';
+      }
+    }
+
+    attendanceStatus = normalizeStatus(rawStatus, { isWeekendOff });
+
+    // Department Saturday policy overrides — only when HR didn't explicitly set a status
+    // In PATCH, `status` comes from the request body: if HR chose a status, respect it
+    const hrExplicitlySetStatus = !!status;
+
+    if (dow === 6 && !hrExplicitlySetStatus) {
+      if (!isWeekendOff && attendanceStatus === 'Holiday') {
+        attendanceStatus = hasPunch ? 'Present' : 'Absent';
+      }
+      if (isWeekendOff && attendanceStatus === 'Absent' && !hasPunch) {
+        attendanceStatus = 'Holiday';
+      }
+    }
+
+    const totalPunches = checkIn && checkOut ? 2 : hasPunch ? 1 : 0;
+
+    const update = {
+      date,
+      empCode,
+      employeeName: emp.name || '',
+      department: emp.department || '',
+      designation: emp.designation || '',
+      shift: shiftCode,
+      checkIn,
+      checkOut,
+      totalPunches,
+      attendanceStatus,
+      reason: reason || '',
+      late,
+      earlyLeave,
+      excused: finalExcused, // Legacy field for backward compatibility
+      lateExcused: finalLateExcused,
+      earlyExcused: finalEarlyExcused,
+      // Quarter-based: store leaveType 'paid' only (no casual/annual)
+      // Extraordinary leaves: store sub-type (marriage, death, etc.) for reporting
+      leaveType: attendanceStatus === 'Paid Leave' ? 'paid'
+        : EXTRAORDINARY_LEAVE_STATUSES.includes(attendanceStatus)
+          ? { 'Marriage Leave': 'marriage', 'Death Leave': 'death', 'Maternity Leave': 'maternity', 'Paternity Leave': 'paternity', 'Hajj Leave': 'hajj', 'Umrah Leave': 'umrah' }[attendanceStatus]
+          : null,
+      manuallyEdited: true,
+      updatedAt: new Date(),
+    };
+
+    if (awayHours !== undefined && awayHours !== null && awayHours !== '') {
+      const parsedAway = Number(awayHours);
+      if (Number.isNaN(parsedAway) || parsedAway < 0) {
+        throw new ValidationError('awayHours must be a non-negative number');
+      }
+      if (parsedAway > 0) {
+        update.awayHours = parsedAway;
+        update.awayNote = String(awayNote || '').trim() || null;
+        update.awayReportedBy = String(awayReportedBy || '').trim() || null;
+        update.awayRecordedBy = user?.email || user?.name || 'HR';
+        update.awayRecordedAt = new Date();
+      } else {
+        update.awayHours = null;
+        update.awayNote = null;
+        update.awayReportedBy = null;
+        update.awayRecordedBy = null;
+        update.awayRecordedAt = null;
+      }
+    }
+
+    const gPost = resolveGracePeriodsForCalendarDate(shiftObj || {}, date);
+    if (date >= companyTodayYmdPost) {
+      update.checkInGracePeriod = gPost.checkIn;
+      update.checkOutGracePeriod = gPost.checkOut;
+    } else if (
+      existingRecord?.checkInGracePeriod == null ||
+      existingRecord?.checkOutGracePeriod == null
+    ) {
+      update.checkInGracePeriod = gPost.checkIn;
+      update.checkOutGracePeriod = gPost.checkOut;
+    }
+
+    const wasPaidLeave = existingRecord?.attendanceStatus === 'Paid Leave';
+    const isPaidLeave = attendanceStatus === 'Paid Leave';
+
+    // Only fetch leave record when status is or was Paid Leave (fewer queries)
+    const existingLeave = (wasPaidLeave || isPaidLeave)
+      ? await LeaveRecord.findOne({ empCode, date }).lean().maxTimeMS(2000)
+      : null;
+
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // -------------------------------------------------------------------------
+        // Quarter-based Paid Leave (no casual/annual): LeaveRecord + PaidLeaveQuarter
+        // -------------------------------------------------------------------------
+        const effectiveLeaveType = (leaveType === 'casual' || leaveType === 'annual') ? 'paid' : (leaveType || 'paid');
+        if (isPaidLeave && effectiveLeaveType === 'paid') {
+          const policy = await getLeavePolicy();
+          const { year: qYear, quarter } = getQuarterFromDate(date);
+          const quarterRecord = await PaidLeaveQuarter.getOrCreate(empCode, qYear, quarter, policy.leavesPerQuarter, session);
+          const maxAllowed = await PaidLeaveQuarter.getMaxAllowedForQuarter(
+            empCode,
+            qYear,
+            quarter,
+            policy.leavesPerQuarter,
+            session
+          );
+          if (quarterRecord.leavesTaken >= maxAllowed) {
+            const quarterLabel = getQuarterLabel(qYear, quarter);
+            throw new ValidationError(
+              `This employee has used all ${maxAllowed} paid leaves for ${quarterLabel}. Per company policy, no additional paid leave can be granted for this quarter.`
+            );
+          }
+          if (!existingLeave) {
+            await LeaveRecord.create(
+              [{ empCode, date, leaveType: 'paid', reason: reason || '', markedBy: 'HR' }],
+              { session }
+            );
+            quarterRecord.leavesAllocated = maxAllowed;
+            quarterRecord.leavesTaken = (quarterRecord.leavesTaken || 0) + 1;
+            await quarterRecord.save({ session });
+          }
+        } else if (wasPaidLeave && !isPaidLeave) {
+          if (existingLeave) {
+            const { year: qYear, quarter } = getQuarterFromDate(date);
+            const quarterRecord = await PaidLeaveQuarter.findOne({ empCode, year: qYear, quarter }).session(session);
+            if (quarterRecord && quarterRecord.leavesTaken > 0) {
+              quarterRecord.leavesTaken -= 1;
+              await quarterRecord.save({ session });
+            }
+            await LeaveRecord.findOneAndDelete({ empCode, date }, { session });
+          }
+          update.leaveType = null;
+        } else if (wasPaidLeave && isPaidLeave && !leaveType) {
+          update.leaveType = 'paid';
+          if (!existingLeave) {
+            const policy = await getLeavePolicy();
+            const { year: qYear, quarter } = getQuarterFromDate(date);
+            const quarterRecord = await PaidLeaveQuarter.getOrCreate(empCode, qYear, quarter, policy.leavesPerQuarter, session);
+            const maxAllowed = await PaidLeaveQuarter.getMaxAllowedForQuarter(
+              empCode,
+              qYear,
+              quarter,
+              policy.leavesPerQuarter,
+              session
+            );
+            if (quarterRecord.leavesTaken >= maxAllowed) {
+              const quarterLabel = getQuarterLabel(qYear, quarter);
+              throw new ValidationError(
+                `This employee has used all ${maxAllowed} paid leaves for ${quarterLabel}. Per company policy, no additional paid leave can be granted for this quarter.`
+              );
+            }
+            await LeaveRecord.create(
+              [{ empCode, date, leaveType: 'paid', reason: reason || '', markedBy: 'HR' }],
+              { session }
+            );
+            quarterRecord.leavesAllocated = maxAllowed;
+            quarterRecord.leavesTaken = (quarterRecord.leavesTaken || 0) + 1;
+            await quarterRecord.save({ session });
+          }
+        }
+
+        // ShiftAttendance update – include shift in filter to match unique index (empCode, date, shift)
+        await ShiftAttendance.findOneAndUpdate(
+          { date, empCode, shift: shiftCode },
+          { $set: update },
+          { upsert: true, runValidators: true, session }
+        ).maxTimeMS(3000);
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return successResponse(
+      null,
+      'Attendance saved successfully',
+      HTTP_STATUS.OK
+    );
+  } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
+    return errorResponseFromException(err, req);
+  }
+}
