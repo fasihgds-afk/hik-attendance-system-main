@@ -2045,7 +2045,11 @@ export default function MonthlyHrPage() {
                             textAlign: 'right',
                             fontWeight: 500,
                           }}
-                          title={`Gross monthly salary`}
+                          title={
+                            emp.salaryProration
+                              ? `Payable gross (prorated from ${emp.salaryProration.effectiveDate}): ${emp.salaryProration.daysBefore}d @ ${emp.salaryProration.previousAmount} + ${emp.salaryProration.daysFromEffective}d @ ${emp.salaryProration.newAmount}`
+                              : `Gross monthly salary`
+                          }
                         >
                           {formatCurrency(emp.monthlySalary || 0)}
                         </td>

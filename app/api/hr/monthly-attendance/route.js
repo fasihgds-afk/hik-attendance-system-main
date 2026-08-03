@@ -50,7 +50,7 @@ import Department from '../../../../models/Department';
 import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { getQuarterFromDate, getQuarterLabel } from '../../../../lib/leave/quarterUtils';
 import { normalizeStatus, extractShiftCode, isSaturdayOffForEmployee, getSaturdayIndexInMonth, EXTRAORDINARY_LEAVE_STATUSES } from '../../../../lib/calculations';
-import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays } from '../../../../lib/calculations';
+import { calculateViolationDeductions, calculateTotalDeductionDays, calculateSalaryAmounts, getLeaveDeductionDays, getMissingPunchDeductionDays, calculateProratedMonthlyGross } from '../../../../lib/calculations';
 import { calculateAwayDeductionDays, getPaidWorkHours, getShiftDurationHours, getShiftBreakMinutes, buildDeductionRemarks } from '../../../../lib/calculations/awayDeduction';
 import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
 import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
@@ -501,14 +501,14 @@ export async function GET(req) {
       Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
       isEmployeeViewer
         ? Employee.find({ empCode: myEmpCode })
-            .select('empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots saturdayGroup')
+            .select('empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots salaryHistory saturdayGroup')
             .lean()
             .maxTimeMS(1500)
         : fetchEmployeesForMonthlySheet(Employee, ShiftAttendance, {
             monthStartDate,
             monthEndDate,
             monthRelation,
-            projection: 'empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots saturdayGroup',
+            projection: 'empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots salaryHistory saturdayGroup',
             maxTimeMS: 2500,
           }),
       Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
@@ -1321,17 +1321,31 @@ export async function GET(req) {
       const salaryDeductDays = Number(salaryDeductDaysRaw.toFixed(3));
 
 
-      const grossSalary = emp.monthlySalary || 0;
+      const currentGross = Number(emp.monthlySalary) || 0;
 
       const snapshotRaw =
         emp.monthlySalarySnapshots?.[monthPrefix] ??
         (typeof emp.monthlySalarySnapshots?.get === 'function'
           ? emp.monthlySalarySnapshots.get(monthPrefix)
           : undefined);
-      let recordedMonthlySalary = grossSalary;
-      if (snapshotRaw != null && Number.isFinite(Number(snapshotRaw))) {
-        recordedMonthlySalary = Number(snapshotRaw);
-      } else {
+      const snapshotGross =
+        snapshotRaw != null && Number.isFinite(Number(snapshotRaw))
+          ? Number(snapshotRaw)
+          : null;
+
+      // Prefer history-based rates (supports mid-month raises). Snapshot / current are fallbacks.
+      const fallbackGross =
+        snapshotGross != null && snapshotGross > 0 ? snapshotGross : currentGross;
+      const proration = calculateProratedMonthlyGross({
+        monthPrefix,
+        daysInMonth,
+        salaryHistory: emp.salaryHistory,
+        fallbackGross,
+      });
+      const grossSalary = proration.gross;
+      const recordedMonthlySalary = grossSalary;
+
+      if (snapshotGross == null && !proration.isProrated) {
         Employee.updateOne(
           { empCode: emp.empCode, [`monthlySalarySnapshots.${monthPrefix}`]: { $exists: false } },
           { $set: { [`monthlySalarySnapshots.${monthPrefix}`]: grossSalary } }
@@ -1351,8 +1365,8 @@ export async function GET(req) {
         workingDaysInMonth = daysInMonth - 6;
       }
       const salaryCalc = calculateSalaryAmounts(
-        grossSalary, 
-        salaryDeductDays, 
+        grossSalary,
+        salaryDeductDays,
         { daysPerMonth: workingDaysInMonth } // Per-day salary based on working days
       );
       const perDaySalary = salaryCalc.perDaySalary;
@@ -1393,8 +1407,19 @@ export async function GET(req) {
         department: emp.department || '',
         designation: emp.designation || '',
         shift: dynamicShift,
-        monthlySalary: grossSalary, // GROSS (current)
-        recordedMonthlySalary, // GROSS locked when month was first opened
+        monthlySalary: grossSalary, // Payable gross (prorated when raise is mid-month)
+        recordedMonthlySalary, // Same payable gross for salary report
+        nominalMonthlySalary: proration.nominalGross,
+        salaryProration: proration.isProrated
+          ? {
+              effectiveDate: proration.effectiveDate,
+              previousAmount: proration.previousAmount,
+              newAmount: proration.newAmount,
+              daysBefore: proration.daysBefore,
+              daysFromEffective: proration.daysFromEffective,
+              daysInMonth,
+            }
+          : null,
         netSalary: Number(netSalary.toFixed(2)), // NET after deduction
         salaryDeductAmount: Number(salaryDeductAmount.toFixed(2)),
         lateCount,

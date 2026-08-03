@@ -477,7 +477,7 @@ export default function EmployeeForm({
                   required
                 />
                 <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, marginBottom: 0 }}>
-                  Exact date the new gross salary starts (used on Salary Report).
+                  Exact date the new gross starts. Mid-month raises are paid per day from this date (old rate before, new rate from this day).
                 </p>
               </div>
             )}

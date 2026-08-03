@@ -9,6 +9,7 @@ import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/c
 import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
+import { calculateProratedMonthlyGross } from '@/lib/calculations/salaryProration';
 
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -133,29 +134,29 @@ function getReportTheme(theme, colors) {
   };
 }
 
+function daysInMonthForYm(ym) {
+  const [y, m] = String(ym).split('-').map(Number);
+  if (!y || !m) return 30;
+  return new Date(y, m, 0).getDate();
+}
+
 function buildGrossByMonth(months, currentGross, salaryHistory, apiGrossByMonth) {
-  const sorted = [...(salaryHistory || [])].sort((a, b) =>
-    String(a.effectiveMonth).localeCompare(String(b.effectiveMonth))
-  );
   const result = {};
 
   months.forEach((month) => {
-    let gross = Number(currentGross) || 0;
-    const applicable = sorted.filter((h) => String(h.effectiveMonth) <= month);
-    const upcoming = sorted.find((h) => String(h.effectiveMonth) > month);
-
-    if (applicable.length > 0) {
-      gross = Number(applicable[applicable.length - 1].amount);
-    } else if (upcoming) {
-      gross = Number(upcoming.previousAmount) || gross;
-    }
-
     const fromApi = Number(apiGrossByMonth[month]);
     if (Number.isFinite(fromApi) && fromApi > 0) {
-      gross = fromApi;
+      result[month] = fromApi;
+      return;
     }
 
-    result[month] = gross;
+    const proration = calculateProratedMonthlyGross({
+      monthPrefix: month,
+      daysInMonth: daysInMonthForYm(month),
+      salaryHistory,
+      fallbackGross: Number(currentGross) || 0,
+    });
+    result[month] = proration.gross;
   });
 
   return result;
@@ -172,10 +173,29 @@ function buildRaiseInfo(months, grossByMonth, salaryHistory = []) {
       monthSet.has(entry.effectiveMonth) &&
       Number(entry.amount) > Number(entry.previousAmount || 0)
     ) {
+      const effectiveDate =
+        typeof entry.effectiveDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.effectiveDate)
+          ? entry.effectiveDate
+          : `${entry.effectiveMonth}-01`;
+      const dayNum = Number(effectiveDate.slice(8, 10)) || 1;
+      const daysInMonth = daysInMonthForYm(entry.effectiveMonth);
+      const isProrated = dayNum > 1;
       raisedMonths.push(entry.effectiveMonth);
       raiseDetails[entry.effectiveMonth] = {
         from: Number(entry.previousAmount || 0),
         to: Number(entry.amount),
+        effectiveDate,
+        isProrated,
+        daysBefore: isProrated ? dayNum - 1 : 0,
+        daysFromEffective: isProrated ? daysInMonth - dayNum + 1 : daysInMonth,
+        proratedGross: isProrated
+          ? calculateProratedMonthlyGross({
+              monthPrefix: entry.effectiveMonth,
+              daysInMonth,
+              salaryHistory,
+              fallbackGross: Number(entry.amount) || 0,
+            }).gross
+          : Number(entry.amount),
       };
     }
   });
@@ -187,7 +207,7 @@ function buildRaiseInfo(months, grossByMonth, salaryHistory = []) {
     const curG = Number(grossByMonth[cur]);
     if (prevG > 0 && curG > prevG && !raiseDetails[cur]) {
       raisedMonths.push(cur);
-      raiseDetails[cur] = { from: prevG, to: curG };
+      raiseDetails[cur] = { from: prevG, to: curG, isProrated: false };
     }
   }
 
@@ -949,7 +969,7 @@ export default function HrSalaryReportPage() {
                     marginRight: 6,
                   }}
                 />
-                Raise is shown only when gross salary changed in Employee Manager (with effective month)
+                Raise is shown when gross changed in Employee Manager (effective date). Mid-month raises are paid per day from that date.
               </span>
               <span>
                 <span
@@ -964,7 +984,7 @@ export default function HrSalaryReportPage() {
                     marginRight: 6,
                   }}
                 />
-                Orange badge = month gross went up (e.g. 48,000 → 52,000)
+                Orange badge = raise (e.g. 20,000 → 25,000 from 11th; July gross is prorated)
               </span>
             </div>
           )}
@@ -1097,10 +1117,16 @@ export default function HrSalaryReportPage() {
                             {isRaiseMonth && detail && (
                               <SalaryRaiseBadge
                                 variant="month"
-                                title={`Gross salary raised from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)}`}
+                                title={
+                                  detail.isProrated && detail.effectiveDate
+                                    ? `Raise from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)} effective ${detail.effectiveDate}. Payable gross prorated: ${formatCurrency(detail.proratedGross ?? row.monthGrossSalaries?.[m])} (${detail.daysBefore}d old + ${detail.daysFromEffective}d new).`
+                                    : `Gross salary raised from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)}`
+                                }
                                 variants={reportTheme.badgeVariants}
                               >
-                                ↑ {formatCurrency(detail.from)} → {formatCurrency(detail.to)}
+                                {detail.isProrated
+                                  ? `↑ ${formatCurrency(detail.from)} → ${formatCurrency(detail.to)} from ${Number(String(detail.effectiveDate || '').slice(8, 10)) || '?'}`
+                                  : `↑ ${formatCurrency(detail.from)} → ${formatCurrency(detail.to)}`}
                               </SalaryRaiseBadge>
                             )}
                           </div>

@@ -422,10 +422,21 @@ export async function POST(req) {
       };
 
       const [yearStr] = effectiveMonth.split('-');
+      const effectiveDay = Number(String(effectiveDate).slice(8, 10)) || 1;
       for (let m = 1; m <= 12; m += 1) {
         const ym = `${yearStr}-${String(m).padStart(2, '0')}`;
-        updateOps.$set[`monthlySalarySnapshots.${ym}`] =
-          ym < effectiveMonth ? prevSalary : nextSalary;
+        if (ym < effectiveMonth) {
+          updateOps.$set[`monthlySalarySnapshots.${ym}`] = prevSalary;
+        } else if (ym > effectiveMonth) {
+          updateOps.$set[`monthlySalarySnapshots.${ym}`] = nextSalary;
+        } else if (effectiveDay <= 1) {
+          // Raise from day 1 → whole month is new salary
+          updateOps.$set[`monthlySalarySnapshots.${ym}`] = nextSalary;
+        } else {
+          // Mid-month raise: do not lock full new rate; payroll prorates from salaryHistory
+          if (!updateOps.$unset) updateOps.$unset = {};
+          updateOps.$unset[`monthlySalarySnapshots.${ym}`] = '';
+        }
       }
     }
 
