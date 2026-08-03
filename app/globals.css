@@ -1031,6 +1031,21 @@ body {
   }
 }
 
+/* Native <select> dropdown lists: keep option text readable.
+   Header glass pills use color:#fff; Windows Chrome inherits that onto
+   white option popups → invisible month/year names when scrolling. */
+select option,
+select optgroup {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
+select option:checked,
+select option:hover {
+  color: #0f172a;
+  background-color: #e0f2fe;
+}
+
 /* Light theme — header badge + toolbar tray readability */
 [data-theme="light"] .hr-header-badge {
   color: #0f172a;

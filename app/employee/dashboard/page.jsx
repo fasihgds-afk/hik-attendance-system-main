@@ -1553,6 +1553,13 @@ export default function EmployeeDashboardPage() {
     cursor: "pointer",
     fontWeight: 600,
     outline: "none",
+    // Keep closed control white-on-glass; open list uses dark option text (globals.css)
+    colorScheme: "light",
+  };
+
+  const headerOptionStyle = {
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
   };
 
   const headerActions = (
@@ -1570,7 +1577,7 @@ export default function EmployeeDashboardPage() {
         {Array.from({ length: 10 }, (_, i) => {
           const y = new Date().getFullYear() - 2 + i;
           return (
-            <option key={y} value={y}>
+            <option key={y} value={y} style={headerOptionStyle}>
               {y}
             </option>
           );
@@ -1590,7 +1597,7 @@ export default function EmployeeDashboardPage() {
           const m = String(i + 1).padStart(2, "0");
           const monthName = new Date(0, i).toLocaleString("en-US", { month: "long" });
           return (
-            <option key={m} value={m}>
+            <option key={m} value={m} style={headerOptionStyle}>
               {monthName}
             </option>
           );
