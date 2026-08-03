@@ -180,22 +180,24 @@ function buildRaiseInfo(months, grossByMonth, salaryHistory = []) {
       const dayNum = Number(effectiveDate.slice(8, 10)) || 1;
       const daysInMonth = daysInMonthForYm(entry.effectiveMonth);
       const isProrated = dayNum > 1;
+      const prorated = isProrated
+        ? calculateProratedMonthlyGross({
+            monthPrefix: entry.effectiveMonth,
+            daysInMonth,
+            salaryHistory,
+            fallbackGross: Number(entry.amount) || 0,
+          })
+        : null;
       raisedMonths.push(entry.effectiveMonth);
       raiseDetails[entry.effectiveMonth] = {
         from: Number(entry.previousAmount || 0),
         to: Number(entry.amount),
         effectiveDate,
         isProrated,
-        daysBefore: isProrated ? dayNum - 1 : 0,
-        daysFromEffective: isProrated ? daysInMonth - dayNum + 1 : daysInMonth,
-        proratedGross: isProrated
-          ? calculateProratedMonthlyGross({
-              monthPrefix: entry.effectiveMonth,
-              daysInMonth,
-              salaryHistory,
-              fallbackGross: Number(entry.amount) || 0,
-            }).gross
-          : Number(entry.amount),
+        daysBefore: prorated ? prorated.daysBefore : 0,
+        daysFromEffective: prorated ? prorated.daysFromEffective : daysInMonth,
+        basis: prorated?.basis || 'calendar',
+        proratedGross: prorated ? prorated.gross : Number(entry.amount),
       };
     }
   });
@@ -969,7 +971,7 @@ export default function HrSalaryReportPage() {
                     marginRight: 6,
                   }}
                 />
-                Raise is shown when gross changed in Employee Manager (effective date). Mid-month raises are paid per day from that date.
+                Raise is shown when gross changed in Employee Manager (effective date). Mid-month raises are paid by working-day share from that date.
               </span>
               <span>
                 <span
@@ -984,7 +986,7 @@ export default function HrSalaryReportPage() {
                     marginRight: 6,
                   }}
                 />
-                Orange badge = raise (e.g. 20,000 → 25,000 from 11th; July gross is prorated)
+                Orange badge = raise (e.g. 20,000 → 30,000 from 11th; July gross blends by working days)
               </span>
             </div>
           )}
@@ -1119,7 +1121,7 @@ export default function HrSalaryReportPage() {
                                 variant="month"
                                 title={
                                   detail.isProrated && detail.effectiveDate
-                                    ? `Raise from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)} effective ${detail.effectiveDate}. Payable gross prorated: ${formatCurrency(detail.proratedGross ?? row.monthGrossSalaries?.[m])} (${detail.daysBefore}d old + ${detail.daysFromEffective}d new).`
+                                    ? `Raise from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)} effective ${detail.effectiveDate}. Payable gross: ${formatCurrency(detail.proratedGross ?? row.monthGrossSalaries?.[m])} (${detail.daysBefore} ${detail.basis === 'working' ? 'working days' : 'days'} @ old + ${detail.daysFromEffective} @ new).`
                                     : `Gross salary raised from ${formatCurrency(detail.from)} to ${formatCurrency(detail.to)}`
                                 }
                                 variants={reportTheme.badgeVariants}

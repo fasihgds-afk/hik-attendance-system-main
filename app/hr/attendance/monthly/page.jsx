@@ -2047,7 +2047,7 @@ export default function MonthlyHrPage() {
                           }}
                           title={
                             emp.salaryProration
-                              ? `Payable gross (prorated from ${emp.salaryProration.effectiveDate}): ${emp.salaryProration.daysBefore}d @ ${emp.salaryProration.previousAmount} + ${emp.salaryProration.daysFromEffective}d @ ${emp.salaryProration.newAmount}`
+                              ? `Payable gross (prorated from ${emp.salaryProration.effectiveDate} by ${emp.salaryProration.basis === 'working' ? 'working days' : 'calendar days'}): ${emp.salaryProration.daysBefore}d @ ${Number(emp.salaryProration.previousAmount).toLocaleString()} + ${emp.salaryProration.daysFromEffective}d @ ${Number(emp.salaryProration.newAmount).toLocaleString()}`
                               : `Gross monthly salary`
                           }
                         >

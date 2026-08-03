@@ -668,6 +668,7 @@ export async function GET(req) {
 
       let saturdayIndex = 0;
       let employeeOffDayCount = 0; // weekend/off days for this employee (used by 'actual' working-days mode)
+      const workingDates = []; // YYYY-MM-DD non-weekend days (for mid-month raise proration)
 
       // Auto-detect Saturday group from actual attendance pattern
       // Uses both punches AND no-punches to determine which group the employee is in
@@ -741,6 +742,7 @@ export async function GET(req) {
           if (isSaturdayOffForEmployee(saturdayIndex, emp, departmentPolicyMap, emp.department || '')) isWeekendOff = true;
         }
         if (isWeekendOff) employeeOffDayCount++;
+        else workingDates.push(date);
 
         // Get shift for this date - use shift effective on this date (history-first)
         const shiftForDate = shiftForDateMap.get(`${emp.empCode}|${date}`);
@@ -1333,14 +1335,22 @@ export async function GET(req) {
           ? Number(snapshotRaw)
           : null;
 
-      // Prefer history-based rates (supports mid-month raises). Snapshot / current are fallbacks.
-      const fallbackGross =
-        snapshotGross != null && snapshotGross > 0 ? snapshotGross : currentGross;
+      // History-first payable gross for EVERY employee (any effective date / any amounts).
+      // Each emp uses their own salaryHistory + their own workingDates (weekend/Sat group).
+      // Snapshot is only a fallback when the employee has no salaryHistory at all.
+      const hasSalaryHistory =
+        Array.isArray(emp.salaryHistory) && emp.salaryHistory.length > 0;
+      const fallbackGross = hasSalaryHistory
+        ? currentGross
+        : snapshotGross != null && snapshotGross > 0
+          ? snapshotGross
+          : currentGross;
       const proration = calculateProratedMonthlyGross({
         monthPrefix,
         daysInMonth,
         salaryHistory: emp.salaryHistory,
         fallbackGross,
+        workingDates,
       });
       const grossSalary = proration.gross;
       const recordedMonthlySalary = grossSalary;
@@ -1418,6 +1428,9 @@ export async function GET(req) {
               daysBefore: proration.daysBefore,
               daysFromEffective: proration.daysFromEffective,
               daysInMonth,
+              basis: proration.basis,
+              workingDaysTotal: proration.daysBefore + proration.daysFromEffective,
+              rateSegments: proration.rateSegments || [],
             }
           : null,
         netSalary: Number(netSalary.toFixed(2)), // NET after deduction

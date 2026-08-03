@@ -477,7 +477,7 @@ export default function EmployeeForm({
                   required
                 />
                 <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, marginBottom: 0 }}>
-                  Exact date the new gross starts. Mid-month raises are paid per day from this date (old rate before, new rate from this day).
+                  New salary starts on this date (inclusive). Example: 15k through 11 Jul and 30k from 12 Jul → set date to 12 Jul. Payable month gross averages each working day’s rate.
                 </p>
               </div>
             )}
