@@ -410,6 +410,17 @@ export async function POST(req) {
         salaryEffectiveDate?.slice(0, 7) ||
         `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+      // Drop superseded same-month rows that already set this new amount on an earlier
+      // effectiveDate (e.g. raise was corrected from 11th → 12th). Keeps multi-raise
+      // months intact when amounts differ (20k→25k then 25k→32k).
+      updateOps.$pull = {
+        salaryHistory: {
+          effectiveMonth,
+          amount: nextSalary,
+          effectiveDate: { $lt: effectiveDate },
+        },
+      };
+
       updateOps.$push = {
         salaryHistory: {
           previousAmount: prevSalary,
