@@ -253,7 +253,7 @@ async function fetchAllEmployees() {
   let hasNext = true;
 
   while (hasNext) {
-    const res = await fetch(`/api/hr/employees?limit=50&page=${page}`, { cache: 'no-store' });
+    const res = await fetch(`/api/hr/employees?limit=100&page=${page}`, { cache: 'no-store' });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text || `Failed to load employees (${res.status})`);
@@ -268,26 +268,27 @@ async function fetchAllEmployees() {
   return all;
 }
 
-async function fetchMonthSalaries(month) {
-  const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
+async function fetchSalarySummaries(months, empCode = '') {
+  const params = new URLSearchParams();
+  params.set('months', months.join(','));
+  if (empCode) params.set('empCode', empCode);
+  const res = await fetch(`/api/hr/salary-summary?${params.toString()}`, {
     method: 'GET',
     cache: 'no-store',
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Failed to load ${month}`);
+    throw new Error(text || 'Failed to load salary summaries');
   }
   const response = await res.json();
-  let data = {};
-  if (response.success !== undefined) {
-    if (!response.success) {
-      throw new Error(response.error || response.message || `Failed to load ${month}`);
-    }
-    data = response.data || {};
-  } else {
-    data = response;
+  if (response.success === false) {
+    throw new Error(response.error || response.message || 'Failed to load salary summaries');
   }
-  return data.employees || [];
+  const monthsOut = response.data?.months || [];
+  return monthsOut.map((row) => ({
+    month: row.month,
+    employees: row.employees || [],
+  }));
 }
 
 export default function HrSalaryReportPage() {
@@ -417,12 +418,9 @@ export default function HrSalaryReportPage() {
       setReportRows([]);
       setReportMonths([]);
 
-      const monthResults = await Promise.all(
-        months.map(async (m) => {
-          const employees = await fetchMonthSalaries(m);
-          return { month: m, employees };
-        })
-      );
+      const empFilter =
+        employeeMode === 'single' ? String(selectedEmpCode || '').trim() : '';
+      const monthResults = await fetchSalarySummaries(months, empFilter);
 
       const salaryMap = new Map();
       const grossMap = new Map();

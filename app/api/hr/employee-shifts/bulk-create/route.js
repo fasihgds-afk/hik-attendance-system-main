@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
 import { requirePermission } from '../../../../../lib/auth/requireAuth';
+import { invalidateMonthlySheetCache } from '../../../../../lib/api/monthlySheetCache';
 import Employee from '../../../../../models/Employee';
 import Shift from '../../../../../models/Shift';
 import EmployeeShiftHistory from '../../../../../models/EmployeeShiftHistory';
@@ -100,6 +101,8 @@ export async function POST(req) {
       employee.shift = lastShiftObj.code;
       await employee.save();
     }
+
+    invalidateMonthlySheetCache();
 
     return NextResponse.json({
       message: 'Shift history created successfully',

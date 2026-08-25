@@ -3,6 +3,7 @@
 import { connectDB } from '../../../../lib/db';
 import CompanySettings from '../../../../models/CompanySettings';
 import { getCompanySettings, invalidateCompanySettingsCache, DEFAULT_COMPANY_SETTINGS } from '../../../../lib/settings/getCompanySettings';
+import { invalidateMonthlySheetCache } from '../../../../lib/api/monthlySheetCache';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -109,6 +110,7 @@ export async function PATCH(req) {
     }
 
     invalidateCompanySettingsCache();
+    invalidateMonthlySheetCache();
     const settings = await getCompanySettings({ fresh: true });
     return successResponse({ settings, _raw: doc }, 'Company settings updated', HTTP_STATUS.OK);
   } catch (err) {

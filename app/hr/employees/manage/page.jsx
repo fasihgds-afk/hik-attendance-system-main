@@ -10,18 +10,27 @@ import EmployeeForm from '../../../../components/employees/EmployeeForm';
 import Modal from '../../../../components/ui/Modal';
 import Toast from '../../../../components/common/Toast';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import { usePermissions, useModulePermission } from '@/hooks/usePermissions';
+import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api/client';
-import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
+import { getCachedLookup, LOOKUP_KEYS, primeLookupCache, clearLookupCache, coalesceFetch } from '@/lib/api/lookupCache';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { spinnerRingStyle } from '@/lib/theme/styles';
+
+function formHasBankDetails(bankDetails) {
+  if (!bankDetails || typeof bankDetails !== 'object') return false;
+  return Boolean(
+    String(bankDetails.bankName || '').trim() ||
+      String(bankDetails.accountTitle || '').trim() ||
+      String(bankDetails.accountNumber || '').trim() ||
+      String(bankDetails.iban || '').trim()
+  );
+}
 
 export default function EmployeeShiftPage() {
   const router = useRouter();
   const { colors, theme } = useTheme();
   const glossPill = (variant = 'neutral') => getGlossPillStyles(colors, variant);
   const { canCreate, canUpdate, canDelete } = usePermissions('employees');
-  const canViewBankDetails = useModulePermission('bankDetails', 'view');
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -37,6 +46,8 @@ export default function EmployeeShiftPage() {
     totalPages: 1,
   });
   const skipSearchPageReset = React.useRef(true);
+  /** Dedupe detail fetches when Edit is clicked repeatedly / Strict Mode. */
+  const editDetailInflight = React.useRef(null);
   // Snapshot of shift at last load / successful save — table edits mutate `employees`, so we cannot use row.shift as "previous"
   const originalShiftByEmp = React.useRef(new Map());
 
@@ -69,12 +80,29 @@ export default function EmployeeShiftPage() {
     }, 2600);
   }
 
+  const lookupsReady = React.useRef(false);
+
+  async function applyEmployeePage(items, paginationMeta) {
+    const snap = new Map(originalShiftByEmp.current);
+    for (const e of items) {
+      if (!e?.empCode) continue;
+      snap.set(String(e.empCode), {
+        shift: String(e.shift || '').trim().toUpperCase(),
+        shiftId: String(e.shiftId || e._shiftId || '').trim(),
+      });
+    }
+    originalShiftByEmp.current = snap;
+    setEmployees(items);
+    if (paginationMeta) {
+      setPagination(paginationMeta);
+    }
+  }
+
   async function loadShifts() {
     try {
       const shiftsList = await getCachedLookup(LOOKUP_KEYS.shiftsActive, async () => {
         const response = await api.get('/api/hr/shifts?activeOnly=true', {
           requestKey: 'hr-shifts-active',
-          // Static lookup — don't abort concurrent mounts (e.g. React Strict Mode)
           abortDuplicate: false,
         });
         if (response.aborted) {
@@ -137,21 +165,7 @@ export default function EmployeeShiftPage() {
 
       const items = response.data?.items || [];
       const paginationMeta = response.meta?.pagination || response.data?.pagination || null;
-
-      const snap = new Map(originalShiftByEmp.current);
-      for (const e of items) {
-        if (!e?.empCode) continue;
-        snap.set(String(e.empCode), {
-          shift: String(e.shift || '').trim().toUpperCase(),
-          shiftId: String(e.shiftId || e._shiftId || '').trim(),
-        });
-      }
-      originalShiftByEmp.current = snap;
-
-      setEmployees(items);
-      if (paginationMeta) {
-        setPagination(paginationMeta);
-      }
+      applyEmployeePage(items, paginationMeta);
     } catch (err) {
       console.error(err);
       showToast('error', err.message || 'Failed to load employees');
@@ -160,12 +174,66 @@ export default function EmployeeShiftPage() {
     }
   }
 
-  // OPTIMIZATION: Load shifts and departments once on mount (TTL-cached)
+  async function loadBootstrap() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', currentPage.toString());
+      params.set('limit', '50');
+      if (searchQuery) params.set('search', searchQuery);
+
+      const response = await api.get(`/api/hr/bootstrap?${params.toString()}`, {
+        requestKey: 'hr-bootstrap',
+      });
+
+      if (response.aborted) return;
+
+      if (!response.success) {
+        throw new Error(response.error || response.message || 'Failed to load employees');
+      }
+
+      const items = response.data?.items || [];
+      const paginationMeta = response.meta?.pagination || null;
+      const shiftsList = response.data?.shifts || [];
+      const deptList = response.data?.departments || [];
+
+      if (shiftsList.length) {
+        primeLookupCache(LOOKUP_KEYS.shiftsActive, shiftsList);
+        setShifts(shiftsList);
+      } else {
+        loadShifts();
+      }
+      if (deptList.length) {
+        primeLookupCache(LOOKUP_KEYS.departments, deptList);
+        setDepartments(deptList);
+      } else {
+        loadDepartments();
+      }
+
+      applyEmployeePage(items, paginationMeta);
+      lookupsReady.current = true;
+    } catch (err) {
+      if (err?.aborted) return;
+      console.error(err);
+      showToast('error', err.message || 'Failed to load employees');
+      loadShifts();
+      loadDepartments();
+      await loadEmployees();
+      lookupsReady.current = true;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // First paint: one bootstrap request. Later page/search: employees only.
   useEffect(() => {
-    loadShifts();
-    loadDepartments();
+    if (!lookupsReady.current) {
+      loadBootstrap();
+      return;
+    }
+    loadEmployees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentPage, searchQuery]);
 
   // Debounce search and reset page together so we only fire one list request
   useEffect(() => {
@@ -179,12 +247,6 @@ export default function EmployeeShiftPage() {
     }, 450);
     return () => clearTimeout(timer);
   }, [searchInput]);
-
-  // Reload employees when page or debounced search changes
-  useEffect(() => {
-    loadEmployees();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchQuery]);
 
   function handleShiftChange(index, newShift) {
     setEmployees((prev) => {
@@ -290,6 +352,10 @@ export default function EmployeeShiftPage() {
         'success',
         `Saved ${savedEmployee?.empCode || currentEmployee.empCode} (${savedEmployee?.name || currentEmployee.name || 'No name'})`
       );
+
+      clearLookupCache(LOOKUP_KEYS.hubEmployeesOverview);
+      clearLookupCache(LOOKUP_KEYS.hubDeptStats);
+      clearLookupCache(`employee:detail:${String(currentEmployee.empCode)}`);
       
       // Refresh the list to ensure we have the latest data from server
       // Use forceRefresh to bypass cache
@@ -377,11 +443,14 @@ export default function EmployeeShiftPage() {
         joinDate: formData.joinDate || undefined,
         phoneNumber: formData.phoneNumber || undefined,
         cnic: formData.cnic || undefined,
-        bankDetails: formData.bankDetails || undefined,
         profileImageBase64: formData.profileImageBase64 || undefined,
         profileImageUrl: formData.profileImageUrl || undefined,
         allowWebClockIn: !!formData.allowWebClockIn,
       };
+      // Only send bank details when filled — empty payload used to wipe stored/encrypted values
+      if (formHasBankDetails(formData.bankDetails)) {
+        body.bankDetails = formData.bankDetails;
+      }
 
       const res = await fetch('/api/employee', {
         method: 'POST',
@@ -413,10 +482,16 @@ export default function EmployeeShiftPage() {
         );
       });
 
-      showToast('success', editingEmployee 
+      showToast('success', editingEmployee
         ? `Employee ${employee.empCode} updated successfully`
         : `Employee ${employee.empCode} added successfully`
       );
+
+      clearLookupCache(LOOKUP_KEYS.hubEmployeesOverview);
+      clearLookupCache(LOOKUP_KEYS.hubDeptStats);
+      if (employee?.empCode) {
+        clearLookupCache(`employee:detail:${String(employee.empCode)}`);
+      }
 
       setIsModalOpen(false);
       setEditingEmployee(null);
@@ -500,26 +575,69 @@ export default function EmployeeShiftPage() {
     }
   }
 
-  // Open modal for editing existing employee
+  // Open modal for editing existing employee — always load full profile first
+  // so join date / phone / CNIC / bank fields are present (list row is incomplete).
   async function openEditModal(emp) {
-    try {
-      const res = await fetch(`/api/employee?empCode=${encodeURIComponent(emp.empCode)}`, {
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        const response = await res.json();
-        const fullEmployee = response?.data?.employee || response?.employee || emp;
-        setEditingEmployee(fullEmployee);
-      } else {
-        setEditingEmployee(emp);
-      }
-    } catch {
-      setEditingEmployee(emp);
-    }
-    loadDepartments(); // Refresh so department dropdown is up to date
-    setIsModalOpen(true);
+    if (!emp?.empCode) return;
+    const code = String(emp.empCode);
+
+    if (editDetailInflight.current === code) return;
+    editDetailInflight.current = code;
+
     setShowShiftHistory(false);
-    loadShiftHistory(emp.empCode);
+    setShiftHistory([]);
+
+    try {
+      // Always bypass TTL cache so decrypted bank details are fresh
+      clearLookupCache(`employee:detail:${code}`);
+      const fullEmployee = await coalesceFetch(`employee:detail:inflight:${code}`, async () => {
+        const res = await fetch(`/api/employee?empCode=${encodeURIComponent(code)}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Failed to load employee (${res.status})`);
+        }
+        const response = await res.json();
+        return response?.data?.employee || response?.employee || emp;
+      });
+
+      // Dedicated bank fetch — avoids empty bank fields when main profile payload omits/fails decrypt
+      let bankDetails = fullEmployee?.bankDetails || null;
+      try {
+        const bankRes = await fetch(
+          `/api/hr/employees/bank-details?empCode=${encodeURIComponent(code)}`,
+          { cache: 'no-store' }
+        );
+        if (bankRes.ok) {
+          const bankJson = await bankRes.json();
+          const fromBankApi = bankJson?.data?.bankDetails;
+          if (fromBankApi && formHasBankDetails(fromBankApi)) {
+            bankDetails = fromBankApi;
+          }
+        }
+      } catch (bankErr) {
+        console.error('Bank details fetch:', bankErr);
+      }
+
+      setEditingEmployee({
+        ...fullEmployee,
+        bankDetails: bankDetails || {
+          bankName: '',
+          accountTitle: '',
+          accountNumber: '',
+          iban: '',
+        },
+      });
+      setIsModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      showToast('error', err.message || 'Failed to load employee details');
+      setEditingEmployee(emp);
+      setIsModalOpen(true);
+    } finally {
+      if (editDetailInflight.current === code) editDetailInflight.current = null;
+    }
   }
 
   // Close modal
@@ -747,6 +865,7 @@ export default function EmployeeShiftPage() {
         size="lg"
       >
         <EmployeeForm
+          key={editingEmployee ? `edit-${editingEmployee.empCode}` : 'add'}
           employee={editingEmployee}
           shifts={shifts}
           departments={departments}
@@ -754,7 +873,7 @@ export default function EmployeeShiftPage() {
           onCancel={closeModal}
           loading={isSaving}
           readOnly={editingEmployee ? !canUpdate : false}
-          showBankDetails={canViewBankDetails}
+          showBankDetails={true}
         />
       </Modal>
 
@@ -892,6 +1011,9 @@ export default function EmployeeShiftPage() {
 
                 setEmployees((prev) => prev.filter((e) => e.empCode !== empCode));
                 showToast('success', `Employee ${empCode} deactivated`);
+                clearLookupCache(LOOKUP_KEYS.hubEmployeesOverview);
+                clearLookupCache(LOOKUP_KEYS.hubDeptStats);
+                clearLookupCache(`employee:detail:${String(empCode)}`);
                 setDeleteConfirm({ isOpen: false, employee: null });
                 setDeleteReason('Resigned');
                 setLastWorkingDay('');

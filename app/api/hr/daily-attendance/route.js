@@ -17,6 +17,7 @@ import { getNextDateStr, classifyByTime } from './attendance/time-utils.js';
 import { getFirstAndLastPunchPerEmployee, resolveCheckOutFromPunches } from './attendance/punch-helpers.js';
 import { ensureCheckInBeforeCheckOut } from './attendance/validation.js';
 import { getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
+import { invalidateMonthlySheetCache } from '../../../../lib/api/monthlySheetCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,117 @@ const MANUAL_OR_LEAVE_STATUSES = new Set([
   'Hajj Leave',
   'Umrah Leave',
 ]);
+
+export async function GET(req) {
+  try {
+    await requirePermission('dailyAttendance', 'view');
+    const { searchParams } = new URL(req.url);
+    const date = searchParams.get('date');
+
+    if (!date) {
+      throw new ValidationError('Missing "date" query parameter');
+    }
+
+    await connectDB();
+
+    // Fast path: read stored rows + roster only (no punch aggregation / bulkWrite).
+    const [allShifts, allEmployees, existingRecords] = await Promise.all([
+      Shift.find({}).select('_id name code').lean().maxTimeMS(2000),
+      Employee.find(mergeActiveFilter({}))
+        .select('empCode name shift shiftId department designation')
+        .lean()
+        .maxTimeMS(2000),
+      ShiftAttendance.find({ date })
+        .select(
+          'date empCode checkIn checkOut shift attendanceStatus reason leaveType totalPunches manuallyEdited late earlyLeave excused lateExcused earlyExcused'
+        )
+        .lean()
+        .maxTimeMS(2000),
+    ]);
+
+    const shiftById = new Map();
+    for (const shift of allShifts) {
+      if (shift._id) {
+        shiftById.set(shift._id.toString(), shift.code);
+        shiftById.set(String(shift._id), shift.code);
+      }
+    }
+
+    const empCodes = allEmployees.map((e) => toEmpCodeKey(e.empCode)).filter(Boolean);
+    const shiftForDateMap = await getShiftsForEmployeesOnDate(empCodes, date, {
+      employees: allEmployees,
+      shiftById,
+    });
+
+    const existingByEmpCodeShift = new Map();
+    for (const record of existingRecords) {
+      const key = toEmpCodeShiftKey(record.empCode, record.shift);
+      if (!toEmpCodeKey(record.empCode)) continue;
+      existingByEmpCodeShift.set(key, record);
+    }
+
+    const items = [];
+    for (const emp of allEmployees) {
+      const empKey = toEmpCodeKey(emp.empCode);
+      if (!empKey) continue;
+      const assignedShift =
+        shiftForDateMap.get(empKey) ||
+        extractShiftCode(emp.shift || emp.shiftId, shiftById) ||
+        '';
+      const shift = assignedShift || 'Unknown';
+      const existing = existingByEmpCodeShift.get(toEmpCodeShiftKey(empKey, shift));
+
+      const checkIn = existing?.checkIn ? new Date(existing.checkIn) : null;
+      const checkOut = existing?.checkOut ? new Date(existing.checkOut) : null;
+      let totalPunches = existing?.totalPunches ?? 0;
+      if (!totalPunches) {
+        totalPunches = checkIn && checkOut ? 2 : checkIn || checkOut ? 1 : 0;
+      }
+
+      const attendanceStatus =
+        existing?.attendanceStatus || (totalPunches > 0 ? 'Present' : 'Absent');
+
+      items.push({
+        empCode: emp.empCode,
+        employeeName: emp.name || '',
+        department: emp.department || '',
+        designation: emp.designation || '',
+        shift,
+        checkIn,
+        checkOut,
+        totalPunches,
+        attendanceStatus,
+        reason: existing?.reason ?? '',
+        leaveType: existing?.leaveType ?? null,
+        manuallyEdited: existing?.manuallyEdited ?? false,
+        late: existing?.late ?? false,
+        earlyLeave: existing?.earlyLeave ?? false,
+        excused: existing?.excused ?? false,
+        lateExcused: existing?.lateExcused ?? false,
+        earlyExcused: existing?.earlyExcused ?? false,
+      });
+    }
+
+    const shiftOrder = new Map();
+    allShifts.forEach((s, idx) => shiftOrder.set(s.code, idx + 1));
+    shiftOrder.set('Unknown', 999);
+    items.sort((a, b) => {
+      const sa = shiftOrder.get(a.shift) ?? 999;
+      const sb = shiftOrder.get(b.shift) ?? 999;
+      if (sa !== sb) return sa - sb;
+      return String(a.empCode).localeCompare(String(b.empCode));
+    });
+
+    return successResponse(
+      { date, savedCount: 0, items, readOnly: true },
+      'Daily attendance loaded',
+      HTTP_STATUS.OK
+    );
+  } catch (err) {
+    if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
+    return errorResponseFromException(err, req);
+  }
+}
 
 export async function POST(req) {
   try {
@@ -318,6 +430,8 @@ export async function POST(req) {
       if (sa !== sb) return sa - sb;
       return String(a.empCode).localeCompare(String(b.empCode));
     });
+
+    invalidateMonthlySheetCache(date);
 
     return successResponse(
       { date, savedCount: presentItems.length, items },

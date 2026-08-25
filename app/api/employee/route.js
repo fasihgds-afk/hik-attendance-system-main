@@ -2,7 +2,7 @@
 import { connectDB } from '../../../lib/db';
 import Employee from '../../../models/Employee';
 import User from '../../../models/User';
-import { buildEmployeeFilter, getEmployeeProjection } from '../../../lib/db/queryOptimizer';
+import { getEmployeeProjection } from '../../../lib/db/queryOptimizer';
 import { NotFoundError, ValidationError } from '../../../lib/errors/errorHandler';
 import { validateEmployee } from '../../../lib/validations/employee';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../lib/api/response';
@@ -13,8 +13,11 @@ import {
   encryptBankDetails,
   hasAnyBankDetails,
   normalizeBankDetailsInput,
+  isBankEncryptionKeyConfigured,
 } from '../../../lib/security/bankDetailsCrypto';
 import { mergeActiveFilter, isEmployeeActive, EMPLOYEE_STATUS } from '../../../lib/employees/activeFilter';
+import { queryEmployeeList } from '../../../lib/employees/queryEmployeeList';
+import { invalidateMonthlySheetCache } from '../../../lib/api/monthlySheetCache';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -75,7 +78,14 @@ export async function GET(req) {
         throw new NotFoundError(`Employee ${empCode}`);
       }
 
-      employee.bankDetails = decryptBankDetails(employee.bankDetails);
+      const rawBank = employee.bankDetails;
+      employee.bankDetails = decryptBankDetails(rawBank);
+      if (rawBank && !employee.bankDetails) {
+        console.warn('[api/employee] bankDetails stored but decrypt returned empty', {
+          empCode,
+          keyConfigured: isBankEncryptionKeyConfigured(),
+        });
+      }
       employee.allowWebClockIn = !!employee.allowWebClockIn;
 
       // OPTIMIZATION: Only normalize shift if it's an ObjectId (skip if already a code)
@@ -112,142 +122,24 @@ export async function GET(req) {
     if (user.role !== 'HR' && user.role !== 'ADMIN') {
       return errorResponse('Unauthorized', 401);
     }
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const page = searchParams.get('page') || '1';
+    const limit = searchParams.get('limit') || '50';
     const search = (searchParams.get('search') || '').trim();
     let shift = (searchParams.get('shift') || '').trim();
     const department = (searchParams.get('department') || '').trim();
-    
-    // Normalize "All Shifts" - empty string means all shifts
-    if (shift === 'All Shifts' || shift === 'all shifts') {
-      shift = '';
-    }
 
-    // Build filter
-    const { filter, sortOptions, useTextScore } = buildEmployeeFilter({ search, shift, department });
-    const skip = (page - 1) * limit;
-    
-    // Use direct Mongoose queries instead of aggregation for simplicity and reliability
-    const queryFilter = mergeActiveFilter(Object.keys(filter).length > 0 ? filter : {});
-    
-    // OPTIMIZATION: Use empCode index for sorting; textScore when using $text search
-    const optimizedSort = sortOptions || { empCode: 1 };
-    
-    // OPTIMIZATION: Minimal projection for list view - exclude heavy fields
-    const listProjection = {
-      _id: 1,
-      empCode: 1,
-      name: 1,
-      email: 1,
-      monthlySalary: 1,
-      shift: 1,
-      shiftId: 1,
-      department: 1,
-      designation: 1,
-      saturdayGroup: 1,
-      allowWebClockIn: 1,
-      portalEnabled: 1,
-    };
-
-    if (useTextScore) {
-      listProjection.score = { $meta: 'textScore' };
-    }
-    
-    // Always run find + exact count in parallel for accurate pagination
-    // When searching: skip expensive countDocuments — use limit+1 to detect next page
-    let employees;
-    let total;
-
-    if (search) {
-      const rows = await Employee.find(queryFilter)
-        .select(listProjection)
-        .sort(optimizedSort)
-        .skip(skip)
-        .limit(limit + 1)
-        .lean()
-        .maxTimeMS(2000)
-        .exec();
-      const hasMore = rows.length > limit;
-      employees = hasMore ? rows.slice(0, limit) : rows;
-      // Approximate total so pagination controls still work without a full count
-      total = skip + employees.length + (hasMore ? 1 : 0);
-    } else {
-      [employees, total] = await Promise.all([
-        Employee.find(queryFilter)
-          .select(listProjection)
-          .sort(optimizedSort)
-          .skip(skip)
-          .limit(limit)
-          .lean()
-          .maxTimeMS(2000)
-          .exec(),
-        Employee.countDocuments(queryFilter)
-          .maxTimeMS(1500)
-          .exec(),
-      ]);
-    }
-    
-    // OPTIMIZATION: Fast shift normalization - skip lookup if shift is already a code
-    // Most employees have shift codes (not ObjectIds), so we can skip the lookup in most cases
-    let shiftObjectIds = new Set();
-    let needsShiftLookup = false;
-    
-    // First pass: normalize codes and collect ObjectIds
-    for (const emp of employees) {
-      if (emp.shift) {
-        const shiftString = String(emp.shift).trim();
-        // Check if it's an ObjectId (24 hex characters)
-        if (/^[0-9a-fA-F]{24}$/.test(shiftString)) {
-          shiftObjectIds.add(shiftString);
-          needsShiftLookup = true;
-        } else {
-          // Already a code - normalize to uppercase immediately (most common case)
-          emp.shift = shiftString.toUpperCase();
-        }
-      }
-    }
-    
-    // OPTIMIZATION: Only do shift lookup if we have ObjectIds (rare case)
-    if (needsShiftLookup && shiftObjectIds.size > 0) {
-      const Shift = (await import('../../../models/Shift')).default;
-      const shifts = await Shift.find({ 
-        _id: { $in: Array.from(shiftObjectIds) } 
-      })
-        .select('_id code')
-        .lean()
-        .maxTimeMS(1000); // Very fast timeout - this should be rare
-      
-      // Build map for fast lookup
-      const shiftMap = new Map();
-      for (const shift of shifts) {
-        shiftMap.set(shift._id.toString(), shift.code);
-      }
-      
-      // Update only employees with ObjectId shifts
-      for (const emp of employees) {
-        if (emp.shift) {
-          const shiftString = String(emp.shift).trim();
-          if (/^[0-9a-fA-F]{24}$/.test(shiftString)) {
-            emp.shift = shiftMap.get(shiftString) || '';
-          }
-        }
-      }
-    }
-    
-    if (process.env.NODE_ENV === 'development') {
-      // Employee API Query result
-    }
+    const list = await queryEmployeeList({ page, limit, search, shift, department });
 
     return successResponse(
-      { items: employees || [] },
+      { items: list.employees },
       'Employees retrieved successfully',
       HTTP_STATUS.OK,
       {
         pagination: {
-          page,
-          limit,
-          total: total || 0,
-          totalPages: Math.ceil((total || 0) / limit),
+          page: list.page,
+          limit: list.limit,
+          total: list.total,
+          totalPages: Math.ceil((list.total || 0) / list.limit),
         },
       }
     );
@@ -333,9 +225,8 @@ export async function POST(req) {
         } catch (e) {
           throw new ValidationError(e.message || 'Failed to secure bank details');
         }
-      } else {
-        update.bankDetails = null;
       }
+      // Empty bank payload: leave existing stored details untouched (do not wipe).
     }
 
     // Handle shift field: Convert ObjectId to shift code if needed
@@ -496,6 +387,8 @@ export async function POST(req) {
 
     employee.bankDetails = decryptBankDetails(employee.bankDetails);
 
+    invalidateMonthlySheetCache();
+
     const isNew = !employee.createdAt || new Date(employee.createdAt).getTime() > Date.now() - 1000;
     
     return successResponse(
@@ -546,6 +439,8 @@ export async function DELETE(req) {
 
     const deactivated = employee.toObject();
     deactivated.bankDetails = decryptBankDetails(deactivated.bankDetails);
+
+    invalidateMonthlySheetCache();
 
     return successResponse(
       { employee: deactivated },

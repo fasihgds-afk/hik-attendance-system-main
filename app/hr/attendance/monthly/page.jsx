@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTheme } from '@/lib/theme/ThemeContext';
 import { HrPageShell, HrHeaderActions, GlassCard, getGlossPillStyles } from '@/components/glass';
 import { spinnerRingStyle } from '@/lib/theme/styles';
@@ -338,6 +338,7 @@ export default function MonthlyHrPage() {
   });
 
   const [loading, setLoading] = useState(false);
+  const lastMonthLoadedAtRef = useRef(0);
   const [toast, setToast] = useState({ type: '', text: '' });
   const [shifts, setShifts] = useState([]);
   const [selectedShift, setSelectedShift] = useState(''); // Filter by shift
@@ -481,6 +482,7 @@ export default function MonthlyHrPage() {
       }
 
       setData(response.data || {});
+      lastMonthLoadedAtRef.current = Date.now();
     } catch (err) {
       console.error(err);
       showToast('error', err.message || 'Failed to load monthly attendance');
@@ -494,10 +496,13 @@ export default function MonthlyHrPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
-  // Refetch when user returns to this tab (e.g. after changing leave on HR Leaves page) so both pages stay in sync
+  // Soft refetch on tab focus (skip if data loaded within last 60s)
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') loadMonth(true);
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastMonthLoadedAtRef.current < 60_000) return;
+      // Prefer snapshot/cache; writes already invalidate persisted rollups.
+      loadMonth(false);
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);

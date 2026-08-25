@@ -5,6 +5,7 @@ import { requirePermission } from '../../../../lib/auth/requireAuth';
 import ViolationRules from '../../../../models/ViolationRules';
 import { successResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
+import { invalidateMonthlySheetCache } from '../../../../lib/api/monthlySheetCache';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -50,17 +51,15 @@ export async function GET(req) {
           description: 'Default rules',
         },
         message: 'No active rules found, returning defaults',
-      });
+      }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=60' } });
     }
 
-    return NextResponse.json({ rules: activeRules });
+    return NextResponse.json({ rules: activeRules }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=60' } });
   } catch (err) {
-    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (err?.code === 'UNAUTHORIZED_HR') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=60' } });
     console.error('GET /api/hr/violation-rules error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message || 'Internal server error' },
+      { status: 500 }, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=60' } });
   }
 }
 
@@ -118,7 +117,7 @@ export async function POST(req) {
       updatedBy: updatedBy || 'HR',
     });
 
-    // Cache removed - data is always fresh
+    invalidateMonthlySheetCache();
 
     return NextResponse.json({
       success: true,
@@ -193,7 +192,7 @@ export async function PUT(req) {
         updatedBy: updatedBy || 'HR',
       });
 
-      // Cache removed - data is always fresh
+      invalidateMonthlySheetCache();
 
       return successResponse(
         { rules: newRules },
@@ -239,7 +238,7 @@ export async function PUT(req) {
 
     await activeRules.save();
 
-    // Cache removed - data is always fresh
+    invalidateMonthlySheetCache();
 
     return NextResponse.json({
       success: true,

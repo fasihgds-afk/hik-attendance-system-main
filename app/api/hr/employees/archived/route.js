@@ -16,6 +16,7 @@ import {
 import { requirePermission } from '../../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../../lib/errors/errorHandler';
 import { decryptBankDetails } from '../../../../../lib/security/bankDetailsCrypto';
+import { invalidateMonthlySheetCache } from '../../../../../lib/api/monthlySheetCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -132,6 +133,8 @@ export async function POST(req) {
     ).catch(() => {});
 
     const restored = employee.toObject();
+
+    invalidateMonthlySheetCache();
 
     return successResponse(
       {

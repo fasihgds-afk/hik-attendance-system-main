@@ -19,7 +19,7 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api/client';
-import { getCachedLookup, LOOKUP_KEYS } from '@/lib/api/lookupCache';
+import { getCachedLookup, LOOKUP_KEYS, coalesceFetch } from '@/lib/api/lookupCache';
 
 // Styles will be generated dynamically based on theme
 
@@ -113,28 +113,79 @@ export default function HrDashboardPage() {
     loadShifts();
   }, []);
 
-  // Auto-run Load and Save every 20 minutes (only when user can create/sync)
+  function parseDailyResponse(response) {
+    let items = [];
+    let savedCount = 0;
+    let date = businessDate;
+    if (response.success !== undefined) {
+      if (!response.success) {
+        throw new Error(response.error || response.message || 'Failed to load attendance');
+      }
+      items = response.data?.items || [];
+      savedCount = response.data?.savedCount ?? items.length;
+      date = response.data?.date || businessDate;
+    } else {
+      items = response.items || [];
+      savedCount = response.savedCount ?? items.length;
+      date = response.date || businessDate;
+    }
+    return { items, savedCount, date };
+  }
+
+  // Fast open: GET stored rows (no punch sync). Heavy sync is button / interval only.
+  // coalesceFetch collapses Strict Mode / remount double GETs for the same date.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setStatus('');
+      try {
+        const response = await coalesceFetch(`daily-attendance:get:${businessDate}`, async () => {
+          const res = await fetch(`/api/hr/daily-attendance?date=${businessDate}`, {
+            method: 'GET',
+            cache: 'no-store',
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Request failed: ${res.status}`);
+          }
+          return res.json();
+        });
+        if (cancelled) return;
+        const { items, date } = parseDailyResponse(response);
+        setRows(items);
+        setStatus(`Loaded ${items.length} record(s) for ${date}`);
+      } catch (err) {
+        if (!cancelled) {
+          console.error(err);
+          showToast('error', err.message || 'Failed to load attendance');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessDate, ready]);
+
+  // Background punch sync every 20 minutes (Sync button still available)
   useEffect(() => {
     if (!ready || !canCreate) return;
-
-    // Run immediately on mount
-    handleLoadAndSave();
-
-    // Set up interval to run every 20 minutes (1200000 milliseconds)
     const interval = setInterval(() => {
-      handleLoadAndSave();
-    }, 20 * 60 * 1000); // 20 minutes in milliseconds
-
-    // Cleanup interval on unmount
+      handleLoadAndSave({ quiet: true });
+    }, 20 * 60 * 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessDate, ready, canCreate]); // Re-run when business date or permission changes
+  }, [businessDate, ready, canCreate]);
 
-
-  async function handleLoadAndSave() {
+  async function handleLoadAndSave({ quiet = false } = {}) {
     setLoading(true);
-    setStatus('');
-    setRows([]);
+    if (!quiet) {
+      setStatus('');
+    }
 
     try {
       const res = await fetch(
@@ -148,33 +199,12 @@ export default function HrDashboardPage() {
       }
 
       const response = await res.json();
-      
-      // Handle standardized API response format
-      // New format: { success, message, data: { items, savedCount, date }, error }
-      // Old format (backward compatibility): { items, savedCount, date }
-      let items = [];
-      let savedCount = 0;
-      let date = businessDate;
-      
-      if (response.success !== undefined) {
-        // New standardized format
-        if (!response.success) {
-          throw new Error(response.error || response.message || 'Failed to load and save');
-        }
-        items = response.data?.items || [];
-        savedCount = response.data?.savedCount ?? items.length;
-        date = response.data?.date || businessDate;
-      } else {
-        // Legacy format (backward compatibility)
-        items = response.items || [];
-        savedCount = response.savedCount ?? items.length;
-        date = response.date || businessDate;
-      }
-      
+      const { items, savedCount, date } = parseDailyResponse(response);
+
       setRows(items);
-      const msg = `Saved ${savedCount} record(s) for ${date}`;
+      const msg = `Synced ${savedCount} record(s) for ${date}`;
       setStatus(msg);
-      showToast('success', msg);
+      if (!quiet) showToast('success', msg);
     } catch (err) {
       console.error(err);
       showToast('error', err.message || 'Something went wrong');
@@ -584,7 +614,7 @@ export default function HrDashboardPage() {
               }}
             />
           )}
-          {loading ? 'Loading & Saving…' : 'Load & Save'}
+          {loading ? 'Syncing…' : 'Sync from Device'}
         </button>
       )}
       <button type="button" onClick={handleLogout} style={glossPill('neutral')}>

@@ -31,6 +31,26 @@ function normalizeCondition(value) {
 }
 
 // GET /api/hr/assets?status=&type=&q=&empCode=&page=&limit=
+
+let _assetsStatsCache = null;
+let _assetsStatsCacheAt = 0;
+const ASSETS_STATS_TTL_MS = 60 * 1000;
+
+async function getAssetsStatsCached(Asset) {
+  if (_assetsStatsCache && Date.now() - _assetsStatsCacheAt < ASSETS_STATS_TTL_MS) {
+    return _assetsStatsCache;
+  }
+  const [statusAgg, typeStatusAgg] = await Promise.all([
+    Asset.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]).option({ maxTimeMS: 2500 }),
+    Asset.aggregate([
+      { $group: { _id: { type: '$type', status: '$status' }, count: { $sum: 1 } } },
+    ]).option({ maxTimeMS: 2500 }),
+  ]);
+  _assetsStatsCache = { statusAgg, typeStatusAgg };
+  _assetsStatsCacheAt = Date.now();
+  return _assetsStatsCache;
+}
+
 export async function GET(req) {
   try {
     await requirePermission('assets', 'view');
@@ -64,7 +84,7 @@ export async function GET(req) {
       ];
     }
 
-    const [total, assets, statusAgg, typeStatusAgg] = await Promise.all([
+    const [total, assets, statsBundle] = await Promise.all([
       Asset.countDocuments(filter).maxTimeMS(2500),
       Asset.find(filter)
         .sort({ updatedAt: -1 })
@@ -72,18 +92,9 @@ export async function GET(req) {
         .limit(limit)
         .lean()
         .maxTimeMS(2500),
-      Asset.aggregate([
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]).option({ maxTimeMS: 2500 }),
-      Asset.aggregate([
-        {
-          $group: {
-            _id: { type: '$type', status: '$status' },
-            count: { $sum: 1 },
-          },
-        },
-      ]).option({ maxTimeMS: 2500 }),
+      getAssetsStatsCached(Asset),
     ]);
+    const { statusAgg, typeStatusAgg } = statsBundle;
 
     const stats = { in_stock: 0, assigned: 0, repair: 0, retired: 0, total: 0 };
     for (const row of statusAgg) {

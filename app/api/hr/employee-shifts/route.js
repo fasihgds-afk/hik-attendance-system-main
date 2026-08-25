@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../lib/db';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
+import { invalidateMonthlySheetCache } from '../../../../lib/api/monthlySheetCache';
 import Employee from '../../../../models/Employee';
 import Shift from '../../../../models/Shift';
 import EmployeeShiftHistory from '../../../../models/EmployeeShiftHistory';
@@ -236,6 +237,8 @@ export async function POST(req) {
     employee.shiftId = shiftId;
     employee.shift = shift.code; // Keep legacy field updated
     await employee.save();
+
+    invalidateMonthlySheetCache();
 
     return NextResponse.json(
       {

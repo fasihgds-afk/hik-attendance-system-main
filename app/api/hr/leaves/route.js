@@ -11,6 +11,7 @@ import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError, NotFoundError } from '../../../../lib/errors/errorHandler';
+import { invalidateMonthlySheetCache } from '../../../../lib/api/monthlySheetCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -200,6 +201,8 @@ export async function POST(req) {
     const updated = await PaidLeaveQuarter.getOrCreate(empCode, year, quarter, leavesPerQuarter);
     const updatedMaxAllowed = await PaidLeaveQuarter.getMaxAllowedForQuarter(empCode, year, quarter, leavesPerQuarter);
 
+    invalidateMonthlySheetCache(date);
+
     return successResponse(
       {
         leaveRecord: { empCode, date, leaveType: 'paid', reason: reason || '', markedBy: markedBy || 'HR' },
@@ -253,6 +256,8 @@ export async function DELETE(req) {
         $set: { attendanceStatus: 'Absent' },
       }
     );
+
+    invalidateMonthlySheetCache(date);
 
     return successResponse({ leaveRecord }, 'Leave removed successfully', HTTP_STATUS.OK);
   } catch (err) {

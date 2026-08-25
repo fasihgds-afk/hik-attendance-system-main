@@ -1,7 +1,7 @@
 // app/hr/leaves/page.jsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -10,6 +10,7 @@ import { useAutoLogout } from '@/hooks/useAutoLogout';
 import AutoLogoutWarning from '@/components/ui/AutoLogoutWarning';
 import { usePermissions } from '@/hooks/usePermissions';
 import { getCurrentQuarter } from '@/lib/leave/quarterUtils';
+import { coalesceFetch } from '@/lib/api/lookupCache';
 
 const LOW_BALANCE_THRESHOLD = 2;
 
@@ -76,6 +77,7 @@ export default function HrLeavesPage() {
   const [paidLeaves, setPaidLeaves] = useState([]);
   const [leavesPerQuarter, setLeavesPerQuarter] = useState(6);
   const [loading, setLoading] = useState(false);
+  const lastLeavesLoadedAtRef = useRef(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('all'); // all | low | exhausted | none_taken
   const activeQuarterKey = getActiveQuarterKey(year);
@@ -99,19 +101,21 @@ export default function HrLeavesPage() {
   async function loadLeaves() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/hr/leaves?year=${year}`, { cache: 'no-store' });
-      if (res.ok) {
-        const response = await res.json();
-        if (response.success) {
-          setPaidLeaves(response.data?.paidLeaves || []);
-          if (response.data?.leavesPerQuarter != null) {
-            setLeavesPerQuarter(response.data.leavesPerQuarter);
-          }
-        } else {
-          showToast('error', response.error || 'Failed to load leaves');
+      const response = await coalesceFetch(`leaves:year:${year}`, async () => {
+        const res = await fetch(`/api/hr/leaves?year=${year}`, { cache: 'no-store' });
+        if (!res.ok) {
+          throw new Error('Failed to load leaves');
+        }
+        return res.json();
+      });
+      if (response.success) {
+        setPaidLeaves(response.data?.paidLeaves || []);
+        lastLeavesLoadedAtRef.current = Date.now();
+        if (response.data?.leavesPerQuarter != null) {
+          setLeavesPerQuarter(response.data.leavesPerQuarter);
         }
       } else {
-        showToast('error', 'Failed to load leaves');
+        showToast('error', response.error || 'Failed to load leaves');
       }
     } catch (err) {
       console.error('Failed to load leaves:', err);
@@ -123,12 +127,15 @@ export default function HrLeavesPage() {
 
   useEffect(() => {
     loadLeaves();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year]);
 
-  // Refetch when user returns to this tab (e.g. after changing leave on monthly sheet) so both pages stay in sync
+  // Soft refetch on tab focus (skip if data loaded within last 60s)
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') loadLeaves();
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastLeavesLoadedAtRef.current < 60_000) return;
+      loadLeaves();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);

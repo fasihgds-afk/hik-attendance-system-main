@@ -7,8 +7,81 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import EmployeeAvatar from './EmployeeAvatar';
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function defaultSalaryMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Normalize DB/API dates for <input type="date"> (needs YYYY-MM-DD). */
+function toDateInputValue(value) {
+  if (value == null || value === '') return '';
+  const s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  return '';
+}
+
+function buildFormState(employee) {
+  if (!employee) {
+    return {
+      empCode: '',
+      name: '',
+      email: '',
+      monthlySalary: '',
+      salaryEffectiveMonth: defaultSalaryMonth(),
+      salaryEffectiveDate: todayStr(),
+      shift: '',
+      effectiveFromDate: '',
+      department: '',
+      designation: '',
+      joinDate: todayStr(),
+      phoneNumber: '',
+      cnic: '',
+      bankDetails: {
+        bankName: '',
+        accountTitle: '',
+        accountNumber: '',
+        iban: '',
+      },
+      profileImageBase64: '',
+      profileImageUrl: '',
+      allowWebClockIn: false,
+    };
+  }
+
+  return {
+    empCode: employee.empCode || '',
+    name: employee.name || '',
+    email: employee.email || '',
+    monthlySalary: employee.monthlySalary ?? '',
+    salaryEffectiveMonth: defaultSalaryMonth(),
+    salaryEffectiveDate: todayStr(),
+    shift: employee.shift || employee.shiftId || '',
+    effectiveFromDate: todayStr(),
+    department: employee.department || '',
+    designation: employee.designation || '',
+    joinDate: toDateInputValue(employee.joinDate),
+    phoneNumber: employee.phoneNumber || '',
+    cnic: employee.cnic || '',
+    bankDetails: {
+      bankName: employee.bankDetails?.bankName || '',
+      accountTitle: employee.bankDetails?.accountTitle || '',
+      accountNumber: employee.bankDetails?.accountNumber || '',
+      iban: employee.bankDetails?.iban || '',
+    },
+    profileImageBase64: employee.profileImageBase64 || '',
+    profileImageUrl: employee.profileImageUrl || '',
+    allowWebClockIn: !!employee.allowWebClockIn,
+  };
+}
 
 export default function EmployeeForm({
   employee = null, // If provided, form is in edit mode
@@ -20,38 +93,35 @@ export default function EmployeeForm({
   readOnly = false,
   showBankDetails = true,
 }) {
-  const todayStr = () => new Date().toISOString().slice(0, 10);
-  const defaultSalaryMonth = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  };
-
-  const [formData, setFormData] = useState({
-    empCode: employee?.empCode || '',
-    name: employee?.name || '',
-    email: employee?.email || '',
-    monthlySalary: employee?.monthlySalary || '',
-    salaryEffectiveMonth: defaultSalaryMonth(),
-    salaryEffectiveDate: todayStr(),
-    shift: employee?.shift || employee?.shiftId || '',
-    effectiveFromDate: employee ? todayStr() : '',
-    department: employee?.department || '',
-    designation: employee?.designation || '',
-    joinDate: employee?.joinDate || (employee ? '' : todayStr()),
-    phoneNumber: employee?.phoneNumber || '',
-    cnic: employee?.cnic || '',
-    bankDetails: {
-      bankName: employee?.bankDetails?.bankName || '',
-      accountTitle: employee?.bankDetails?.accountTitle || '',
-      accountNumber: employee?.bankDetails?.accountNumber || '',
-      iban: employee?.bankDetails?.iban || '',
-    },
-    profileImageBase64: employee?.profileImageBase64 || '',
-    profileImageUrl: employee?.profileImageUrl || '',
-    allowWebClockIn: !!employee?.allowWebClockIn,
-  });
-
+  const [formData, setFormData] = useState(() => buildFormState(employee));
   const [imagePreview, setImagePreview] = useState(employee?.profileImageUrl || '');
+
+  // Sync when switching employees or when full detail arrives after a sparse list row.
+  const employeeSyncKey = employee
+    ? [
+        employee.empCode,
+        employee.joinDate || '',
+        employee.phoneNumber || '',
+        employee.cnic || '',
+        employee.email || '',
+        employee.monthlySalary ?? '',
+        employee.shift || '',
+        employee.department || '',
+        employee.designation || '',
+        employee.profileImageUrl || '',
+        employee.bankDetails?.bankName || '',
+        employee.bankDetails?.accountTitle || '',
+        employee.bankDetails?.accountNumber || '',
+        employee.bankDetails?.iban || '',
+        employee.allowWebClockIn ? '1' : '0',
+      ].join('|')
+    : 'new';
+
+  useEffect(() => {
+    setFormData(buildFormState(employee));
+    setImagePreview(employee?.profileImageUrl || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync on employeeSyncKey only
+  }, [employeeSyncKey]);
 
   const handleChange = (field, value) => {
     if (readOnly) return;
@@ -106,59 +176,8 @@ export default function EmployeeForm({
   };
 
   const handleReset = () => {
-    if (employee) {
-      // Reset to original employee data
-      setFormData({
-        empCode: employee.empCode || '',
-        name: employee.name || '',
-        email: employee.email || '',
-        monthlySalary: employee.monthlySalary || '',
-        salaryEffectiveMonth: defaultSalaryMonth(),
-        salaryEffectiveDate: todayStr(),
-        shift: employee.shift || employee.shiftId || '',
-        effectiveFromDate: todayStr(),
-        department: employee.department || '',
-        designation: employee.designation || '',
-        joinDate: employee.joinDate || '',
-        phoneNumber: employee.phoneNumber || '',
-        cnic: employee.cnic || '',
-        bankDetails: {
-          bankName: employee?.bankDetails?.bankName || '',
-          accountTitle: employee?.bankDetails?.accountTitle || '',
-          accountNumber: employee?.bankDetails?.accountNumber || '',
-          iban: employee?.bankDetails?.iban || '',
-        },
-        profileImageBase64: employee.profileImageBase64 || '',
-        profileImageUrl: employee.profileImageUrl || '',
-        allowWebClockIn: !!employee.allowWebClockIn,
-      });
-      setImagePreview(employee.profileImageUrl || '');
-    } else {
-      // Reset to empty form
-      setFormData({
-        empCode: '',
-        name: '',
-        email: '',
-        monthlySalary: '',
-        shift: '',
-        effectiveFromDate: '',
-        department: '',
-        designation: '',
-        joinDate: todayStr(),
-        phoneNumber: '',
-        cnic: '',
-        bankDetails: {
-          bankName: '',
-          accountTitle: '',
-          accountNumber: '',
-          iban: '',
-        },
-        profileImageBase64: '',
-        profileImageUrl: '',
-        allowWebClockIn: false,
-      });
-      setImagePreview('');
-    }
+    setFormData(buildFormState(employee));
+    setImagePreview(employee?.profileImageUrl || '');
   };
 
   return (
@@ -563,17 +582,25 @@ export default function EmployeeForm({
           </div>
         </div>
 
-        {/* Section: Bank Details (Private) */}
+        {/* Section: Bank Details (Private) — always visible on Manage */}
         {showBankDetails && (
-          <div style={{ marginBottom: 28 }}>
+          <div
+            style={{
+              marginBottom: 28,
+              padding: 16,
+              borderRadius: 12,
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+            }}
+          >
             <h3
               style={{
                 fontSize: 16,
                 fontWeight: 700,
-                color: '#111827',
+                color: '#14532d',
                 marginBottom: 16,
                 paddingBottom: 8,
-                borderBottom: '2px solid #e5e7eb',
+                borderBottom: '2px solid #86efac',
               }}
             >
               Bank Details (Private)
@@ -583,7 +610,7 @@ export default function EmployeeForm({
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: 20,
-                marginBottom: 24,
+                marginBottom: 8,
               }}
             >
               <div>

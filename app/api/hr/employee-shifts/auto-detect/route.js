@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '../../../../../lib/db';
 import { requirePermission } from '../../../../../lib/auth/requireAuth';
+import { invalidateMonthlySheetCache } from '../../../../../lib/api/monthlySheetCache';
 import Employee from '../../../../../models/Employee';
 import Shift from '../../../../../models/Shift';
 import ShiftAttendance from '../../../../../models/ShiftAttendance';
@@ -222,6 +223,8 @@ export async function POST(req) {
       exists: results.filter((r) => r.status === 'exists').length,
       errors: results.filter((r) => r.status === 'error').length,
     };
+
+    invalidateMonthlySheetCache();
 
     return NextResponse.json({
       message: summary.created > 0 

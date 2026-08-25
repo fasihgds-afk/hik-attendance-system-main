@@ -51,7 +51,7 @@ export async function GET() {
       .sort({ name: 1 })
       .lean()
       .maxTimeMS(1500);
-    return successResponse({ departments }, 'Departments retrieved', HTTP_STATUS.OK);
+    return successResponse({ departments }, 'Departments retrieved', HTTP_STATUS.OK, null, { isStatic: true, maxAge: 60 });
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);
     return errorResponseFromException(err);

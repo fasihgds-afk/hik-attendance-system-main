@@ -31,6 +31,7 @@ import ShiftAttendance from '../../../../../models/ShiftAttendance';
 import Shift from '../../../../../models/Shift';
 import { normalizeStatus, extractShiftCode } from '../../../../../lib/calculations';
 import { getShiftsForEmployeesOnDate } from '../../../../../lib/shift/getShiftForDate.js';
+import { invalidateMonthlySheetCache } from '../../../../../lib/api/monthlySheetCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -156,6 +157,8 @@ export async function POST(req) {
       modified = result.modifiedCount || 0;
       upserted = result.upsertedCount || 0;
     }
+
+    invalidateMonthlySheetCache(date);
 
     return successResponse(
       {

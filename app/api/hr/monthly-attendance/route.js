@@ -56,6 +56,13 @@ import { memoize, createCacheKey } from '../../../../lib/utils/memoize';
 import { getShiftsForEmployeesInDateRange, getShiftsForEmployeesOnDate } from '../../../../lib/shift/getShiftForDate.js';
 import { getCompanySettings } from '../../../../lib/settings/getCompanySettings';
 import { fetchEmployeesForMonthlySheet } from '../../../../lib/employees/activeFilter';
+import {
+  compactMonthlyEmployee,
+  getMonthlySheetCache,
+  invalidateMonthlySheetCache,
+  monthlySheetCacheKey,
+  setMonthlySheetCache,
+} from '../../../../lib/api/monthlySheetCache';
 
 // OPTIMIZATION: Node.js runtime for better connection pooling
 export const runtime = 'nodejs';
@@ -407,6 +414,39 @@ function _normalizeStatus_DEPRECATED(rawStatus, { isWeekendOff } = {}) {
   return s;
 }
 
+const SHIFT_CALC_FIELDS =
+  '_id name code startTime endTime crossesMidnight breakMinutes paidHoursPerDay gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod';
+
+const DEFAULT_VIOLATION_RULES = {
+  violationConfig: {
+    freeViolations: 2,
+    milestoneInterval: 3,
+    perMinuteRate: 0.007,
+    maxPerMinuteFine: 1.0,
+  },
+  absentConfig: {
+    bothMissingDays: 1.0,
+    partialPunchDays: 1.0,
+    leaveWithoutInformDays: 1.5,
+  },
+  leaveConfig: {
+    unpaidLeaveDays: 1.0,
+    sickLeaveDays: 1.0,
+    halfDayDays: 0.5,
+    paidLeaveDays: 0.0,
+  },
+};
+
+function monthlySuccess(result) {
+  const response = successResponse(
+    result,
+    'Monthly attendance retrieved successfully',
+    HTTP_STATUS.OK
+  );
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  return response;
+}
+
 // -----------------------------------------------------------------------------
 // GET /api/hr/monthly-attendance?month=YYYY-MM
 // -----------------------------------------------------------------------------
@@ -427,6 +467,8 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     let month = searchParams.get('month');
     const search = (searchParams.get('search') || '').trim();
+    const mode = (searchParams.get('mode') || '').trim().toLowerCase(); // '' | 'summary'
+    const forceRefresh = Boolean(searchParams.get('_t') || searchParams.get('refresh'));
 
     if (!month) {
       const now = new Date();
@@ -456,67 +498,117 @@ export async function GET(req) {
     else if (monthIndex > companyToday.monthIndex) monthRelation = 1;
     else monthRelation = 0;
 
-    // OPTIMIZATION: Connect DB early
-    await connectDB();
-
-    // OPTIMIZATION: Fetch violation rules with minimal fields, fast timeout
-    let violationRules = await ViolationRules.findOne({ isActive: true })
-      .select('violationConfig absentConfig leaveConfig')
-      .lean()
-      .maxTimeMS(1500); // Reduced timeout
-    if (!violationRules) {
-      // Return default rules if none exist
-      violationRules = {
-        violationConfig: {
-          freeViolations: 2,
-          milestoneInterval: 3,
-          perMinuteRate: 0.007,
-          maxPerMinuteFine: 1.0,
-        },
-        absentConfig: {
-          bothMissingDays: 1.0,
-          partialPunchDays: 1.0,
-          leaveWithoutInformDays: 1.5,
-        },
-        leaveConfig: {
-          unpaidLeaveDays: 1.0,
-          sickLeaveDays: 1.0,
-          halfDayDays: 0.5,
-          paidLeaveDays: 0.0,
-        },
-      };
-    }
-
     const isEmployeeViewer = user.role === 'EMPLOYEE';
     const myEmpCode = isEmployeeViewer ? String(user.empCode || '').trim() : '';
     if (isEmployeeViewer && !myEmpCode) {
       return errorResponse('Unauthorized', 401);
     }
 
+    const cacheKey = monthlySheetCacheKey({
+      month: monthPrefix,
+      search: isEmployeeViewer ? '' : search,
+      role: user.role,
+      empCode: myEmpCode,
+      companyTodayYmd,
+      mode: mode || 'full',
+    });
+    const cached = getMonthlySheetCache(cacheKey);
+    if (cached) {
+      return monthlySuccess(cached);
+    }
+
+    await connectDB();
+
+    // Persistent month snapshot (past months = instant; current month = short TTL).
+    // Skip when force-refresh (_t) so Sync/visibility rebuild stays correct.
+    if (!forceRefresh) {
+      try {
+        const {
+          getMonthlySheetSnapshot,
+        } = await import('../../../../lib/attendance/monthlySheetSnapshots.js');
+        const snap = await getMonthlySheetSnapshot(monthPrefix, { companyTodayYmd });
+        if (snap && Array.isArray(snap.employees)) {
+          let employeesFromSnap = snap.employees;
+          if (isEmployeeViewer) {
+            employeesFromSnap = employeesFromSnap.filter(
+              (e) => String(e.empCode || '').trim() === myEmpCode
+            );
+          } else if (search) {
+            const term = search.toLowerCase();
+            employeesFromSnap = employeesFromSnap.filter((emp) => {
+              const code = String(emp.empCode || '').toLowerCase();
+              const name = String(emp.name || '').toLowerCase();
+              return code.includes(term) || name.includes(term);
+            });
+          }
+          let payload = employeesFromSnap;
+          if (mode === 'summary') {
+            payload = payload.map((emp) => {
+              const { days, ...rest } = emp;
+              return rest;
+            });
+          }
+          const snapResult = {
+            month: monthPrefix,
+            daysInMonth: snap.daysInMonth || daysInMonth,
+            employees: payload,
+            mode: mode || 'full',
+            fromSnapshot: true,
+          };
+          setMonthlySheetCache(cacheKey, snapResult);
+          return monthlySuccess(snapResult);
+        }
+      } catch (snapErr) {
+        console.warn(
+          '[monthly-attendance] snapshot read failed:',
+          snapErr?.message || snapErr
+        );
+      }
+    }
+
     const monthStartDate = `${monthPrefix}-01`;
     const monthEndDate = `${monthPrefix}-${String(daysInMonth).padStart(2, '0')}`;
 
-    // OPTIMIZATION: Run queries in parallel; employees scoped to one row when viewer is EMPLOYEE
-    const [shiftCount, employeesRaw, departmentDocs] = await Promise.all([
-      Shift.countDocuments({ isActive: true }).maxTimeMS(1500),
-      isEmployeeViewer
-        ? Employee.find({ empCode: myEmpCode })
-            .select('empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots salaryHistory saturdayGroup')
-            .lean()
-            .maxTimeMS(1500)
-        : fetchEmployeesForMonthlySheet(Employee, ShiftAttendance, {
-            monthStartDate,
-            monthEndDate,
-            monthRelation,
-            projection: 'empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots salaryHistory saturdayGroup',
-            maxTimeMS: 2500,
-          }),
-      Department.find().select('name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight').lean().maxTimeMS(1500),
-    ]);
+    const employeeProjection =
+      'empCode name department designation shift shiftId monthlySalary monthlySalarySnapshots salaryHistory saturdayGroup';
+
+    const [violationRulesDoc, employeesRaw, departmentDocs, companySettings, allShifts] =
+      await Promise.all([
+        ViolationRules.findOne({ isActive: true })
+          .select('violationConfig absentConfig leaveConfig')
+          .lean()
+          .maxTimeMS(1500),
+        isEmployeeViewer
+          ? Employee.find({ empCode: myEmpCode })
+              .select(employeeProjection)
+              .lean()
+              .maxTimeMS(1500)
+          : fetchEmployeesForMonthlySheet(Employee, ShiftAttendance, {
+              monthStartDate,
+              monthEndDate,
+              monthRelation,
+              projection: employeeProjection,
+              maxTimeMS: 2500,
+            }),
+        Department.find()
+          .select(
+            'name saturdayPolicy fifthSaturdayPolicy saturdayShiftMode saturdayUnifiedStart saturdayUnifiedEnd saturdayUnifiedCrossesMidnight'
+          )
+          .lean()
+          .maxTimeMS(1500),
+        getCompanySettings(),
+        Shift.find({})
+          .select(SHIFT_CALC_FIELDS)
+          .sort({ code: 1 })
+          .lean()
+          .maxTimeMS(1500),
+      ]);
+
+    const violationRules = violationRulesDoc || DEFAULT_VIOLATION_RULES;
 
     let employees = employeesRaw || [];
 
-    const useDynamicShifts = shiftCount > 0;
+    const useDynamicShifts = (allShifts || []).length > 0;
     const departmentPolicyMap = new Map();
     (departmentDocs || []).forEach((d) => {
       if (d.name == null) return;
@@ -540,79 +632,63 @@ export async function GET(req) {
       });
     }
 
-    // Dynamic weekly off days (default [0] = Sunday). Saturday (6) is handled
-    // separately by department policy below, so it is excluded here.
-    const companySettings = await getCompanySettings();
     const weeklyOffDays = (companySettings.weeklyOffDays || [0]).filter((d) => d !== 6);
 
+    const empCodes = employees.map((e) => e.empCode).filter(Boolean);
     const shiftAttendanceFilter = {
       date: { $gte: monthStartDate, $lte: monthEndDate },
     };
     if (isEmployeeViewer) {
       shiftAttendanceFilter.empCode = myEmpCode;
     } else if (search) {
-      const codes = employees.map((e) => e.empCode).filter(Boolean);
-      // No matches → skip heavy attendance scan
-      shiftAttendanceFilter.empCode = { $in: codes.length ? codes : ['__none__'] };
+      shiftAttendanceFilter.empCode = { $in: empCodes.length ? empCodes : ['__none__'] };
     }
 
-    const shiftDocs = await ShiftAttendance.find(shiftAttendanceFilter)
-      .select(
-        'date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited checkInGracePeriod checkOutGracePeriod awayHours awayNote awayReportedBy'
-      )
-      .lean()
-      .maxTimeMS(4000); // Reduced timeout for faster response
+    const allShiftsMap = new Map();
+    (allShifts || []).forEach((s) => {
+      allShiftsMap.set(s._id.toString(), s);
+      allShiftsMap.set(s.code, s);
+    });
+    const shiftById = new Map();
+    allShiftsMap.forEach((s) => {
+      if (s && s._id && s.code) shiftById.set(s._id.toString(), s.code);
+    });
+
+    const [shiftDocs, leaveRecords, shiftForDateMap] = await Promise.all([
+      ShiftAttendance.find(shiftAttendanceFilter)
+        .select(
+          'date empCode checkIn checkOut shift attendanceStatus reason excused lateExcused earlyExcused leaveType manuallyEdited checkInGracePeriod checkOutGracePeriod awayHours awayNote awayReportedBy'
+        )
+        .lean()
+        .maxTimeMS(4000),
+      empCodes.length
+        ? LeaveRecord.find({
+            empCode: { $in: empCodes },
+            date: { $gte: monthStartDate, $lte: monthEndDate },
+            leaveType: 'paid',
+          })
+            .select('empCode date')
+            .lean()
+            .maxTimeMS(2000)
+        : Promise.resolve([]),
+      empCodes.length
+        ? getShiftsForEmployeesInDateRange(empCodes, monthStartDate, monthEndDate, {
+            employees,
+            shiftById,
+          })
+        : Promise.resolve(new Map()),
+    ]);
 
     // Group ALL records by empCode|date (there may be multiple per day if shift changed)
     const allDocsByEmpDate = new Map();
-    for (const doc of shiftDocs) {
+    for (const doc of shiftDocs || []) {
       if (!doc.empCode || !doc.date) continue;
       const key = `${doc.empCode}|${doc.date}`;
       if (!allDocsByEmpDate.has(key)) allDocsByEmpDate.set(key, []);
       allDocsByEmpDate.get(key).push(doc);
     }
 
-    // Paid leave from HR Leaves (quarter-based): reflect on monthly sheet from LeaveRecord
-    const empCodes = employees.map((e) => e.empCode);
-    const leaveRecords = await LeaveRecord.find({
-      empCode: { $in: empCodes },
-      date: { $gte: monthStartDate, $lte: monthEndDate },
-      leaveType: 'paid',
-    })
-      .select('empCode date')
-      .lean()
-      .maxTimeMS(2000);
     const paidLeaveKeys = new Set((leaveRecords || []).map((lr) => `${lr.empCode}|${lr.date}`));
-
-    // OPTIMIZATION: Pre-fetch all shifts in parallel with other queries
-    const allShiftsMap = new Map();
-    if (useDynamicShifts) {
-      // OPTIMIZATION: Fetch shifts with minimal fields, fast timeout
-      // Load ALL shifts (active + inactive) so historical codes (R1, R2) resolve correctly when deactivated
-      const allShifts = await Shift.find({})
-        .select(
-          '_id name code startTime endTime crossesMidnight breakMinutes paidHoursPerDay gracePeriod checkInGracePeriod checkOutGracePeriod graceEffectiveFrom priorCheckInGracePeriod priorCheckOutGracePeriod'
-        )
-        .sort({ code: 1 }) // Consistent ordering
-        .lean()
-        .maxTimeMS(1500); // Reduced timeout
-      
-      allShifts.forEach((s) => {
-        allShiftsMap.set(s._id.toString(), s);
-        allShiftsMap.set(s.code, s); // Also index by code for quick lookup
-      });
-    }
-
-    const shiftById = new Map();
-    allShiftsMap.forEach((s) => {
-      if (s && s._id && s.code) shiftById.set(s._id.toString(), s.code);
-    });
-    const shiftForDateMap = await getShiftsForEmployeesInDateRange(
-      empCodes,
-      monthStartDate,
-      monthEndDate,
-      { employees, shiftById }
-    );
 
     // Pick the correct record per (empCode, date): prefer the one matching effective shift for that date
     const docsByEmpDate = new Map();
@@ -1491,21 +1567,56 @@ export async function GET(req) {
       filteredEmployees = employeesOut.filter((e) => String(e.empCode || '').trim() === myEmpCode);
     }
 
+    let employeesPayload = filteredEmployees.map(compactMonthlyEmployee);
+    if (mode === 'summary') {
+      employeesPayload = employeesPayload.map((emp) => {
+        const { days, ...rest } = emp;
+        return rest;
+      });
+    }
+
     const result = {
       month: monthPrefix,
       daysInMonth,
-      employees: filteredEmployees,
+      employees: employeesPayload,
+      mode: mode || 'full',
     };
 
-    // Direct response - NO edge caching for authenticated routes
-    // (public cache would serve HR data to unauthenticated users - security risk)
-    const response = successResponse(
-      result,
-      'Monthly attendance retrieved successfully',
-      HTTP_STATUS.OK
-    );
-    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    return response;
+    // Persist salary rollups so salary-report can read O(employees) docs instead of recomputing.
+    // Use pre-compact employees (filteredEmployees) which still include salary totals.
+    try {
+      const { upsertSalarySummariesFromEmployees } = await import(
+        '../../../../lib/salary/salarySummaries.js'
+      );
+      await upsertSalarySummariesFromEmployees(monthPrefix, filteredEmployees);
+    } catch (upsertErr) {
+      console.warn(
+        '[monthly-attendance] salary summary upsert failed:',
+        upsertErr?.message || upsertErr
+      );
+    }
+
+    // Persist full day-grid snapshot for fast subsequent monthly opens.
+    // Always store with days (ignore request mode) so one snapshot serves full + summary.
+    try {
+      const { upsertMonthlySheetSnapshot } = await import(
+        '../../../../lib/attendance/monthlySheetSnapshots.js'
+      );
+      const fullEmployees = filteredEmployees.map(compactMonthlyEmployee);
+      await upsertMonthlySheetSnapshot(monthPrefix, {
+        daysInMonth,
+        employees: fullEmployees,
+        companyTodayYmd,
+      });
+    } catch (snapUpsertErr) {
+      console.warn(
+        '[monthly-attendance] sheet snapshot upsert failed:',
+        snapUpsertErr?.message || snapUpsertErr
+      );
+    }
+
+    setMonthlySheetCache(cacheKey, result);
+    return monthlySuccess(result);
   } catch (err) {
     if (
       err?.code === 'UNAUTHORIZED_HR' ||
@@ -1901,6 +2012,8 @@ export async function POST(req) {
     } finally {
       await session.endSession();
     }
+
+    invalidateMonthlySheetCache(date);
 
     return successResponse(
       null,

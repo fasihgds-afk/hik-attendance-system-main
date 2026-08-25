@@ -2,7 +2,7 @@
 // Get and update leave policy (leaves per quarter, carry-forward) – configurable from HR frontend
 import { connectDB } from '../../../../lib/db';
 import LeavePolicy from '../../../../models/LeavePolicy';
-import { getLeavePolicy } from '../../../../lib/leave/getLeavePolicy';
+import { getLeavePolicy, invalidateLeavePolicyCache } from '../../../../lib/leave/getLeavePolicy';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
@@ -17,7 +17,7 @@ export async function GET() {
   try {
     await requirePermission('leavePolicy', 'view');
     const policy = await getLeavePolicy();
-    return successResponse({ policy }, 'Leave policy retrieved', HTTP_STATUS.OK);
+    return successResponse({ policy }, 'Leave policy retrieved', HTTP_STATUS.OK, null, { isStatic: true, maxAge: 60 });
   } catch (err) {
     return errorResponseFromException(err);
   }
@@ -61,6 +61,7 @@ export async function PUT(req) {
       carryForwardMax: doc.carryForwardMax ?? DEFAULT_POLICY.carryForwardMax,
     };
 
+    invalidateLeavePolicyCache();
     return successResponse({ policy }, 'Leave policy updated', HTTP_STATUS.OK);
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);

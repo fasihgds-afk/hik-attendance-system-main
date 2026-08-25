@@ -35,7 +35,9 @@ export async function GET(req) {
     return successResponse(
       { shifts },
       'Shifts retrieved successfully',
-      HTTP_STATUS.OK
+      HTTP_STATUS.OK,
+      null,
+      { isStatic: true, maxAge: 60 }
     );
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);

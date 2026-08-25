@@ -10,6 +10,7 @@ import { HrPageShell, HrHeaderActions, HrHeaderBadge, GlassCard } from "@/compon
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import AutoLogoutWarning from "@/components/ui/AutoLogoutWarning";
 import { sessionHasPermission } from "@/lib/auth/permissionClient";
+import { getCachedLookup, LOOKUP_KEYS } from "@/lib/api/lookupCache";
 
 export default function HrDashboardPage() {
   const router = useRouter();
@@ -71,129 +72,91 @@ export default function HrDashboardPage() {
   const [statsError, setStatsError] = useState("");
   const [dataLoaded, setDataLoaded] = useState(false); // Track if data has been loaded
   
-  // Leave statistics state
-  const [leaveStats, setLeaveStats] = useState([]);
-  const [loadingLeaveStats, setLoadingLeaveStats] = useState(false);
-
   // Department stats from API (accurate counts for ALL employees)
   const [departmentCounts, setDepartmentCounts] = useState([]);
 
   // Lazy load function - only called when needed
-  // OPTIMIZATION: Load paginated data, use meta.total for stats
+  // OPTIMIZATION: Load paginated data, use meta.total for stats (60s module cache)
   async function loadEmployees() {
-    // Prevent duplicate loads
+    // Prevent duplicate loads in this mount
     if (statsLoading || dataLoaded) return;
 
-    let cancelled = false;
     try {
       setStatsLoading(true);
       setStatsError("");
 
-      // OPTIMIZATION: Load first page with limit=50 for better department stats
-      const res = await fetch("/api/hr/employees?limit=50&page=1", {
-        cache: 'no-store', // Always get fresh data
-      });
-      
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Request failed (${res.status})`);
-      }
+      const { list, total } = await getCachedLookup(LOOKUP_KEYS.hubEmployeesOverview, async () => {
+        const res = await fetch("/api/hr/employees?limit=50&page=1", {
+          cache: "no-store",
+        });
 
-      const response = await res.json();
-      
-      // Handle standardized API response format with pagination
-      // New format: { success, message, data: { employees }, meta: { total, page, limit, hasNext }, error }
-      // Old format (backward compatibility): { employees } or array
-      let list = [];
-      let total = 0;
-      
-      if (Array.isArray(response)) {
-        list = response;
-        total = response.length;
-      } else if (response.success !== undefined) {
-        // New standardized format with pagination
-        if (!response.success) {
-          throw new Error(response.error || response.message || 'Failed to load employees');
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Request failed (${res.status})`);
         }
-        list = response.data?.employees || response.data?.items || [];
-        // Meta is at top level, not inside data
-        total = response.meta?.total || response.data?.meta?.total || list.length;
-      } else {
-        // Legacy format (backward compatibility)
-        list = response.employees || response.items || [];
-        total = response.meta?.total || list.length;
-      }
 
-      if (!cancelled) {
-        setEmployees(list);
-        setTotalEmployees(total);
-        setDataLoaded(true);
-      }
+        const response = await res.json();
+        let nextList = [];
+        let nextTotal = 0;
+
+        if (Array.isArray(response)) {
+          nextList = response;
+          nextTotal = response.length;
+        } else if (response.success !== undefined) {
+          if (!response.success) {
+            throw new Error(response.error || response.message || "Failed to load employees");
+          }
+          nextList = response.data?.employees || response.data?.items || [];
+          nextTotal = response.meta?.total || response.data?.meta?.total || nextList.length;
+        } else {
+          nextList = response.employees || response.items || [];
+          nextTotal = response.meta?.total || nextList.length;
+        }
+
+        return { list: nextList, total: nextTotal };
+      });
+
+      setEmployees(list);
+      setTotalEmployees(total);
+      setDataLoaded(true);
     } catch (err) {
-      if (!cancelled) {
-        console.error("Employee stats load error:", err);
-        setStatsError(err.message || "Failed to load employee stats.");
-      }
+      console.error("Employee stats load error:", err);
+      setStatsError(err.message || "Failed to load employee stats.");
     } finally {
-      if (!cancelled) {
-        setStatsLoading(false);
-      }
+      setStatsLoading(false);
     }
   }
 
   // Load accurate department counts (ALL employees, not paginated)
   async function loadDepartmentStats() {
     try {
-      const res = await fetch("/api/hr/employees/dept-stats", { cache: "no-store" });
-      if (res.ok) {
+      const counts = await getCachedLookup(LOOKUP_KEYS.hubDeptStats, async () => {
+        const res = await fetch("/api/hr/employees/dept-stats", { cache: "no-store" });
+        if (!res.ok) return [];
         const response = await res.json();
         if (response.success && response.data?.departmentCounts) {
-          setDepartmentCounts(response.data.departmentCounts);
+          return response.data.departmentCounts;
         }
-      }
+        return [];
+      });
+      if (counts?.length) setDepartmentCounts(counts);
     } catch (err) {
       console.error("Failed to load department stats:", err);
     }
   }
 
-  // Load leave statistics
-  async function loadLeaveStats() {
-    try {
-      setLoadingLeaveStats(true);
-      const year = new Date().getFullYear();
-      const res = await fetch(`/api/hr/leaves?year=${year}`);
-      if (res.ok) {
-        const response = await res.json();
-        if (response.success) {
-          setLeaveStats(response.data?.paidLeaves || []);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load leave stats:', err);
-    } finally {
-      setLoadingLeaveStats(false);
-    }
-  }
-
-  // Load data when overview tab is clicked or after a short delay (lazy loading)
+  // Load overview stats once per mount (no re-fetch when dataLoaded flips / session polls)
   useEffect(() => {
     if (!session || !showHrOverviewStats) return;
+    if (tab !== "overview" || dataLoaded || statsLoading) return;
 
-    // If overview tab is active, load data after a short delay (non-blocking)
-    if (tab === "overview" && !dataLoaded && !statsLoading) {
-      // OPTIMIZATION: Reduced delay for faster data loading (page still renders first)
-      const timer = setTimeout(() => {
-        loadEmployees();
-        loadDepartmentStats(); // Accurate counts for ALL employees
-        loadLeaveStats();
-      }, 100); // 100ms delay - faster perceived performance
-
-      return () => clearTimeout(timer);
-    } else if (tab === "overview" && dataLoaded) {
-      // Load leave stats and department stats if employees are already loaded
+    const timer = setTimeout(() => {
+      loadEmployees();
       loadDepartmentStats();
-      loadLeaveStats();
-    }
+    }, 100);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, session, dataLoaded, statsLoading, showHrOverviewStats]);
 
 

@@ -74,9 +74,7 @@ function LoginInner() {
         return;
       }
 
-      // Client navigation is faster than a full page reload
       router.replace("/hr/employees");
-      router.refresh();
     } catch (err) {
       console.error("HR login error", err);
       setErrorMsg("Something went wrong. Please try again.");
@@ -119,7 +117,6 @@ function LoginInner() {
       }
 
       router.replace("/employee/dashboard");
-      router.refresh();
     } catch (err) {
       console.error("Employee login error", err);
       setErrorMsg("Something went wrong. Please try again.");
