@@ -301,27 +301,28 @@ export async function POST(req) {
         salaryEffectiveDate?.slice(0, 7) ||
         `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+      // MongoDB forbids $pull and $push on the same path in one update, so apply
+      // both in memory and $set salaryHistory once.
       // Drop superseded same-month rows that already set this new amount on an earlier
       // effectiveDate (e.g. raise was corrected from 11th → 12th). Keeps multi-raise
       // months intact when amounts differ (20k→25k then 25k→32k).
-      updateOps.$pull = {
-        salaryHistory: {
-          effectiveMonth,
-          amount: nextSalary,
-          effectiveDate: { $lt: effectiveDate },
-        },
-      };
-
-      updateOps.$push = {
-        salaryHistory: {
-          previousAmount: prevSalary,
-          amount: nextSalary,
-          effectiveMonth,
-          effectiveDate,
-          changedAt: now,
-          changedBy: user.email || user.name || user.empCode || 'HR',
-        },
-      };
+      const history = Array.isArray(existing.salaryHistory) ? existing.salaryHistory : [];
+      const nextHistory = history.filter((entry) => {
+        if (entry?.effectiveMonth !== effectiveMonth) return true;
+        if (Number(entry?.amount) !== nextSalary) return true;
+        const entryDate = entry?.effectiveDate;
+        if (entryDate == null) return true;
+        return !(String(entryDate) < effectiveDate);
+      });
+      nextHistory.push({
+        previousAmount: prevSalary,
+        amount: nextSalary,
+        effectiveMonth,
+        effectiveDate,
+        changedAt: now,
+        changedBy: user.email || user.name || user.empCode || 'HR',
+      });
+      updateOps.$set.salaryHistory = nextHistory;
 
       const [yearStr] = effectiveMonth.split('-');
       const effectiveDay = Number(String(effectiveDate).slice(8, 10)) || 1;
