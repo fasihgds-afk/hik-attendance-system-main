@@ -107,6 +107,26 @@ function previewAwayDeduction(monthlySalary, paidWorkHours, hoursAway, workingDa
   };
 }
 
+/**
+ * Late and early excuses are independent. Legacy `excused` is OR of both, so
+ * it must NOT mean "late is excused" when only early was excused (and vice versa).
+ * Compacted API payloads used to omit `lateExcused: false`, which triggered the
+ * legacy fallback and painted Aug-26-style days green while Late Violations still counted.
+ */
+function resolveLateExcused(day) {
+  if (day?.lateExcused === true) return true;
+  if (day?.lateExcused === false) return false;
+  if (day?.earlyExcused === true) return false;
+  return !!(day?.excused && day?.late);
+}
+
+function resolveEarlyExcused(day) {
+  if (day?.earlyExcused === true) return true;
+  if (day?.earlyExcused === false) return false;
+  if (day?.lateExcused === true) return false;
+  return !!(day?.excused && day?.earlyLeave);
+}
+
 // --- Cell color rules (includes EXCUSED + missing punches + WFH) ------
 function getCellStyle(day, colors, baseCell, theme) {
   const isLeaveType =
@@ -226,8 +246,8 @@ function getCellStyle(day, colors, baseCell, theme) {
   }
 
   // Normal punches present: handle late/early + excused separately
-  const lateExcused = day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late);
-  const earlyExcused = day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave);
+  const lateExcused = resolveLateExcused(day);
+  const earlyExcused = resolveEarlyExcused(day);
   
   const hasLateViolation = day.late && !lateExcused;
   const hasEarlyViolation = day.earlyLeave && !earlyExcused;
@@ -523,15 +543,9 @@ export default function MonthlyHrPage() {
     setEditReason(day.reason || '');
     setEditCheckIn(toTimeInputValue(day.checkIn));
     setEditCheckOut(toTimeInputValue(day.checkOut));
-    // Support both new separate fields and legacy excused field
-    // Read excused flags - prioritize new fields, fallback to legacy
-    const lateExcusedValue = day.lateExcused !== undefined 
-      ? !!day.lateExcused 
-      : (!!day.excused && !!day.late);
-    const earlyExcusedValue = day.earlyExcused !== undefined 
-      ? !!day.earlyExcused 
-      : (!!day.excused && !!day.earlyLeave);
-    
+    const lateExcusedValue = resolveLateExcused(day);
+    const earlyExcusedValue = resolveEarlyExcused(day);
+
     setEditLateExcused(lateExcusedValue);
     setEditEarlyExcused(earlyExcusedValue);
     setEditAwayHours(day.awayHours != null && day.awayHours > 0 ? String(day.awayHours) : '');
@@ -2241,8 +2255,12 @@ export default function MonthlyHrPage() {
                             ? `Punch: ${punchLabel}`
                             : '';
 
-                          const lateExcused = day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late);
-                          const earlyExcused = day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave);
+                          const lateExcused = resolveLateExcused(day);
+                          const earlyExcused = resolveEarlyExcused(day);
+                          const allPresentViolationsExcused =
+                            (day.late || isEarlyLike) &&
+                            (!day.late || lateExcused) &&
+                            (!isEarlyLike || earlyExcused);
                           
                           const titleParts = [
                             `Date: ${day.date}`,
@@ -2281,8 +2299,7 @@ export default function MonthlyHrPage() {
                                   Away {day.awayHours}h
                                 </div>
                               )}
-                              {((day.late && (day.lateExcused !== undefined ? day.lateExcused : (day.excused && day.late))) ||
-                                (isEarlyLike && (day.earlyExcused !== undefined ? day.earlyExcused : (day.excused && day.earlyLeave)))) && (
+                              {allPresentViolationsExcused && (
                                 <div
                                   style={{
                                     marginTop: 2,
