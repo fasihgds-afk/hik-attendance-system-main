@@ -34,6 +34,7 @@ export default function HrDashboardPage() {
   const canViewLeavePolicy = can("leavePolicy");
   const canViewComplaints = can("complaints");
   const canViewAssets = can("assets");
+  const canViewBreaks = can("breakMonitoring");
   const canViewAttendanceTab = canViewDaily || canViewMonthly || canViewSalary;
   const showHrOverviewStats =
     canViewEmployees || canViewDepartments || canViewLeaves || canViewDaily || canViewMonthly;
@@ -263,6 +264,10 @@ export default function HrDashboardPage() {
     router.push("/hr/assets");
   }
 
+  function openBreakMonitoring() {
+    router.push("/hr/breaks");
+  }
+
   /** Overview hub cards — same visual language as stats row (kicker, headline, icon, one CTA) */
   const hub = useMemo(() => {
     const isDark = theme === "dark";
@@ -318,6 +323,7 @@ export default function HrDashboardPage() {
       portal: hubVariant,
       complaints: hubVariant,
       assets: hubVariant,
+      breaks: hubVariant,
     };
 
     const card = (key) => {
@@ -1217,6 +1223,46 @@ export default function HrDashboardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     View All Leaves
+                  </button>
+                </div>
+              </div>
+              </>
+              )}
+
+
+              {canViewBreaks && (
+              <>
+              <div style={hub.card("breaks")} {...hub.hoverProps("breaks")}>
+                <div style={hub.topRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={hub.kicker("breaks")}>Breaks</div>
+                    <h3 style={hub.headline("breaks")}>Employee break monitoring</h3>
+                    <div style={hub.hint("breaks")}>General · Official · Namaz</div>
+                  </div>
+                  <div style={hub.icon48("breaks")} aria-hidden>
+                    <svg width="20" height="20" fill="none" stroke={hub.iconStroke("breaks")} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <p style={hub.desc("breaks")}>
+                  Track live and closed breaks. General over 60 min or Namaz over 40 min per shift day shows in red; Official is unlimited.
+                </p>
+                <div style={hub.actionsCol}>
+                  <button
+                    type="button"
+                    onClick={openBreakMonitoring}
+                    style={hub.btn("breaks")}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.filter = "brightness(1.06)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.filter = "";
+                      e.currentTarget.style.transform = "";
+                    }}
+                  >
+                    Open Break Monitoring
                   </button>
                 </div>
               </div>

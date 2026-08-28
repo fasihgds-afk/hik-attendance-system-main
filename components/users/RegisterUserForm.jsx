@@ -220,7 +220,7 @@ export default function RegisterUserForm({
           return;
         }
         setSuccessMsg(
-          'Saved. Ask this user to log out and log in again so new permissions apply.'
+          'Permissions saved. The affected user must log out and log in again — session permissions do not refresh until re-login.'
         );
         if (onSuccess) onSuccess(data);
         return;

@@ -1,8 +1,5 @@
 // next-app/models/User.js
 import mongoose from 'mongoose';
-import { buildPermissionsSchemaDefinition } from '../lib/auth/permissions';
-
-const PermissionsSchema = buildPermissionsSchemaDefinition(mongoose.Schema);
 
 const UserSchema = new mongoose.Schema(
   {
@@ -23,9 +20,10 @@ const UserSchema = new mongoose.Schema(
       index: true, // Index for role-based queries
     },
     // Module-level CRUD permissions (HR portal). ADMIN ignores this (full access).
+    // Mixed so new modules (e.g. breakMonitoring) persist without schema recompile issues.
     // Legacy HR users with no permissions are treated as full access at runtime.
     permissions: {
-      type: PermissionsSchema,
+      type: mongoose.Schema.Types.Mixed,
       default: undefined,
     },
     // (optional but very useful)
@@ -50,5 +48,12 @@ UserSchema.index({ role: 1, email: 1 });
 // Index for employee code lookups (for employee authentication)
 UserSchema.index({ employeeEmpCode: 1, role: 1 });
 
-export default mongoose.models.User ||
-  mongoose.model('User', UserSchema);
+// Drop cached model so schema changes (permissions Mixed) apply after hot reload / restart
+if (mongoose.models.User) {
+  delete mongoose.models.User;
+}
+if (mongoose.modelSchemas?.User) {
+  delete mongoose.modelSchemas.User;
+}
+
+export default mongoose.model('User', UserSchema);

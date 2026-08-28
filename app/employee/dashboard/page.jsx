@@ -19,6 +19,7 @@ import {
   getGlossPillStyles,
   withLeftAccent,
 } from "@/components/glass";
+import EmployeeDailyBreaksCard from "@/components/employee/EmployeeDailyBreaksCard";
 
 // Convert number to words (for amount in words)
 function numberToWords(num) {
@@ -968,6 +969,10 @@ export default function EmployeeDashboardPage() {
   const [leaveBalance, setLeaveBalance] = useState(null);
   const [loadingLeaveBalance, setLoadingLeaveBalance] = useState(false);
 
+  // Daily breaks (self) — compact card between profile row and attendance
+  const [dailyBreaks, setDailyBreaks] = useState(null);
+  const [loadingDailyBreaks, setLoadingDailyBreaks] = useState(false);
+
   const empCode = session?.user?.empCode;
 
   // redirect if not employee
@@ -1003,6 +1008,34 @@ export default function EmployeeDashboardPage() {
       }
     }
     loadLeaveBalance();
+  }, [empCode]);
+
+  // Daily break usage for dashboard card
+  useEffect(() => {
+    if (!empCode) return;
+    let cancelled = false;
+    async function loadDailyBreaks() {
+      try {
+        setLoadingDailyBreaks(true);
+        const res = await fetch('/api/employee/breaks?view=daily&preset=daily', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok && data.success) {
+          setDailyBreaks(data.data?.daily || null);
+        }
+      } catch (_) {
+        /* keep dashboard usable if breaks fail */
+      } finally {
+        if (!cancelled) setLoadingDailyBreaks(false);
+      }
+    }
+    loadDailyBreaks();
+    return () => {
+      cancelled = true;
+    };
   }, [empCode]);
 
   // optional profile API
@@ -1666,6 +1699,9 @@ export default function EmployeeDashboardPage() {
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
           }
+          .employee-breaks-bars {
+            grid-template-columns: 1fr !important;
+          }
           .employee-table-wrapper {
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
@@ -2190,6 +2226,17 @@ export default function EmployeeDashboardPage() {
                   )}
                 </div>
               )}
+
+              {/* Compact daily breaks — single row in profile empty strip */}
+              <EmployeeDailyBreaksCard
+                variant="inline"
+                daily={dailyBreaks}
+                loading={loadingDailyBreaks}
+                colors={colors}
+                theme={theme}
+                onViewAll={() => router.push('/employee/breaks')}
+              />
+
               {loadingEmployee && (
                 <div
                   style={{

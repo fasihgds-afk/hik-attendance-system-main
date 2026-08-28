@@ -105,7 +105,9 @@ export async function PATCH(req) {
     }
 
     if (permissions && (target.role === 'HR' || target.role === 'ADMIN')) {
-      target.permissions = normalizePermissions(permissions);
+      // Assign a plain object (Mixed) so newly added modules like breakMonitoring persist
+      const nextPerms = normalizePermissions(permissions);
+      target.set('permissions', nextPerms);
       target.markModified('permissions');
     }
 
@@ -119,13 +121,20 @@ export async function PATCH(req) {
 
     await target.save();
 
+    // Re-read from DB so response reflects what actually persisted (guards against schema strip)
+    const saved = await User.findById(target._id)
+      .select('_id email role employeeEmpCode isActive permissions')
+      .lean()
+      .maxTimeMS(2000);
+
     return successResponse(
       {
-        id: String(target._id),
-        email: target.email,
-        role: target.role,
-        isActive: target.isActive !== false,
-        permissions: resolvePermissions(target),
+        id: String(saved._id),
+        email: saved.email,
+        role: saved.role,
+        isActive: saved.isActive !== false,
+        permissions: resolvePermissions(saved),
+        permissionsRaw: saved.permissions || null,
       },
       'User updated',
       HTTP_STATUS.OK
