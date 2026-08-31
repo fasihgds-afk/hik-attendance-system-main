@@ -533,6 +533,11 @@ export async function GET(req) {
             employeesFromSnap = employeesFromSnap.filter(
               (e) => String(e.empCode || '').trim() === myEmpCode
             );
+            // Snapshot may predate this employee (or empCode formatting differs).
+            // Fall through to live compute instead of returning an empty sheet.
+            if (employeesFromSnap.length === 0) {
+              employeesFromSnap = null;
+            }
           } else if (search) {
             const term = search.toLowerCase();
             employeesFromSnap = employeesFromSnap.filter((emp) => {
@@ -541,22 +546,24 @@ export async function GET(req) {
               return code.includes(term) || name.includes(term);
             });
           }
-          let payload = employeesFromSnap;
-          if (mode === 'summary') {
-            payload = payload.map((emp) => {
-              const { days, ...rest } = emp;
-              return rest;
-            });
+          if (employeesFromSnap) {
+            let payload = employeesFromSnap;
+            if (mode === 'summary') {
+              payload = payload.map((emp) => {
+                const { days, ...rest } = emp;
+                return rest;
+              });
+            }
+            const snapResult = {
+              month: monthPrefix,
+              daysInMonth: snap.daysInMonth || daysInMonth,
+              employees: payload,
+              mode: mode || 'full',
+              fromSnapshot: true,
+            };
+            setMonthlySheetCache(cacheKey, snapResult);
+            return monthlySuccess(snapResult);
           }
-          const snapResult = {
-            month: monthPrefix,
-            daysInMonth: snap.daysInMonth || daysInMonth,
-            employees: payload,
-            mode: mode || 'full',
-            fromSnapshot: true,
-          };
-          setMonthlySheetCache(cacheKey, snapResult);
-          return monthlySuccess(snapResult);
         }
       } catch (snapErr) {
         console.warn(
