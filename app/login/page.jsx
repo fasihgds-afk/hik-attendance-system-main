@@ -3,7 +3,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { safeCredentialsSignIn } from "@/lib/auth/safeCredentialsSignIn";
 import { useTheme } from "@/lib/theme/ThemeContext";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { AppShell, GlassCard } from "@/components/glass";
@@ -61,14 +61,13 @@ function LoginInner() {
     setLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        redirect: false,
+      const result = await safeCredentialsSignIn({
         mode: "HR",
-        email,
-        password: hrPassword,
+        callbackPath: "/hr/employees",
+        credentials: { email, password: hrPassword },
       });
 
-      if (!result || result.error) {
+      if (!result.ok) {
         setErrorMsg("Invalid HR email or password.");
         setLoading(false);
         return;
@@ -100,15 +99,13 @@ function LoginInner() {
     setLoading(true);
 
     try {
-      // Single auth round-trip (precheck + NextAuth was hitting MongoDB twice)
-      const result = await signIn("credentials", {
-        redirect: false,
+      const result = await safeCredentialsSignIn({
         mode: "EMPLOYEE",
-        empCode: code,
-        password: "",
+        callbackPath: "/employee/dashboard",
+        credentials: { empCode: code, password: "" },
       });
 
-      if (!result || result.error) {
+      if (!result.ok) {
         setErrorMsg(
           "Unable to sign in. Check your employee code with HR (or ask if portal access is enabled)."
         );

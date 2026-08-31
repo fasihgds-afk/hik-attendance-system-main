@@ -950,8 +950,9 @@ export default function EmployeeDashboardPage() {
   });
 
   const [month, setMonth] = useState(() => {
+    // Use local calendar month — toISOString() is UTC and can pick the wrong month near midnight in PK (+05).
     const now = new Date();
-    return now.toISOString().slice(0, 7); // YYYY-MM
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
   const [attendanceData, setAttendanceData] = useState(null);
@@ -959,6 +960,7 @@ export default function EmployeeDashboardPage() {
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [loadingEmployee, setLoadingEmployee] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [attendanceReloadKey, setAttendanceReloadKey] = useState(0);
   
   // Profile edit modal state
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -1084,66 +1086,85 @@ export default function EmployeeDashboardPage() {
     loadEmployeeProfile();
   }, [empCode]);
 
-  // monthly attendance (same API as HR page) - LAZY LOADING
-  // Only load when user interacts or after a delay
-  const [attendanceDataLoaded, setAttendanceDataLoaded] = useState(false);
-  
+  // monthly attendance (same API as HR page) — load immediately for the signed-in employee
   useEffect(() => {
     if (!empCode) return;
-    
-    // OPTIMIZATION: Reduced delay for faster data loading (page still renders first)
-    const timer = setTimeout(() => {
-      setAttendanceDataLoaded(true);
-    }, 200); // 200ms delay - faster perceived performance
 
-    return () => clearTimeout(timer);
-  }, [empCode]);
+    const ctrl = new AbortController();
+    let cancelled = false;
 
-  useEffect(() => {
-    if (!empCode || !attendanceDataLoaded) return;
-
-    async function loadMonth() {
+    async function loadMonth(attempt = 0) {
       try {
         setLoadingAttendance(true);
         setErrorMsg("");
-        const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
-          method: "GET",
-          cache: "no-store",
-          credentials: "include",
-        });
+        const res = await fetch(
+          `/api/hr/monthly-attendance?month=${encodeURIComponent(month)}`,
+          {
+            method: "GET",
+            cache: "no-store",
+            credentials: "include",
+            signal: ctrl.signal,
+          }
+        );
         if (!res.ok) {
           const text = await res.text();
           throw new Error(text || `Request failed (${res.status})`);
         }
         const response = await res.json();
-        
-        // Handle standardized API response format
-        // New format: { success, message, data: { employees, ... }, error }
-        // Old format (backward compatibility): { employees, ... }
-        let attendanceData = null;
-        
+
+        let nextData = null;
         if (response.success !== undefined) {
-          // New standardized format
           if (!response.success) {
-            throw new Error(response.error || response.message || 'Failed to load monthly attendance');
+            throw new Error(
+              response.error || response.message || "Failed to load monthly attendance"
+            );
           }
-          attendanceData = response.data || {};
+          nextData = response.data || {};
         } else {
-          // Legacy format (backward compatibility)
-          attendanceData = response;
+          nextData = response;
         }
-        
-        setAttendanceData(attendanceData);
+
+        if (cancelled) return;
+
+        const list = Array.isArray(nextData?.employees) ? nextData.employees : [];
+        const mine = list.find(
+          (emp) =>
+            String(emp?.empCode || "").trim().toLowerCase() ===
+            String(empCode).trim().toLowerCase()
+        );
+        if (!mine) {
+          // Retry once — cold Mongo / snapshot race after login can return an empty sheet
+          if (attempt < 1) {
+            await new Promise((r) => setTimeout(r, 600));
+            if (!cancelled && !ctrl.signal.aborted) return loadMonth(attempt + 1);
+          }
+          setAttendanceData(nextData);
+          setErrorMsg(
+            "Your attendance record did not load. Check your connection and tap Retry."
+          );
+          return;
+        }
+
+        setAttendanceData(nextData);
       } catch (err) {
+        if (cancelled || err?.name === "AbortError") return;
         console.error(err);
+        if (attempt < 1) {
+          await new Promise((r) => setTimeout(r, 600));
+          if (!cancelled && !ctrl.signal.aborted) return loadMonth(attempt + 1);
+        }
         setErrorMsg(err.message || "Failed to load monthly attendance");
       } finally {
-        setLoadingAttendance(false);
+        if (!cancelled) setLoadingAttendance(false);
       }
     }
 
     loadMonth();
-  }, [month, empCode, attendanceDataLoaded]);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [month, empCode, attendanceReloadKey]);
 
   // Handle profile update
   async function handleProfileUpdate(formData) {
@@ -1212,8 +1233,11 @@ export default function EmployeeDashboardPage() {
   // record for current empCode from monthly data
   const myRecord = useMemo(() => {
     if (!attendanceData?.employees || !empCode) return null;
-    return attendanceData.employees.find(
-      (emp) => String(emp.empCode) === String(empCode)
+    const code = String(empCode).trim().toLowerCase();
+    return (
+      attendanceData.employees.find(
+        (emp) => String(emp.empCode || "").trim().toLowerCase() === code
+      ) || null
     );
   }, [attendanceData, empCode]);
 
@@ -1449,30 +1473,9 @@ export default function EmployeeDashboardPage() {
   ]);
 
   const refreshMonthlyAttendance = useCallback(async () => {
-    if (!empCode || !attendanceDataLoaded || !month) return;
-    try {
-      setLoadingAttendance(true);
-      const res = await fetch(`/api/hr/monthly-attendance?month=${month}`, {
-        method: "GET",
-        cache: "no-store",
-        credentials: "include",
-      });
-      if (!res.ok) return;
-      const response = await res.json();
-      let attendanceData = null;
-      if (response.success !== undefined) {
-        if (!response.success) return;
-        attendanceData = response.data || {};
-      } else {
-        attendanceData = response;
-      }
-      setAttendanceData(attendanceData);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingAttendance(false);
-    }
-  }, [empCode, attendanceDataLoaded, month]);
+    if (!empCode || !month) return;
+    setAttendanceReloadKey((k) => k + 1);
+  }, [empCode, month]);
 
   // Always load from DB (authoritative). Do not gate on /api/employee profile — that payload can omit allowWebClockIn.
   useEffect(() => {
@@ -1649,7 +1652,7 @@ export default function EmployeeDashboardPage() {
           try {
             await signOut({
               redirect: false,
-              callbackUrl: "/login?role=employee",
+              callbackUrl: `${window.location.origin}/login?role=employee`,
             });
             router.push("/login?role=employee");
           } catch (error) {
@@ -1746,9 +1749,33 @@ export default function EmployeeDashboardPage() {
                 border: `1px solid ${colors.error}`,
                 color: colors.error,
                 fontSize: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
               }}
             >
-            {errorMsg}
+            <span>{errorMsg}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMsg("");
+                setAttendanceReloadKey((k) => k + 1);
+              }}
+              style={{
+                flexShrink: 0,
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: `1px solid ${colors.error}`,
+                background: "transparent",
+                color: colors.error,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -2510,7 +2537,9 @@ export default function EmployeeDashboardPage() {
                 </div>
               ) : !myRecord ? (
                 <div style={{ fontSize: 12.5, color: colors.text.tertiary }}>
-                  No data found for this month.
+                  {errorMsg
+                    ? "Attendance could not be loaded for this month."
+                    : "No attendance data for this month yet."}
                 </div>
               ) : (
               <>

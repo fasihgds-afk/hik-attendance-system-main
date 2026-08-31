@@ -531,7 +531,9 @@ export async function GET(req) {
           let employeesFromSnap = snap.employees;
           if (isEmployeeViewer) {
             employeesFromSnap = employeesFromSnap.filter(
-              (e) => String(e.empCode || '').trim() === myEmpCode
+              (e) =>
+                String(e.empCode || '').trim().toLowerCase() ===
+                myEmpCode.toLowerCase()
             );
             // Snapshot may predate this employee (or empCode formatting differs).
             // Fall through to live compute instead of returning an empty sheet.
@@ -545,6 +547,17 @@ export async function GET(req) {
               const name = String(emp.name || '').toLowerCase();
               return code.includes(term) || name.includes(term);
             });
+          }
+          if (employeesFromSnap) {
+            // Recover from a previously poisoned snapshot (employee login used to
+            // overwrite the full sheet with 0–1 rows). Fall through to live HR rebuild.
+            if (
+              !isEmployeeViewer &&
+              !search &&
+              employeesFromSnap.length <= 1
+            ) {
+              employeesFromSnap = null;
+            }
           }
           if (employeesFromSnap) {
             let payload = employeesFromSnap;
@@ -586,7 +599,9 @@ export async function GET(req) {
           .lean()
           .maxTimeMS(1500),
         isEmployeeViewer
-          ? Employee.find({ empCode: myEmpCode })
+          ? Employee.find({
+              empCode: { $regex: `^${myEmpCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+            })
               .select(employeeProjection)
               .lean()
               .maxTimeMS(1500)
@@ -1571,7 +1586,10 @@ export async function GET(req) {
     let filteredEmployees = employeesOut;
     if (user.role === 'EMPLOYEE') {
       const myEmpCode = String(user.empCode || '').trim();
-      filteredEmployees = employeesOut.filter((e) => String(e.empCode || '').trim() === myEmpCode);
+      filteredEmployees = employeesOut.filter(
+        (e) =>
+          String(e.empCode || '').trim().toLowerCase() === myEmpCode.toLowerCase()
+      );
     }
 
     let employeesPayload = filteredEmployees.map(compactMonthlyEmployee);
@@ -1589,37 +1607,40 @@ export async function GET(req) {
       mode: mode || 'full',
     };
 
-    // Persist salary rollups so salary-report can read O(employees) docs instead of recomputing.
-    // Use pre-compact employees (filteredEmployees) which still include salary totals.
-    try {
-      const { upsertSalarySummariesFromEmployees } = await import(
-        '../../../../lib/salary/salarySummaries.js'
-      );
-      await upsertSalarySummariesFromEmployees(monthPrefix, filteredEmployees);
-    } catch (upsertErr) {
-      console.warn(
-        '[monthly-attendance] salary summary upsert failed:',
-        upsertErr?.message || upsertErr
-      );
-    }
+    // Persist salary rollups / full-sheet snapshot ONLY for HR/ADMIN rebuilds.
+    // Employee dashboard hits this same route with a 1-row sheet; writing that
+    // into the shared month snapshot poisons HR monthly view (1 employee / empty).
+    if (!isEmployeeViewer) {
+      try {
+        const { upsertSalarySummariesFromEmployees } = await import(
+          '../../../../lib/salary/salarySummaries.js'
+        );
+        await upsertSalarySummariesFromEmployees(monthPrefix, filteredEmployees);
+      } catch (upsertErr) {
+        console.warn(
+          '[monthly-attendance] salary summary upsert failed:',
+          upsertErr?.message || upsertErr
+        );
+      }
 
-    // Persist full day-grid snapshot for fast subsequent monthly opens.
-    // Always store with days (ignore request mode) so one snapshot serves full + summary.
-    try {
-      const { upsertMonthlySheetSnapshot } = await import(
-        '../../../../lib/attendance/monthlySheetSnapshots.js'
-      );
-      const fullEmployees = filteredEmployees.map(compactMonthlyEmployee);
-      await upsertMonthlySheetSnapshot(monthPrefix, {
-        daysInMonth,
-        employees: fullEmployees,
-        companyTodayYmd,
-      });
-    } catch (snapUpsertErr) {
-      console.warn(
-        '[monthly-attendance] sheet snapshot upsert failed:',
-        snapUpsertErr?.message || snapUpsertErr
-      );
+      // Persist full day-grid snapshot for fast subsequent monthly opens.
+      // Always store with days (ignore request mode) so one snapshot serves full + summary.
+      try {
+        const { upsertMonthlySheetSnapshot } = await import(
+          '../../../../lib/attendance/monthlySheetSnapshots.js'
+        );
+        const fullEmployees = filteredEmployees.map(compactMonthlyEmployee);
+        await upsertMonthlySheetSnapshot(monthPrefix, {
+          daysInMonth,
+          employees: fullEmployees,
+          companyTodayYmd,
+        });
+      } catch (snapUpsertErr) {
+        console.warn(
+          '[monthly-attendance] sheet snapshot upsert failed:',
+          snapUpsertErr?.message || snapUpsertErr
+        );
+      }
     }
 
     setMonthlySheetCache(cacheKey, result);
