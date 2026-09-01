@@ -5,6 +5,7 @@ import Department from '../../../../models/Department';
 import { successResponse, errorResponse, errorResponseFromException, HTTP_STATUS } from '../../../../lib/api/response';
 import { requirePermission } from '../../../../lib/auth/requireAuth';
 import { ValidationError } from '../../../../lib/errors/errorHandler';
+import { invalidateMonthlySheetCache } from '../../../../lib/api/monthlySheetCache';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -119,6 +120,10 @@ export async function PATCH(req) {
       .lean()
       .maxTimeMS(1500);
     if (!doc) throw new ValidationError(`Department "${name}" not found`);
+    if (body.saturdayShiftMode !== undefined) {
+      // Late/early on Saturdays depends on this — rebuild monthly sheets immediately.
+      invalidateMonthlySheetCache();
+    }
     return successResponse({ department: doc }, 'Department updated', HTTP_STATUS.OK);
   } catch (err) {
     if (err?.code === 'UNAUTHORIZED_HR') return errorResponse('Unauthorized', 401);

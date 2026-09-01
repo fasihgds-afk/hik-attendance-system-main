@@ -122,7 +122,15 @@ export default function DepartmentPoliciesPage() {
     }
   }
 
+  function updateDepartmentLocal(deptName, patch) {
+    setDepartments((prev) =>
+      prev.map((d) => (d.name === deptName ? { ...d, ...patch } : d))
+    );
+  }
+
   async function handlePolicyChange(dept, newPolicy) {
+    const snapshot = { ...dept };
+    updateDepartmentLocal(dept.name, { saturdayPolicy: newPolicy });
     try {
       const res = await fetch('/api/hr/departments', {
         method: 'PATCH',
@@ -135,14 +143,18 @@ export default function DepartmentPoliciesPage() {
       });
       const response = await res.json();
       if (!res.ok) throw new Error(response.error || response.message || 'Failed to update');
+      const saved = response.data?.department;
+      if (saved) updateDepartmentLocal(dept.name, saved);
       showToast('success', `"${dept.name}" updated to ${policyToastLabel(newPolicy)}`);
-      await loadDepartments();
     } catch (err) {
+      updateDepartmentLocal(dept.name, snapshot);
       showToast('error', err.message || 'Failed to update');
     }
   }
 
   async function handleFifthPolicyChange(dept, newFifthPolicy) {
+    const snapshot = { ...dept };
+    updateDepartmentLocal(dept.name, { fifthSaturdayPolicy: newFifthPolicy });
     try {
       const res = await fetch('/api/hr/departments', {
         method: 'PATCH',
@@ -155,14 +167,18 @@ export default function DepartmentPoliciesPage() {
       });
       const response = await res.json();
       if (!res.ok) throw new Error(response.error || response.message || 'Failed to update');
+      const saved = response.data?.department;
+      if (saved) updateDepartmentLocal(dept.name, saved);
       showToast('success', `"${dept.name}" 5th Saturday policy updated`);
-      await loadDepartments();
     } catch (err) {
+      updateDepartmentLocal(dept.name, snapshot);
       showToast('error', err.message || 'Failed to update');
     }
   }
 
   async function handleSaturdayShiftChange(dept, patch) {
+    const snapshot = { ...dept };
+    updateDepartmentLocal(dept.name, patch);
     try {
       const res = await fetch('/api/hr/departments', {
         method: 'PATCH',
@@ -180,10 +196,20 @@ export default function DepartmentPoliciesPage() {
       });
       const response = await res.json();
       if (!res.ok) throw new Error(response.error || response.message || 'Failed to update');
-      showToast('success', `"${dept.name}" Saturday shift updated`);
-      await loadDepartments();
+      const saved = response.data?.department;
+      if (saved) updateDepartmentLocal(dept.name, saved);
+      const mode = patch.saturdayShiftMode ?? saved?.saturdayShiftMode ?? dept.saturdayShiftMode ?? 'own_time';
+      if (patch.saturdayShiftMode !== undefined) {
+        showToast(
+          'success',
+          mode === 'own_time'
+            ? `"${dept.name}": each shift uses its own N1/N2 times on Saturdays.`
+            : `"${dept.name}": all shifts use one Saturday window.`
+        );
+      }
     } catch (err) {
-      showToast('error', err.message || 'Failed to update');
+      updateDepartmentLocal(dept.name, snapshot);
+      showToast('error', err.message || 'Failed to save — change reverted');
     }
   }
 
@@ -454,21 +480,34 @@ export default function DepartmentPoliciesPage() {
                             <option value="own_time">Each shift&apos;s own time</option>
                             <option value="unified_time">One unified time</option>
                           </select>
+                          {(d.saturdayShiftMode || 'own_time') === 'own_time' ? (
+                            <span style={{ fontSize: 11, opacity: 0.75, color: tableCellColor(colors, theme === 'dark') }}>
+                              N1 and N2 employees use their own shift start/end on Saturdays.
+                            </span>
+                          ) : null}
                           {d.saturdayShiftMode === 'unified_time' && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tableCellColor(colors, theme === 'dark') }}>
                               <input
                                 type="time"
                                 disabled={!canUpdate}
-                                defaultValue={d.saturdayUnifiedStart || '21:00'}
-                                onBlur={(e) => { if (canUpdate && e.target.value && e.target.value !== d.saturdayUnifiedStart) handleSaturdayShiftChange(d, { saturdayUnifiedStart: e.target.value }); }}
+                                value={d.saturdayUnifiedStart || '21:00'}
+                                onChange={(e) => {
+                                  if (canUpdate && e.target.value) {
+                                    handleSaturdayShiftChange(d, { saturdayUnifiedStart: e.target.value });
+                                  }
+                                }}
                                 style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12, opacity: canUpdate ? 1 : 0.7 }}
                               />
                               <span>to</span>
                               <input
                                 type="time"
                                 disabled={!canUpdate}
-                                defaultValue={d.saturdayUnifiedEnd || '06:00'}
-                                onBlur={(e) => { if (canUpdate && e.target.value && e.target.value !== d.saturdayUnifiedEnd) handleSaturdayShiftChange(d, { saturdayUnifiedEnd: e.target.value }); }}
+                                value={d.saturdayUnifiedEnd || '06:00'}
+                                onChange={(e) => {
+                                  if (canUpdate && e.target.value) {
+                                    handleSaturdayShiftChange(d, { saturdayUnifiedEnd: e.target.value });
+                                  }
+                                }}
                                 style={{ padding: '6px 8px', borderRadius: 6, border: `1px solid ${theme === 'dark' ? 'rgba(55, 65, 81, 0.8)' : colors.border?.default}`, background: theme === 'dark' ? '#1e293b' : (colors.background?.input ?? colors.background?.card), color: theme === 'dark' ? '#f1f5f9' : colors.text?.primary, fontSize: 12, opacity: canUpdate ? 1 : 0.7 }}
                               />
                             </div>
