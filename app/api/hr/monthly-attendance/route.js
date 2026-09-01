@@ -148,12 +148,6 @@ function toCompanyMinutes(date) {
   return toMinutes(h, m);
 }
 
-function isCompanySaturday(date) {
-  const localMs = date.getTime() + COMPANY_OFFSET_MS;
-  const local = new Date(localMs);
-  return local.getUTCDay() === 6; // Saturday in company timezone
-}
-
 // Helper: Parse time string "HH:mm" to minutes
 function parseTimeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
@@ -198,16 +192,8 @@ const _computeLateEarlyOriginal = function(
     shiftObj = allShiftsMap.get(shift);
   }
 
-  // Saturday special case: If shift is N2 on Saturday, use N1 timing instead
-  if (shiftObj && shiftObj.code === 'N2' && allShiftsMap && isCompanySaturday(checkIn)) {
-    const n1Shift = allShiftsMap.get('N1');
-    if (n1Shift && n1Shift.startTime) {
-      shiftObj =
-        calendarDateYmd != null && calendarDateYmd !== ''
-          ? shiftWithGraceResolvedForDate(n1Shift, calendarDateYmd)
-          : n1Shift;
-    }
-  }
+  // Saturday timing is resolved by the caller (department unified_time → SAT-UNIFIED;
+  // own_time → each shift's own start/end). Do not hardcode N2→N1 here.
 
   if (shiftObj && shiftObj.startTime) {
     // Use shift times from database (fully dynamic)
