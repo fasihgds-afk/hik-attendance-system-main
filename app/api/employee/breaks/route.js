@@ -16,7 +16,7 @@ import {
   localDayBounds,
   resolveBreakMinutes,
   isOpenBreak,
-  resolveBreakShiftDate,
+  allocateBreakCountedSegments,
   normalizeBreakTypeName,
   isGeneralBreakType,
   isNamazBreakType,
@@ -129,26 +129,42 @@ export async function GET(req) {
       const shift = shiftById.get(String(row.ShiftId || '').trim()) || null;
       const startAt = row.BreakStartTime ? new Date(row.BreakStartTime) : null;
       if (!startAt || Number.isNaN(startAt.getTime())) continue;
-      const shiftDate = resolveBreakShiftDate({ breakAt: startAt, shift, timezoneOffset: TZ_OFFSET });
-      if (!shiftDate || shiftDate < from || shiftDate > to) continue;
       const open = isOpenBreak(row);
-      const minutes = resolveBreakMinutes(row, now);
-      sessions.push({
-        id: String(row._id),
-        empCode,
-        breakTypeId: typeMeta.id,
-        breakTypeName: typeMeta.name,
-        breakStartTime: startAt.toISOString(),
-        breakEndTime: row.BreakEndTime ? new Date(row.BreakEndTime).toISOString() : null,
-        totalMinutes: Math.round(minutes * 100) / 100,
-        comment: row.Comment || '',
-        status: open ? 'Open' : String(row.Status || 'Closed'),
-        isOpen: open,
-        shiftDate,
-        shiftName: shift?.name || '',
-        shiftCode: shift?.code || '',
-        isGeneral: isGeneralBreakType(typeMeta.name),
-        isNamaz: isNamazBreakType(typeMeta.name),
+      const endAt = row.BreakEndTime ? new Date(row.BreakEndTime) : null;
+      const rawMinutes = resolveBreakMinutes(row, now);
+      const segments = allocateBreakCountedSegments({
+        startAt,
+        endAt,
+        shift,
+        timezoneOffset: TZ_OFFSET,
+        now,
+      });
+      if (!segments.length) continue;
+
+      segments.forEach((seg, idx) => {
+        if (!seg.shiftDate || seg.shiftDate < from || seg.shiftDate > to) return;
+        const minutes = Math.round(seg.durationMin * 100) / 100;
+        if (minutes <= 0) return;
+        const multi = segments.length > 1;
+        sessions.push({
+          id: multi ? `${row._id}::${seg.shiftDate}` : String(row._id),
+          sourceBreakId: String(row._id),
+          empCode,
+          breakTypeId: typeMeta.id,
+          breakTypeName: typeMeta.name,
+          breakStartTime: startAt.toISOString(),
+          breakEndTime: endAt && !Number.isNaN(endAt.getTime()) ? endAt.toISOString() : null,
+          totalMinutes: minutes,
+          rawTotalMinutes: Math.round(rawMinutes * 100) / 100,
+          comment: row.Comment || '',
+          status: open ? 'Open' : String(row.Status || 'Closed'),
+          isOpen: open && idx === segments.length - 1,
+          shiftDate: seg.shiftDate,
+          shiftName: shift?.name || '',
+          shiftCode: shift?.code || '',
+          isGeneral: isGeneralBreakType(typeMeta.name),
+          isNamaz: isNamazBreakType(typeMeta.name),
+        });
       });
     }
 

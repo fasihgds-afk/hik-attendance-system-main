@@ -24,7 +24,7 @@ import {
   localDayBounds,
   resolveBreakMinutes,
   isOpenBreak,
-  resolveBreakShiftDate,
+  allocateBreakCountedSegments,
   normalizeBreakTypeName,
   isGeneralBreakType,
   isNamazBreakType,
@@ -181,40 +181,56 @@ export async function GET(req) {
       const startAt = row.BreakStartTime ? new Date(row.BreakStartTime) : null;
       if (!startAt || Number.isNaN(startAt.getTime())) continue;
 
-      const shiftDate = resolveBreakShiftDate({ breakAt: startAt, shift, timezoneOffset: TZ_OFFSET });
-      if (!shiftDate || shiftDate < from || shiftDate > to) continue;
-
       if (search) {
         const q = search.toLowerCase();
         const hay = `${row.EmpCode || ''} ${emp?.name || ''} ${emp?.department || ''}`.toLowerCase();
         if (!hay.includes(q) && !String(row.EmpCode || '').startsWith(search)) continue;
       }
 
-      const minutes = resolveBreakMinutes(row, now);
+      const endAt = row.BreakEndTime ? new Date(row.BreakEndTime) : null;
+      const rawMinutes = resolveBreakMinutes(row, now);
+      // Only minutes inside this employee's own shift window count (e.g. N2 9pm–6am).
+      const segments = allocateBreakCountedSegments({
+        startAt,
+        endAt,
+        shift,
+        timezoneOffset: TZ_OFFSET,
+        now,
+      });
+      if (!segments.length) continue;
 
-      enriched.push({
-        id: String(row._id),
-        empCode: String(row.EmpCode || ''),
-        employeeName: emp?.name || '',
-        department: emp?.department || '',
-        designation: emp?.designation || '',
-        shiftId: String(row.ShiftId || ''),
-        shiftName: shift?.name || '',
-        shiftCode: shift?.code || '',
-        shiftStartTime: shift?.startTime || '',
-        shiftEndTime: shift?.endTime || '',
-        crossesMidnight: !!shift?.crossesMidnight,
-        breakTypeId: typeMeta.id,
-        breakTypeName: typeMeta.name,
-        breakStartTime: startAt.toISOString(),
-        breakEndTime: row.BreakEndTime ? new Date(row.BreakEndTime).toISOString() : null,
-        totalMinutes: Math.round(minutes * 100) / 100,
-        comment: row.Comment || '',
-        status: open ? 'Open' : String(row.Status || 'Closed'),
-        isOpen: open,
-        shiftDate,
-        isGeneral: isGeneralBreakType(typeMeta.name),
-        isNamaz: isNamazBreakType(typeMeta.name),
+      segments.forEach((seg, idx) => {
+        if (!seg.shiftDate || seg.shiftDate < from || seg.shiftDate > to) return;
+        const minutes = Math.round(seg.durationMin * 100) / 100;
+        if (minutes <= 0) return;
+        const multi = segments.length > 1;
+        enriched.push({
+          id: multi ? `${row._id}::${seg.shiftDate}` : String(row._id),
+          sourceBreakId: String(row._id),
+          empCode: String(row.EmpCode || ''),
+          employeeName: emp?.name || '',
+          department: emp?.department || '',
+          designation: emp?.designation || '',
+          shiftId: String(row.ShiftId || ''),
+          shiftName: shift?.name || '',
+          shiftCode: shift?.code || '',
+          shiftStartTime: shift?.startTime || '',
+          shiftEndTime: shift?.endTime || '',
+          crossesMidnight: !!shift?.crossesMidnight,
+          breakTypeId: typeMeta.id,
+          breakTypeName: typeMeta.name,
+          breakStartTime: startAt.toISOString(),
+          breakEndTime: endAt && !Number.isNaN(endAt.getTime()) ? endAt.toISOString() : null,
+          totalMinutes: minutes,
+          rawTotalMinutes: Math.round(rawMinutes * 100) / 100,
+          comment: row.Comment || '',
+          status: open ? 'Open' : String(row.Status || 'Closed'),
+          // Open flag only on last segment so "on break now" is not double-counted
+          isOpen: open && idx === segments.length - 1,
+          shiftDate: seg.shiftDate,
+          isGeneral: isGeneralBreakType(typeMeta.name),
+          isNamaz: isNamazBreakType(typeMeta.name),
+        });
       });
     }
 
